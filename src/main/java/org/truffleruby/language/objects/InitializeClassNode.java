@@ -57,4 +57,27 @@ public abstract class InitializeClassNode extends RubyBaseNode {
 
         moduleInitialize(rubyClass, block);
 
-        r
+        return rubyClass;
+    }
+
+    private void initializeCommon(RubyClass rubyClass) {
+        ClassNodes.initialize(getContext(), rubyClass);
+    }
+
+    private void triggerInheritedHook(RubyClass subClass, RubyClass superClass) {
+        if (inheritedNode == null) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            inheritedNode = insert(DispatchNode.create());
+        }
+        inheritedNode.call(superClass, "inherited", subClass);
+    }
+
+    private void moduleInitialize(RubyClass rubyClass, RubyProc block) {
+        if (moduleInitializeNode == null) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            moduleInitializeNode = insert(ModuleNodesFactory.InitializeNodeFactory.create(null));
+        }
+        moduleInitializeNode.executeInitialize(rubyClass, block);
+    }
+
+}
