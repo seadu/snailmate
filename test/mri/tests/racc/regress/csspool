@@ -2250,3 +2250,66 @@ module_eval(<<'.,.,', 'csspool.y', 642)
 
     result
   end
+.,.,
+
+module_eval(<<'.,.,', 'csspool.y', 646)
+  def _reduce_222(val, _values, result)
+            unit    = val.first.gsub(/[\s\d.]/, '')
+        result = Terms::Number.new numeric(val.first), nil, unit
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'csspool.y', 650)
+  def _reduce_223(val, _values, result)
+            unit    = val.first.gsub(/[\s\d.]/, '')
+        result = Terms::Number.new numeric(val.first), nil, unit
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'csspool.y', 656)
+  def _reduce_224(val, _values, result)
+            result = Terms::Ratio.new(val[0], val[1])
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'csspool.y', 660)
+  def _reduce_225(val, _values, result)
+     result = :minus
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'csspool.y', 661)
+  def _reduce_226(val, _values, result)
+     result = :plus
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'csspool.y', 664)
+  def _reduce_227(val, _values, result)
+     result = val.first
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'csspool.y', 665)
+  def _reduce_228(val, _values, result)
+     result = Terms::Ident.new interpret_identifier val.first
+    result
+  end
+.,.,
+
+def _reduce_none(val, _values, result)
+  val[0]
+end
+
+    end   # class Parser
+  end   # module CSS
+end   # module CSSPool
