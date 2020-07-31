@@ -66,4 +66,49 @@ module RBS
         method_block
       end
 
-     
+      def each_child(node, &block)
+        each_node node.children, &block
+      end
+
+      def each_node(nodes)
+        nodes.each do |child|
+          if child.is_a?(RubyVM::AbstractSyntaxTree::Node)
+            yield child
+          end
+        end
+      end
+
+      def any_node?(node, nodes: [], &block)
+        if yield(node)
+          nodes << node
+        end
+
+        each_child node do |child|
+          any_node? child, nodes: nodes, &block
+        end
+
+        nodes.empty? ? nil : nodes
+      end
+
+      def keyword_hash?(node)
+        if node && node.type == :HASH
+          node.children[0].children.compact.each_slice(2).all? {|key, _|
+            key.type == :LIT && key.children[0].is_a?(Symbol)
+          }
+        else
+          false
+        end
+      end
+
+      # NOTE: args_node may be a nil by a bug
+      #       https://bugs.ruby-lang.org/issues/17495
+      def args_from_node(args_node)
+        args_node&.children || [0, nil, nil, nil, 0, nil, nil, nil, nil, nil]
+      end
+
+      def untyped
+        @untyped ||= Types::Bases::Any.new(location: nil)
+      end
+    end
+  end
+end
