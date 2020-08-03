@@ -75,4 +75,11 @@ fails:Process.spawn raises an Errno::EACCES or Errno::EISDIR when passed a direc
 fails(spurious failure):Process.spawn when passed close_others: false does not close file descriptors >= 3 in the child process if fds are set close_on_exec=false
 fails(spurious failure):Process.spawn when passed close_others: false closes file descriptors >= 3 in the child process because they are set close_on_exec by default
 fails(spurious failure):Process.spawn when passed close_others: true closes file descriptors >= 3 in the child process even if fds are set close_on_exec=false
-slow:Process.spawn inside Dir.chdir does not create
+slow:Process.spawn inside Dir.chdir does not create extra process without chdir
+slow:Process.spawn inside Dir.chdir kills extra chdir processes
+slow:Process.spawn redirects both STDERR and STDOUT to the given file descriptor
+slow:Process.spawn defaults :close_others to false
+slow:Process.spawn closes STDERR in the child if :err => :close
+slow:Process.spawn returns the process ID of the new process as an Integer
+slow:Process.spawn redirects non-default file descriptor to itself
+slow:Process.spawn redirects default file descriptor to itself
