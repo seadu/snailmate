@@ -29,3 +29,35 @@ module Bundler
             idx << local_spec
           end
 
+          idx.each {|s| s.source = self }
+        end
+      end
+
+      def options
+        {}
+      end
+
+      def install(spec, _opts = {})
+        print_using_message "Using #{version_message(spec)}"
+        nil
+      end
+
+      def to_s
+        "the local ruby installation"
+      end
+
+      def ==(other)
+        self.class == other.class
+      end
+      alias_method :eql?, :==
+
+      def hash
+        self.class.hash
+      end
+
+      def version_message(spec)
+        "#{spec.name} #{spec.version}"
+      end
+    end
+  end
+end
