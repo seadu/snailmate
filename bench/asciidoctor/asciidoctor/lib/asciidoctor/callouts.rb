@@ -103,4 +103,11 @@ class Callouts
   # Internal: Generate a unique id for the callout at the specified position
   #
   # list_index - The 1-based Integer index of the callout list within the document
-  # co_index   - The 1-based Integer index of the callout since the end of 
+  # co_index   - The 1-based Integer index of the callout since the end of the last callout list
+  #
+  # Returns A unique String id for a callout
+  def generate_callout_id list_index, co_index
+    %(CO#{list_index}-#{co_index})
+  end
+end
+end
