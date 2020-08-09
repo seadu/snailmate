@@ -51,4 +51,20 @@ Pick any of:
 * Run a full set of Docker tests we care about, `test` instead of `build`
 * Do not rebuild `openssl`, to test error messages, `--no-rebuild-openssl`
 
-When using `test` y
+When using `test` you need to specify the method of installing, and what to do.
+
+## Docker cache
+
+You may find that the Docker cache interacts badly with these Dockerfiles (such
+as repository URLs being cached that become unavailable). Therefore we recommend
+regularly clearing your Docker cache.
+
+```bash
+docker system prune -a -f
+```
+
+## Version incompatibilities
+
+Some of our Docker configurations are a bit fragile, and trying to run Docker
+to install old binaries, or using old versions of branches in the source
+repository, may not work.
