@@ -221,4 +221,166 @@ public class CoreModuleProcessor extends TruffleRubyProcessor {
                 for (Element e : enclosedElements) {
                     if (e instanceof TypeElement) {
                         final TypeElement klass = (TypeElement) e;
-                        final Primitive primitive = e.getAnnotation(Primitive.cla
+                        final Primitive primitive = e.getAnnotation(Primitive.class);
+                        if (primitive != null) {
+                            processPrimitive(stream, rubyPrimitives, coreModuleElement, klass, primitive);
+                            coreModuleChecks.checks(primitive.lowerFixnum(), null, klass, true);
+                            if (!inherits(e.asType(), primitiveNodeType) && !inherits(e.asType(), rubySourceNodeType)) {
+                                error(e +
+                                        " should inherit from PrimitiveArrayArgumentsNode, PrimitiveNode or RubySourceNode",
+                                        e);
+                            }
+                        }
+                    }
+                }
+
+                stream.println("    }");
+                stream.println();
+                stream.println("}");
+
+                rubyStream.println("end");
+                rubyStream.println();
+
+                rubyStream.println("module Primitive");
+                rubyStream.print(rubyPrimitives);
+                rubyStream.println("end");
+                rubyStream.println();
+            }
+        }
+    }
+
+    private void processPrimitive(
+            PrintStream stream,
+            StringBuilder rubyPrimitives,
+            TypeElement element,
+            TypeElement klass,
+            Primitive primitive) {
+        List<String> argumentNames = getArgumentNames(klass, primitive.argumentNames(), false, false, -1);
+
+        final String nodeFactory = nodeFactoryName(element, klass);
+        stream.println("        primitiveManager.addLazyPrimitive(" +
+                quote(primitive.name()) + ", " + quote(nodeFactory) + ");");
+
+        final StringJoiner arguments = new StringJoiner(", ");
+        for (String argument : argumentNames) {
+            arguments.add(argument);
+        }
+
+        rubyPrimitives
+                .append("  def self.")
+                .append(primitive.name())
+                .append("(")
+                .append(arguments)
+                .append(")")
+                .append('\n');
+        rubyPrimitives.append("    # language=java").append('\n');
+        rubyPrimitives
+                .append("    \"/** @see ")
+                .append(klass.getQualifiedName().toString())
+                .append(" */\"")
+                .append('\n');
+        rubyPrimitives.append("  end").append('\n');
+        rubyPrimitives.append('\n');
+    }
+
+    private void processCoreMethod(
+            PrintStream stream,
+            PrintStream rubyStream,
+            TypeElement element,
+            CoreModule coreModule,
+            TypeElement klass,
+            CoreMethod coreMethod,
+            boolean needsSelf) {
+        final StringJoiner names = new StringJoiner(", ");
+        for (String name : coreMethod.names()) {
+            names.add(quote(name));
+        }
+        // final String className = klass.getQualifiedName().toString();
+        final String nodeFactory = nodeFactoryName(element, klass);
+        final boolean onSingleton = coreMethod.onSingleton() || coreMethod.constructor();
+        stream.println("        coreMethodManager.addLazyCoreMethod(" + quote(nodeFactory) + ",");
+        stream.println("                " +
+                quote(coreModule.value()) + ", " +
+                coreModule.isClass() + ", " +
+                "Visibility." + coreMethod.visibility().name() + ", " +
+                coreMethod.isModuleFunction() + ", " +
+                onSingleton + ", " +
+                coreMethod.alwaysInlined() + ", " +
+                "Split." + coreMethod.split().name() + ", " +
+                coreMethod.required() + ", " +
+                coreMethod.optional() + ", " +
+                coreMethod.rest() + ", " +
+                coreMethod.needsBlock() + ", " +
+                names + ");");
+
+        int numberOfArguments = getNumberOfArguments(coreMethod);
+        String[] argumentNamesFromAnnotation = coreMethod.argumentNames();
+        final List<String> argumentNames = getArgumentNames(klass, argumentNamesFromAnnotation, needsSelf,
+                coreMethod.alwaysInlined(),
+                numberOfArguments);
+
+        if (argumentNames.isEmpty() && numberOfArguments > 0) {
+            error(
+                    "Did not find argument names. If the class has inherited Specializations use org.truffleruby.annotations.CoreMethod.argumentNames",
+                    klass);
+
+            for (int i = 0; i < coreMethod.required(); i++) {
+                argumentNames.add("req" + (i + 1));
+            }
+            for (int i = 0; i < coreMethod.optional(); i++) {
+                argumentNames.add("opt" + (i + 1));
+            }
+            if (coreMethod.rest()) {
+                argumentNames.add("args");
+            }
+            if (coreMethod.needsBlock()) {
+                argumentNames.add("block");
+            }
+        }
+
+        int index = 0;
+
+        final StringJoiner args = new StringJoiner(", ");
+
+        try {
+            for (int i = 0; i < coreMethod.required(); i++) {
+                args.add(argumentNames.get(index));
+                index++;
+            }
+            for (int i = 0; i < coreMethod.optional(); i++) {
+                args.add(argumentNames.get(index) + " = nil");
+                index++;
+            }
+            if (coreMethod.rest()) {
+                args.add("*" + argumentNames.get(index));
+                index++;
+            }
+            if (coreMethod.needsBlock()) {
+                args.add("&" + argumentNames.get(index));
+            }
+        } catch (IndexOutOfBoundsException e) {
+            error(
+                    "Not enough arguments found compared to declared numbers, check required, optional etc. declarations",
+                    klass);
+        }
+
+        rubyStream.println("  def " + (onSingleton ? "self." : "") + coreMethod.names()[0] + "(" + args + ")");
+        rubyStream.println("    # language=java");
+        rubyStream.println("    \"/** @see " + klass.getQualifiedName().toString() + " */\"");
+        rubyStream.println("  end");
+
+        for (int i = 1; i < coreMethod.names().length; i++) {
+            rubyStream.println("  alias_method :" + coreMethod.names()[i] + ", :" + coreMethod.names()[0]);
+        }
+        if (coreMethod.isModuleFunction()) {
+            rubyStream.println("  module_function :" + coreMethod.names()[0]);
+        }
+        rubyStream.println();
+    }
+
+    private List<String> getArgumentNames(TypeElement klass, String[] argumentNamesFromAnnotation,
+            boolean hasSelfArgument, boolean isAlwaysInlinedMethod, int numberOfArguments) {
+
+        List<String> argumentNames;
+        if (argumentNamesFromAnnotation.length == 0) {
+ 
