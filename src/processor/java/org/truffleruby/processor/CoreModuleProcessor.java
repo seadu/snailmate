@@ -383,4 +383,123 @@ public class CoreModuleProcessor extends TruffleRubyProcessor {
 
         List<String> argumentNames;
         if (argumentNamesFromAnnotation.length == 0) {
- 
+            if (isAlwaysInlinedMethod) {
+                argumentNames = getArgumentNamesForAlwaysInlined(numberOfArguments);
+            } else {
+                argumentNames = getArgumentNamesFromSpecializations(klass, hasSelfArgument);
+            }
+        } else {
+            if (argumentNamesFromAnnotation.length != numberOfArguments && numberOfArguments >= 0) {
+                error("The size of argumentNames does not match declared number of arguments.", klass);
+                argumentNames = new ArrayList<>();
+            } else {
+                argumentNames = Arrays.asList(argumentNamesFromAnnotation);
+            }
+        }
+        return argumentNames;
+    }
+
+    private int getNumberOfArguments(CoreMethod coreMethod) {
+        return coreMethod.required() + coreMethod.optional() + (coreMethod.rest() ? 1 : 0) +
+                (coreMethod.needsBlock() ? 1 : 0);
+    }
+
+    private List<String> getArgumentNamesForAlwaysInlined(int argCount) {
+        List<String> argumentNames = new ArrayList<>();
+        for (int i = 0; i < argCount; i++) {
+            argumentNames.add(String.format("arg%d", i + 1));
+        }
+        return argumentNames;
+    }
+
+    private List<String> getArgumentNamesFromSpecializations(TypeElement klass, boolean hasSelfArgument) {
+        List<String> argumentNames = new ArrayList<>();
+        List<VariableElement> argumentElements = new ArrayList<>();
+
+        TypeElement klassIt = klass;
+        while (!isNodeBaseType(klassIt)) {
+            for (Element el : klassIt.getEnclosedElements()) {
+                if (!(el instanceof ExecutableElement)) {
+                    continue; // we are interested only in executable elements
+                }
+
+                final ExecutableElement specializationMethod = (ExecutableElement) el;
+
+                Specialization specializationAnnotation = specializationMethod.getAnnotation(Specialization.class);
+                if (specializationAnnotation == null) {
+                    continue; // we are interested only in Specialization methods
+                }
+
+                boolean addingArguments = argumentNames.isEmpty();
+
+                int index = 0;
+                boolean skippedSelf = false;
+                for (VariableElement parameter : specializationMethod.getParameters()) {
+                    if (!parameter.getAnnotationMirrors().isEmpty()) {
+                        continue; // we ignore arguments having annotations like @Cached
+                    }
+
+                    if (isSameType(parameter.asType(), virtualFrameType)) {
+                        continue;
+                    }
+
+                    if (hasSelfArgument && !skippedSelf) {
+                        skippedSelf = true;
+                        continue;
+                    }
+
+                    String nameCanBeKeyword = parameter
+                            .getSimpleName()
+                            .toString()
+                            .replaceAll("(.)(\\p{Upper})", "$1_$2")
+                            .toLowerCase(Locale.ENGLISH)
+                            .replaceAll("^(maybe|unused)_", "");
+                    String name = KEYWORDS.contains(nameCanBeKeyword) ? nameCanBeKeyword + "_" : nameCanBeKeyword;
+
+
+                    if (addingArguments) {
+                        argumentNames.add(name);
+                        argumentElements.add(parameter);
+                    } else {
+                        if (!argumentNames.get(index).equals(name)) {
+                            error(
+                                    "The argument does not match with the first occurrence of this argument which was '" +
+                                            argumentElements.get(index).getSimpleName() + "' (translated to Ruby as '" +
+                                            argumentNames.get(index) + "').",
+                                    parameter);
+                        }
+                    }
+                    index++;
+                }
+
+            }
+
+            klassIt = processingEnv.getElementUtils().getTypeElement(klassIt.getSuperclass().toString());
+        }
+
+        return argumentNames;
+    }
+
+    public boolean isNodeBaseType(TypeElement typeElement) {
+        return isSameType(typeElement.asType(), rubyNodeType) ||
+                isSameType(typeElement.asType(), rubyBaseNodeType);
+    }
+
+    private boolean anyCoreMethod(List<? extends Element> enclosedElements) {
+        for (Element e : enclosedElements) {
+            if (e instanceof TypeElement && e.getAnnotation(CoreMethod.class) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String nodeFactoryName(TypeElement element, TypeElement klass) {
+        return element.getQualifiedName() + "Factory$" + klass.getSimpleName() + "Factory";
+    }
+
+    private static String quote(String str) {
+        return '"' + str + '"';
+    }
+
+}
