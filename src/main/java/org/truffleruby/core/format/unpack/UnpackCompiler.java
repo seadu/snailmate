@@ -45,4 +45,7 @@ public class UnpackCompiler {
         return new UnpackRootNode(
                 language,
                 currentNode.getEncapsulatingSourceSection(),
-                builder.g
+                builder.getNode()).getCallTarget();
+    }
+
+}
