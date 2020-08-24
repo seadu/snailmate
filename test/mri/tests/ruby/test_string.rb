@@ -311,4 +311,260 @@ CODE
   end
 
   def test_MOD # '%'
-    assert_equal(S("00123"
+    assert_equal(S("00123"), S("%05d") % 123)
+    assert_equal(S("123  |00000001"), S("%-5s|%08x") % [123, 1])
+    x = S("%3s %-4s%%foo %.0s%5d %#x%c%3.1f %b %x %X %#b %#x %#X") %
+    [S("hi"),
+      123,
+      S("never seen"),
+      456,
+      0,
+      ?A,
+      3.0999,
+      11,
+      171,
+      171,
+      11,
+      171,
+      171]
+
+    assert_equal(S(' hi 123 %foo   456 0A3.1 1011 ab AB 0b1011 0xab 0XAB'), x)
+  end
+
+  def test_MUL # '*'
+    assert_equal(S("XXX"),  S("X") * 3)
+    assert_equal(S("HOHO"), S("HO") * 2)
+  end
+
+  def test_PLUS # '+'
+    assert_equal(S("Yodel"), S("Yo") + S("del"))
+  end
+
+  def casetest(a, b, rev=false)
+    msg = proc {"#{a} should#{' not' if rev} match #{b}"}
+    case a
+    when b
+      assert(!rev, msg)
+    else
+      assert(rev, msg)
+    end
+  end
+
+  def test_VERY_EQUAL # '==='
+    # assert_equal(true, S("foo") === :foo)
+    casetest(S("abcdef"), S("abcdef"))
+
+    casetest(S("CAT"), S('cat'), true) # Reverse the test - we don't want to
+    casetest(S("CaT"), S('cAt'), true) # find these in the case.
+  end
+
+  def test_capitalize
+    assert_equal(S("Hello"),  S("hello").capitalize)
+    assert_equal(S("Hello"),  S("hELLO").capitalize)
+    assert_equal(S("123abc"), S("123ABC").capitalize)
+  end
+
+  def test_capitalize!
+    a = S("hello"); a.capitalize!
+    assert_equal(S("Hello"), a)
+
+    a = S("hELLO"); a.capitalize!
+    assert_equal(S("Hello"), a)
+
+    a = S("123ABC"); a.capitalize!
+    assert_equal(S("123abc"), a)
+
+    assert_equal(nil,         S("123abc").capitalize!)
+    assert_equal(S("123abc"), S("123ABC").capitalize!)
+    assert_equal(S("Abc"),    S("ABC").capitalize!)
+    assert_equal(S("Abc"),    S("abc").capitalize!)
+    assert_equal(nil,         S("Abc").capitalize!)
+
+    a = S("hello")
+    b = a.dup
+    assert_equal(S("Hello"), a.capitalize!)
+    assert_equal(S("hello"), b)
+
+  end
+
+  Bug2463 = '[ruby-dev:39856]'
+  def test_center
+    assert_equal(S("hello"),       S("hello").center(4))
+    assert_equal(S("   hello   "), S("hello").center(11))
+    assert_equal(S("ababaababa"), S("").center(10, "ab"), Bug2463)
+    assert_equal(S("ababaababab"), S("").center(11, "ab"), Bug2463)
+  end
+
+  def test_chomp
+    verbose, $VERBOSE = $VERBOSE, nil
+
+    assert_equal(S("hello"), S("hello").chomp("\n"))
+    assert_equal(S("hello"), S("hello\n").chomp("\n"))
+    save = $/
+
+    $/ = "\n"
+
+    assert_equal(S("hello"), S("hello").chomp)
+    assert_equal(S("hello"), S("hello\n").chomp)
+
+    $/ = "!"
+    assert_equal(S("hello"), S("hello").chomp)
+    assert_equal(S("hello"), S("hello!").chomp)
+    $/ = save
+
+    assert_equal(S("a").hash, S("a\u0101").chomp(S("\u0101")).hash, '[ruby-core:22414]')
+
+    s = S("hello")
+    assert_equal("hel", s.chomp('lo'))
+    assert_equal("hello", s)
+
+    s = S("hello")
+    assert_equal("hello", s.chomp('he'))
+    assert_equal("hello", s)
+
+    s = S("\u{3053 3093 306b 3061 306f}")
+    assert_equal("\u{3053 3093 306b}", s.chomp("\u{3061 306f}"))
+    assert_equal("\u{3053 3093 306b 3061 306f}", s)
+
+    s = S("\u{3053 3093 306b 3061 306f}")
+    assert_equal("\u{3053 3093 306b 3061 306f}", s.chomp('lo'))
+    assert_equal("\u{3053 3093 306b 3061 306f}", s)
+
+    s = S("hello")
+    assert_equal("hello", s.chomp("\u{3061 306f}"))
+    assert_equal("hello", s)
+
+    # skip if argument is a broken string
+    s = S("\xe3\x81\x82")
+    assert_equal("\xe3\x81\x82", s.chomp("\x82"))
+    assert_equal("\xe3\x81\x82", s)
+
+    s = S("\x95\x5c").force_encoding("Shift_JIS")
+    assert_equal("\x95\x5c".force_encoding("Shift_JIS"), s.chomp("\x5c"))
+    assert_equal("\x95\x5c".force_encoding("Shift_JIS"), s)
+
+    # clear coderange
+    s = S("hello\u{3053 3093}")
+    assert_not_predicate(s, :ascii_only?)
+    assert_predicate(s.chomp("\u{3053 3093}"), :ascii_only?)
+
+    # argument should be converted to String
+    klass = Class.new { def to_str; 'a'; end }
+    s = S("abba")
+    assert_equal("abb", s.chomp(klass.new))
+    assert_equal("abba", s)
+
+    # chomp removes any of "\n", "\r\n", "\r" when "\n" is specified
+    s = "foo\n"
+    assert_equal("foo", s.chomp("\n"))
+    s = "foo\r\n"
+    assert_equal("foo", s.chomp("\n"))
+    s = "foo\r"
+    assert_equal("foo", s.chomp("\n"))
+  ensure
+    $/ = save
+    $VERBOSE = verbose
+  end
+
+  def test_chomp!
+    verbose, $VERBOSE = $VERBOSE, nil
+
+    a = S("hello")
+    a.chomp!(S("\n"))
+
+    assert_equal(S("hello"), a)
+    assert_equal(nil, a.chomp!(S("\n")))
+
+    a = S("hello\n")
+    a.chomp!(S("\n"))
+    assert_equal(S("hello"), a)
+    save = $/
+
+    $/ = "\n"
+    a = S("hello")
+    a.chomp!
+    assert_equal(S("hello"), a)
+
+    a = S("hello\n")
+    a.chomp!
+    assert_equal(S("hello"), a)
+
+    $/ = "!"
+    a = S("hello")
+    a.chomp!
+    assert_equal(S("hello"), a)
+
+    a="hello!"
+    a.chomp!
+    assert_equal(S("hello"), a)
+
+    $/ = save
+
+    a = S("hello\n")
+    b = a.dup
+    assert_equal(S("hello"), a.chomp!)
+    assert_equal(S("hello\n"), b)
+
+    s = "foo\r\n"
+    s.chomp!
+    assert_equal("foo", s)
+
+    s = "foo\r"
+    s.chomp!
+    assert_equal("foo", s)
+
+    s = "foo\r\n"
+    s.chomp!("")
+    assert_equal("foo", s)
+
+    s = "foo\r"
+    s.chomp!("")
+    assert_equal("foo\r", s)
+
+    assert_equal(S("a").hash, S("a\u0101").chomp!(S("\u0101")).hash, '[ruby-core:22414]')
+
+    s = S("").freeze
+    assert_raise_with_message(FrozenError, /frozen/) {s.chomp!}
+    $VERBOSE = nil # EnvUtil.suppress_warning resets $VERBOSE to the original state
+
+    s = S("ax")
+    o = Struct.new(:s).new(s)
+    def o.to_str
+      s.freeze
+      "x"
+    end
+    assert_raise_with_message(FrozenError, /frozen/) {s.chomp!(o)}
+    $VERBOSE = nil # EnvUtil.suppress_warning resets $VERBOSE to the original state
+
+    s = S("hello")
+    assert_equal("hel", s.chomp!('lo'))
+    assert_equal("hel", s)
+
+    s = S("hello")
+    assert_equal(nil, s.chomp!('he'))
+    assert_equal("hello", s)
+
+    s = S("\u{3053 3093 306b 3061 306f}")
+    assert_equal("\u{3053 3093 306b}", s.chomp!("\u{3061 306f}"))
+    assert_equal("\u{3053 3093 306b}", s)
+
+    s = S("\u{3053 3093 306b 3061 306f}")
+    assert_equal(nil, s.chomp!('lo'))
+    assert_equal("\u{3053 3093 306b 3061 306f}", s)
+
+    s = S("hello")
+    assert_equal(nil, s.chomp!("\u{3061 306f}"))
+    assert_equal("hello", s)
+
+    # skip if argument is a broken string
+    s = S("\xe3\x81\x82")
+    assert_equal(nil, s.chomp!("\x82"))
+    assert_equal("\xe3\x81\x82", s)
+
+    s = S("\x95\x5c").force_encoding("Shift_JIS")
+    assert_equal(nil, s.chomp!("\x5c"))
+    assert_equal("\x95\x5c".force_encoding("Shift_JIS"), s)
+
+    # clear coderange
+    s = S("hello\u{3053 3093}")
+    assert_not_predicate(s, :ascii_only
