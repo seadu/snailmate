@@ -787,3 +787,211 @@ CODE
     b = a.dup
     assert_equal(S("h\0""ello"), a.downcase!)
     assert_equal(S("h\0""ello"), a)
+    assert_equal(S("h\0""ELLO"), b)
+  end
+
+  def test_dump
+    a= S("Test") << 1 << 2 << 3 << 9 << 13 << 10
+    assert_equal(S('"Test\\x01\\x02\\x03\\t\\r\\n"'), a.dump)
+    b= S("\u{7F}")
+    assert_equal(S('"\\x7F"'), b.dump)
+    b= S("\u{AB}")
+    assert_equal(S('"\\u00AB"'), b.dump)
+    b= S("\u{ABC}")
+    assert_equal(S('"\\u0ABC"'), b.dump)
+    b= S("\uABCD")
+    assert_equal(S('"\\uABCD"'), b.dump)
+    b= S("\u{ABCDE}")
+    assert_equal(S('"\\u{ABCDE}"'), b.dump)
+    b= S("\u{10ABCD}")
+    assert_equal(S('"\\u{10ABCD}"'), b.dump)
+  end
+
+  def test_undump
+    a = S("Test") << 1 << 2 << 3 << 9 << 13 << 10
+    assert_equal(a, S('"Test\\x01\\x02\\x03\\t\\r\\n"').undump)
+    assert_equal(S("\\ca"), S('"\\ca"').undump)
+    assert_equal(S("\u{7F}"), S('"\\x7F"').undump)
+    assert_equal(S("\u{7F}A"), S('"\\x7FA"').undump)
+    assert_equal(S("\u{AB}"), S('"\\u00AB"').undump)
+    assert_equal(S("\u{ABC}"), S('"\\u0ABC"').undump)
+    assert_equal(S("\uABCD"), S('"\\uABCD"').undump)
+    assert_equal(S("\uABCD"), S('"\\uABCD"').undump)
+    assert_equal(S("\u{ABCDE}"), S('"\\u{ABCDE}"').undump)
+    assert_equal(S("\u{10ABCD}"), S('"\\u{10ABCD}"').undump)
+    assert_equal(S("\u{ABCDE 10ABCD}"), S('"\\u{ABCDE 10ABCD}"').undump)
+    assert_equal(S(""), S('"\\u{}"').undump)
+    assert_equal(S(""), S('"\\u{  }"').undump)
+
+    assert_equal(S("\u3042".encode("sjis")), S('"\x82\xA0"'.force_encoding("sjis")).undump)
+    assert_equal(S("\u8868".encode("sjis")), S("\"\\x95\\\\\"".force_encoding("sjis")).undump)
+
+    assert_equal(S("äöü"), S('"\u00E4\u00F6\u00FC"').undump)
+    assert_equal(S("äöü"), S('"\xC3\xA4\xC3\xB6\xC3\xBC"').undump)
+
+    assert_equal(Encoding::UTF_8, S('"\\u3042"').encode(Encoding::EUC_JP).undump.encoding)
+
+    assert_equal("abc".encode(Encoding::UTF_16LE),
+                 '"a\x00b\x00c\x00".force_encoding("UTF-16LE")'.undump)
+
+    assert_equal('\#', '"\\\\#"'.undump)
+    assert_equal('\#{', '"\\\\\#{"'.undump)
+
+    assert_raise(RuntimeError) { S('\u3042').undump }
+    assert_raise(RuntimeError) { S('"\x82\xA0\u3042"'.force_encoding("SJIS")).undump }
+    assert_raise(RuntimeError) { S('"\u3042\x82\xA0"'.force_encoding("SJIS")).undump }
+    assert_raise(RuntimeError) { S('"".force_encoding()').undump }
+    assert_raise(RuntimeError) { S('"".force_encoding("').undump }
+    assert_raise(RuntimeError) { S('"".force_encoding("UNKNOWN")').undump }
+    assert_raise(RuntimeError) { S('"\u3042".force_encoding("UTF-16LE")').undump }
+    assert_raise(RuntimeError) { S('"\x00\x00".force_encoding("UTF-16LE")"').undump }
+    assert_raise(RuntimeError) { S('"\x00\x00".force_encoding("'+("a"*9999999)+'")"').undump }
+    assert_raise(RuntimeError) { S(%("\u00E4")).undump }
+    assert_raise(RuntimeError) { S('"').undump }
+    assert_raise(RuntimeError) { S('"""').undump }
+    assert_raise(RuntimeError) { S('""""').undump }
+
+    assert_raise(RuntimeError) { S('"a').undump }
+    assert_raise(RuntimeError) { S('"\u"').undump }
+    assert_raise(RuntimeError) { S('"\u{"').undump }
+    assert_raise(RuntimeError) { S('"\u304"').undump }
+    assert_raise(RuntimeError) { S('"\u304Z"').undump }
+    assert_raise(RuntimeError) { S('"\udfff"').undump }
+    assert_raise(RuntimeError) { S('"\u{dfff}"').undump }
+    assert_raise(RuntimeError) { S('"\u{3042"').undump }
+    assert_raise(RuntimeError) { S('"\u{3042 "').undump }
+    assert_raise(RuntimeError) { S('"\u{110000}"').undump }
+    assert_raise(RuntimeError) { S('"\u{1234567}"').undump }
+    assert_raise(RuntimeError) { S('"\x"').undump }
+    assert_raise(RuntimeError) { S('"\xA"').undump }
+    assert_raise(RuntimeError) { S('"\\"').undump }
+    assert_raise(RuntimeError) { S(%("\0")).undump }
+    assert_raise_with_message(RuntimeError, /invalid/) {
+      '"\\u{007F}".xxxxxx'.undump
+    }
+  end
+
+  def test_dup
+    for frozen in [ false, true ]
+      a = S("hello")
+      a.freeze if frozen
+      b = a.dup
+
+      assert_equal(a, b)
+      assert_not_same(a, b)
+      assert_not_predicate(b, :frozen?)
+    end
+  end
+
+  def test_each
+    verbose, $VERBOSE = $VERBOSE, nil
+
+    save = $/
+    $/ = "\n"
+    res=[]
+    S("hello\nworld").lines.each {|x| res << x}
+    assert_equal(S("hello\n"), res[0])
+    assert_equal(S("world"),   res[1])
+
+    res=[]
+    S("hello\n\n\nworld").lines(S('')).each {|x| res << x}
+    assert_equal(S("hello\n\n"), res[0])
+    assert_equal(S("world"),     res[1])
+
+    $/ = "!"
+    res=[]
+    S("hello!world").lines.each {|x| res << x}
+    assert_equal(S("hello!"), res[0])
+    assert_equal(S("world"),  res[1])
+  ensure
+    $/ = save
+    $VERBOSE = verbose
+  end
+
+  def test_each_byte
+    s = S("ABC")
+
+    res = []
+    assert_equal s.object_id, s.each_byte {|x| res << x }.object_id
+    assert_equal(65, res[0])
+    assert_equal(66, res[1])
+    assert_equal(67, res[2])
+
+    assert_equal 65, s.each_byte.next
+  end
+
+  def test_bytes
+    s = S("ABC")
+    assert_equal [65, 66, 67], s.bytes
+
+    res = []
+    assert_equal s.object_id, s.bytes {|x| res << x }.object_id
+    assert_equal(65, res[0])
+    assert_equal(66, res[1])
+    assert_equal(67, res[2])
+    s = S("ABC")
+    res = []
+    assert_same s, s.bytes {|x| res << x }
+    assert_equal [65, 66, 67], res
+  end
+
+  def test_each_codepoint
+    # Single byte optimization
+    assert_equal 65, S("ABC").each_codepoint.next
+
+    s = S("\u3042\u3044\u3046")
+
+    res = []
+    assert_equal s.object_id, s.each_codepoint {|x| res << x }.object_id
+    assert_equal(0x3042, res[0])
+    assert_equal(0x3044, res[1])
+    assert_equal(0x3046, res[2])
+
+    assert_equal 0x3042, s.each_codepoint.next
+  end
+
+  def test_codepoints
+    # Single byte optimization
+    assert_equal [65, 66, 67], S("ABC").codepoints
+
+    s = S("\u3042\u3044\u3046")
+    assert_equal [0x3042, 0x3044, 0x3046], s.codepoints
+
+    res = []
+    assert_equal s.object_id, s.codepoints {|x| res << x }.object_id
+    assert_equal(0x3042, res[0])
+    assert_equal(0x3044, res[1])
+    assert_equal(0x3046, res[2])
+    s = S("ABC")
+    res = []
+    assert_same s, s.codepoints {|x| res << x }
+    assert_equal [65, 66, 67], res
+  end
+
+  def test_each_char
+    s = S("ABC")
+
+    res = []
+    assert_equal s.object_id, s.each_char {|x| res << x }.object_id
+    assert_equal("A", res[0])
+    assert_equal("B", res[1])
+    assert_equal("C", res[2])
+
+    assert_equal "A", S("ABC").each_char.next
+  end
+
+  def test_chars
+    s = S("ABC")
+    assert_equal ["A", "B", "C"], s.chars
+
+    res = []
+    assert_equal s.object_id, s.chars {|x| res << x }.object_id
+    assert_equal("A", res[0])
+    assert_equal("B", res[1])
+    assert_equal("C", res[2])
+  end
+
+  def test_each_grapheme_cluster
+    [
+      "\u{0D 0A}",
+      "\u{20 200d
