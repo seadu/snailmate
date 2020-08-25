@@ -567,4 +567,223 @@ CODE
 
     # clear coderange
     s = S("hello\u{3053 3093}")
-    assert_not_predicate(s, :ascii_only
+    assert_not_predicate(s, :ascii_only?)
+    assert_predicate(s.chomp!("\u{3053 3093}"), :ascii_only?)
+
+    # argument should be converted to String
+    klass = Class.new { def to_str; 'a'; end }
+    s = S("abba")
+    assert_equal("abb", s.chomp!(klass.new))
+    assert_equal("abb", s)
+
+    # chomp removes any of "\n", "\r\n", "\r" when "\n" is specified
+    s = "foo\n"
+    assert_equal("foo", s.chomp!("\n"))
+    s = "foo\r\n"
+    assert_equal("foo", s.chomp!("\n"))
+    s = "foo\r"
+    assert_equal("foo", s.chomp!("\n"))
+  ensure
+    $/ = save
+    $VERBOSE = verbose
+  end
+
+  def test_chop
+    assert_equal(S("hell"),    S("hello").chop)
+    assert_equal(S("hello"),   S("hello\r\n").chop)
+    assert_equal(S("hello\n"), S("hello\n\r").chop)
+    assert_equal(S(""),        S("\r\n").chop)
+    assert_equal(S(""),        S("").chop)
+    assert_equal(S("a").hash,  S("a\u00d8").chop.hash)
+  end
+
+  def test_chop!
+    a = S("hello").chop!
+    assert_equal(S("hell"), a)
+
+    a = S("hello\r\n").chop!
+    assert_equal(S("hello"), a)
+
+    a = S("hello\n\r").chop!
+    assert_equal(S("hello\n"), a)
+
+    a = S("\r\n").chop!
+    assert_equal(S(""), a)
+
+    a = S("").chop!
+    assert_nil(a)
+
+    a = S("a\u00d8")
+    a.chop!
+    assert_equal(S("a").hash, a.hash)
+
+    a = S("hello\n")
+    b = a.dup
+    assert_equal(S("hello"),   a.chop!)
+    assert_equal(S("hello\n"), b)
+  end
+
+  def test_clone
+    for frozen in [ false, true ]
+      a = S("Cool")
+      a.freeze if frozen
+      b = a.clone
+
+      assert_equal(a, b)
+      assert_not_same(a, b)
+      assert_equal(a.frozen?, b.frozen?)
+    end
+
+    assert_equal("", File.read(IO::NULL).clone, '[ruby-dev:32819] reported by Kazuhiro NISHIYAMA')
+  end
+
+  def test_concat
+    assert_equal(S("world!"), S("world").concat(33))
+    assert_equal(S("world!"), S("world").concat(S('!')))
+    b = S("sn")
+    assert_equal(S("snsnsn"), b.concat(b, b))
+
+    bug7090 = '[ruby-core:47751]'
+    result = S("").force_encoding(Encoding::UTF_16LE)
+    result << 0x0300
+    expected = S("\u0300".encode(Encoding::UTF_16LE))
+    assert_equal(expected, result, bug7090)
+    assert_raise(TypeError) { 'foo' << :foo }
+    assert_raise(FrozenError) { 'foo'.freeze.concat('bar') }
+  end
+
+  def test_concat_literals
+    s="." * 50
+    assert_equal(Encoding::UTF_8, "#{s}x".encoding)
+  end
+
+  def test_count
+    a = S("hello world")
+    assert_equal(5, a.count(S("lo")))
+    assert_equal(2, a.count(S("lo"), S("o")))
+    assert_equal(4, a.count(S("hello"), S("^l")))
+    assert_equal(4, a.count(S("ej-m")))
+    assert_equal(0, S("y").count(S("a\\-z")))
+    assert_equal(5, "abc\u{3042 3044 3046}".count("^a"))
+    assert_equal(1, "abc\u{3042 3044 3046}".count("\u3042"))
+    assert_equal(5, "abc\u{3042 3044 3046}".count("^\u3042"))
+    assert_equal(2, "abc\u{3042 3044 3046}".count("a-z", "^a"))
+    assert_equal(0, "abc\u{3042 3044 3046}".count("a", "\u3042"))
+    assert_equal(0, "abc\u{3042 3044 3046}".count("\u3042", "a"))
+    assert_equal(0, "abc\u{3042 3044 3046}".count("\u3042", "\u3044"))
+    assert_equal(4, "abc\u{3042 3044 3046}".count("^a", "^\u3044"))
+    assert_equal(4, "abc\u{3042 3044 3046}".count("^\u3044", "^a"))
+    assert_equal(4, "abc\u{3042 3044 3046}".count("^\u3042", "^\u3044"))
+
+    assert_raise(ArgumentError) { "foo".count }
+  end
+
+  def crypt_supports_des_crypt?
+    /openbsd/ !~ RUBY_PLATFORM
+  end
+
+  def test_crypt
+    if crypt_supports_des_crypt?
+      pass      = "aaGUC/JkO9/Sc"
+      good_salt = "aa"
+      bad_salt  = "ab"
+    else
+      pass      = "$2a$04$0WVaz0pV3jzfZ5G5tpmHWuBQGbkjzgtSc3gJbmdy0GAGMa45MFM2."
+      good_salt = "$2a$04$0WVaz0pV3jzfZ5G5tpmHWu"
+      bad_salt  = "$2a$04$0WVaz0pV3jzfZ5G5tpmHXu"
+    end
+    assert_equal(S(pass), S("mypassword").crypt(S(good_salt)))
+    assert_not_equal(S(pass), S("mypassword").crypt(S(bad_salt)))
+    assert_raise(ArgumentError) {S("mypassword").crypt(S(""))}
+    assert_raise(ArgumentError) {S("mypassword").crypt(S("\0a"))}
+    assert_raise(ArgumentError) {S("mypassword").crypt(S("a\0"))}
+    assert_raise(ArgumentError) {S("poison\u0000null").crypt(S("aa"))}
+    WIDE_ENCODINGS.each do |enc|
+      assert_raise(ArgumentError) {S("mypassword").crypt(S("aa".encode(enc)))}
+      assert_raise(ArgumentError) {S("mypassword".encode(enc)).crypt(S("aa"))}
+    end
+
+    @cls == String and
+      assert_no_memory_leak([], "s = ''; salt_proc = proc{#{(crypt_supports_des_crypt? ? '..' : good_salt).inspect}}", "#{<<~"begin;"}\n#{<<~'end;'}")
+
+    begin;
+      1000.times { s.crypt(-salt_proc.call).clear  }
+    end;
+  end
+
+  def test_delete
+    assert_equal(S("heo"),  S("hello").delete(S("l"), S("lo")))
+    assert_equal(S("he"),   S("hello").delete(S("lo")))
+    assert_equal(S("hell"), S("hello").delete(S("aeiou"), S("^e")))
+    assert_equal(S("ho"),   S("hello").delete(S("ej-m")))
+
+    assert_equal("a".hash, "a\u0101".delete("\u0101").hash, '[ruby-talk:329267]')
+    assert_equal(true, "a\u0101".delete("\u0101").ascii_only?)
+    assert_equal(true, "a\u3041".delete("\u3041").ascii_only?)
+    assert_equal(false, "a\u3041\u3042".delete("\u3041").ascii_only?)
+
+    assert_equal("a", "abc\u{3042 3044 3046}".delete("^a"))
+    assert_equal("bc\u{3042 3044 3046}", "abc\u{3042 3044 3046}".delete("a"))
+    assert_equal("\u3042", "abc\u{3042 3044 3046}".delete("^\u3042"))
+
+    bug6160 = '[ruby-dev:45374]'
+    assert_equal("", '\\'.delete('\\'), bug6160)
+  end
+
+  def test_delete!
+    a = S("hello")
+    a.delete!(S("l"), S("lo"))
+    assert_equal(S("heo"), a)
+
+    a = S("hello")
+    a.delete!(S("lo"))
+    assert_equal(S("he"), a)
+
+    a = S("hello")
+    a.delete!(S("aeiou"), S("^e"))
+    assert_equal(S("hell"), a)
+
+    a = S("hello")
+    a.delete!(S("ej-m"))
+    assert_equal(S("ho"), a)
+
+    a = S("hello")
+    assert_nil(a.delete!(S("z")))
+
+    a = S("hello")
+    b = a.dup
+    a.delete!(S("lo"))
+    assert_equal(S("he"), a)
+    assert_equal(S("hello"), b)
+
+    a = S("hello")
+    a.delete!(S("^el"))
+    assert_equal(S("ell"), a)
+
+    assert_raise(ArgumentError) { S("foo").delete! }
+  end
+
+
+  def test_downcase
+    assert_equal(S("hello"), S("helLO").downcase)
+    assert_equal(S("hello"), S("hello").downcase)
+    assert_equal(S("hello"), S("HELLO").downcase)
+    assert_equal(S("abc hello 123"), S("abc HELLO 123").downcase)
+    assert_equal(S("h\0""ello"), S("h\0""ELLO").downcase)
+  end
+
+  def test_downcase!
+    a = S("helLO")
+    b = a.dup
+    assert_equal(S("hello"), a.downcase!)
+    assert_equal(S("hello"), a)
+    assert_equal(S("helLO"), b)
+
+    a=S("hello")
+    assert_nil(a.downcase!)
+    assert_equal(S("hello"), a)
+
+    a = S("h\0""ELLO")
+    b = a.dup
+    assert_equal(S("h\0""ello"), a.downcase!)
+    assert_equal(S("h\0""ello"), a)
