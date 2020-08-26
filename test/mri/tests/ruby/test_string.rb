@@ -994,4 +994,246 @@ CODE
   def test_each_grapheme_cluster
     [
       "\u{0D 0A}",
-      "\u{20 200d
+      "\u{20 200d}",
+      "\u{600 600}",
+      "\u{600 20}",
+      "\u{261d 1F3FB}",
+      "\u{1f600}",
+      "\u{20 308}",
+      "\u{1F477 1F3FF 200D 2640 FE0F}",
+      "\u{1F468 200D 1F393}",
+      "\u{1F46F 200D 2642 FE0F}",
+      "\u{1f469 200d 2764 fe0f 200d 1f469}",
+    ].each do |g|
+      assert_equal [g], g.each_grapheme_cluster.to_a
+      assert_equal 1, g.each_grapheme_cluster.size
+    end
+
+    [
+      ["\u{a 324}", ["\u000A", "\u0324"]],
+      ["\u{d 324}", ["\u000D", "\u0324"]],
+      ["abc", ["a", "b", "c"]],
+    ].each do |str, grapheme_clusters|
+      assert_equal grapheme_clusters, str.each_grapheme_cluster.to_a
+      assert_equal grapheme_clusters.size, str.each_grapheme_cluster.size
+    end
+
+    s = ("x"+"\u{10ABCD}"*250000)
+    assert_empty(s.each_grapheme_cluster {s.clear})
+  end
+
+  def test_grapheme_clusters
+    [
+      "\u{20 200d}",
+      "\u{600 600}",
+      "\u{600 20}",
+      "\u{261d 1F3FB}",
+      "\u{1f600}",
+      "\u{20 308}",
+      "\u{1F477 1F3FF 200D 2640 FE0F}",
+      "\u{1F468 200D 1F393}",
+      "\u{1F46F 200D 2642 FE0F}",
+      "\u{1f469 200d 2764 fe0f 200d 1f469}",
+    ].product([Encoding::UTF_8, *WIDE_ENCODINGS]) do |g, enc|
+      g = g.encode(enc)
+      assert_equal [g], g.grapheme_clusters
+    end
+
+    [
+      "\u{a 324}",
+      "\u{d 324}",
+      "abc",
+    ].product([Encoding::UTF_8, *WIDE_ENCODINGS]) do |g, enc|
+      g = g.encode(enc)
+      assert_equal g.chars, g.grapheme_clusters
+    end
+    assert_equal ["a", "b", "c"], "abc".b.grapheme_clusters
+
+    s = "ABC".b
+    res = []
+    assert_same s, s.grapheme_clusters {|x| res << x }
+    assert_equal(3, res.size)
+    assert_equal("A", res[0])
+    assert_equal("B", res[1])
+    assert_equal("C", res[2])
+  end
+
+  def test_each_line
+    verbose, $VERBOSE = $VERBOSE, nil
+
+    save = $/
+    $/ = "\n"
+    res=[]
+    S("hello\nworld").each_line {|x| res << x}
+    assert_equal(S("hello\n"), res[0])
+    assert_equal(S("world"),   res[1])
+
+    res=[]
+    S("hello\n\n\nworld").each_line(S('')) {|x| res << x}
+    assert_equal(S("hello\n\n"), res[0])
+    assert_equal(S("world"),     res[1])
+
+    res=[]
+    S("hello\r\n\r\nworld").each_line(S('')) {|x| res << x}
+    assert_equal(S("hello\r\n\r\n"), res[0])
+    assert_equal(S("world"),         res[1])
+
+    $/ = "!"
+
+    res=[]
+    S("hello!world").each_line {|x| res << x}
+    assert_equal(S("hello!"), res[0])
+    assert_equal(S("world"),  res[1])
+
+    $/ = "ab"
+
+    res=[]
+    S("a").lines.each {|x| res << x}
+    assert_equal(1, res.size)
+    assert_equal(S("a"), res[0])
+
+    $/ = save
+
+    s = nil
+    "foo\nbar".each_line(nil) {|s2| s = s2 }
+    assert_equal("foo\nbar", s)
+
+    assert_equal "hello\n", S("hello\nworld").each_line.next
+    assert_equal "hello\nworld", S("hello\nworld").each_line(nil).next
+
+    bug7646 = "[ruby-dev:46827]"
+    assert_nothing_raised(bug7646) do
+      "\n\u0100".each_line("\n") {}
+    end
+  ensure
+    $/ = save
+    $VERBOSE = verbose
+  end
+
+  def test_each_line_chomp
+    res = []
+    S("hello\nworld").each_line("\n", chomp: true) {|x| res << x}
+    assert_equal(S("hello"), res[0])
+    assert_equal(S("world"), res[1])
+
+    res = []
+    S("hello\n\n\nworld").each_line(S(''), chomp: true) {|x| res << x}
+    assert_equal(S("hello\n"), res[0])
+    assert_equal(S("world"),   res[1])
+
+    res = []
+    S("hello\r\n\r\nworld").each_line(S(''), chomp: true) {|x| res << x}
+    assert_equal(S("hello\r\n"), res[0])
+    assert_equal(S("world"),     res[1])
+
+    res = []
+    S("hello!world").each_line(S('!'), chomp: true) {|x| res << x}
+    assert_equal(S("hello"), res[0])
+    assert_equal(S("world"), res[1])
+
+    res = []
+    S("a").each_line(S('ab'), chomp: true).each {|x| res << x}
+    assert_equal(1, res.size)
+    assert_equal(S("a"), res[0])
+
+    s = nil
+    "foo\nbar".each_line(nil, chomp: true) {|s2| s = s2 }
+    assert_equal("foo\nbar", s)
+
+    assert_equal "hello", S("hello\nworld").each_line(chomp: true).next
+    assert_equal "hello\nworld", S("hello\nworld").each_line(nil, chomp: true).next
+
+    res = []
+    S("").each_line(chomp: true) {|x| res << x}
+    assert_equal([], res)
+
+    res = []
+    S("\n").each_line(chomp: true) {|x| res << x}
+    assert_equal([S("")], res)
+
+    res = []
+    S("\r\n").each_line(chomp: true) {|x| res << x}
+    assert_equal([S("")], res)
+
+    res = []
+    S("a\n b\n").each_line(" ", chomp: true) {|x| res << x}
+    assert_equal([S("a\n"), S("b\n")], res)
+  end
+
+  def test_lines
+    s = S("hello\nworld")
+    assert_equal ["hello\n", "world"], s.lines
+    assert_equal ["hello\nworld"], s.lines(nil)
+
+    res = []
+    assert_equal s.object_id, s.lines {|x| res << x }.object_id
+    assert_equal(S("hello\n"), res[0])
+    assert_equal(S("world"),  res[1])
+  end
+
+  def test_empty?
+    assert_empty(S(""))
+    assert_not_empty(S("not"))
+  end
+
+  def test_end_with?
+    assert_send([S("hello"), :end_with?, S("llo")])
+    assert_not_send([S("hello"), :end_with?, S("ll")])
+    assert_send([S("hello"), :end_with?, S("el"), S("lo")])
+    assert_send([S("hello"), :end_with?, S("")])
+    assert_not_send([S("hello"), :end_with?])
+
+    bug5536 = '[ruby-core:40623]'
+    assert_raise(TypeError, bug5536) {S("str").end_with? :not_convertible_to_string}
+  end
+
+  def test_eql?
+    a = S("hello")
+    assert_operator(a, :eql?, S("hello"))
+    assert_operator(a, :eql?, a)
+  end
+
+  def test_gsub
+    assert_equal(S("h*ll*"),     S("hello").gsub(/[aeiou]/, S('*')))
+    assert_equal(S("h<e>ll<o>"), S("hello").gsub(/([aeiou])/, S('<\1>')))
+    assert_equal(S("h e l l o "),
+                 S("hello").gsub(/./) { |s| s[0].to_s + S(' ')})
+    assert_equal(S("HELL-o"),
+                 S("hello").gsub(/(hell)(.)/) { |s| $1.upcase + S('-') + $2 })
+    assert_equal(S("<>h<>e<>l<>l<>o<>"), S("hello").gsub(S(''), S('<\0>')))
+
+    assert_equal("z", "abc".gsub(/./, "a" => "z"), "moved from btest/knownbug")
+
+    assert_raise(ArgumentError) { "foo".gsub }
+  end
+
+  def test_gsub_encoding
+    a = S("hello world")
+    a.force_encoding Encoding::UTF_8
+
+    b = S("hi")
+    b.force_encoding Encoding::US_ASCII
+
+    assert_equal Encoding::UTF_8, a.gsub(/hello/, b).encoding
+
+    c = S("everybody")
+    c.force_encoding Encoding::US_ASCII
+
+    assert_equal Encoding::UTF_8, a.gsub(/world/, c).encoding
+
+    assert_equal S("a\u{e9}apos&lt;"), S("a\u{e9}'&lt;").gsub("'", "apos")
+
+    bug9849 = '[ruby-core:62669] [Bug #9849]'
+    assert_equal S("\u{3042 3042 3042}!foo!"), S("\u{3042 3042 3042}/foo/").gsub("/", "!"), bug9849
+  end
+
+  def test_gsub!
+    a = S("hello")
+    b = a.dup
+    a.gsub!(/[aeiou]/, S('*'))
+    assert_equal(S("h*ll*"), a)
+    assert_equal(S("hello"), b)
+
+    a = S("hello")
+    a.gsub!(/([aeiou])/, S('<\1>'))
+    as
