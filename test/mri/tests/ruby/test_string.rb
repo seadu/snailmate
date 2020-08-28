@@ -1236,4 +1236,239 @@ CODE
 
     a = S("hello")
     a.gsub!(/([aeiou])/, S('<\1>'))
-    as
+    assert_equal(S("h<e>ll<o>"), a)
+
+    a = S("hello")
+    a.gsub!(/./) { |s| s[0].to_s + S(' ')}
+    assert_equal(S("h e l l o "), a)
+
+    a = S("hello")
+    a.gsub!(/(hell)(.)/) { |s| $1.upcase + S('-') + $2 }
+    assert_equal(S("HELL-o"), a)
+
+    a = S("hello")
+    assert_nil(a.sub!(S('X'), S('Y')))
+  end
+
+  def test_sub_hash
+    assert_equal('azc', 'abc'.sub(/b/, "b" => "z"))
+    assert_equal('ac', 'abc'.sub(/b/, {}))
+    assert_equal('a1c', 'abc'.sub(/b/, "b" => 1))
+    assert_equal('aBc', 'abc'.sub(/b/, Hash.new {|h, k| k.upcase }))
+    assert_equal('a[\&]c', 'abc'.sub(/b/, "b" => '[\&]'))
+    assert_equal('aBcabc', 'abcabc'.sub(/b/, Hash.new {|h, k| h[k] = k.upcase }))
+    assert_equal('aBcdef', 'abcdef'.sub(/de|b/, "b" => "B", "de" => "DE"))
+  end
+
+  def test_gsub_hash
+    assert_equal('azc', 'abc'.gsub(/b/, "b" => "z"))
+    assert_equal('ac', 'abc'.gsub(/b/, {}))
+    assert_equal('a1c', 'abc'.gsub(/b/, "b" => 1))
+    assert_equal('aBc', 'abc'.gsub(/b/, Hash.new {|h, k| k.upcase }))
+    assert_equal('a[\&]c', 'abc'.gsub(/b/, "b" => '[\&]'))
+    assert_equal('aBcaBc', 'abcabc'.gsub(/b/, Hash.new {|h, k| h[k] = k.upcase }))
+    assert_equal('aBcDEf', 'abcdef'.gsub(/de|b/, "b" => "B", "de" => "DE"))
+  end
+
+  def test_hash
+    assert_equal(S("hello").hash, S("hello").hash)
+    assert_not_equal(S("hello").hash, S("helLO").hash)
+    bug4104 = '[ruby-core:33500]'
+    assert_not_equal(S("a").hash, S("a\0").hash, bug4104)
+    bug9172 = '[ruby-core:58658] [Bug #9172]'
+    assert_not_equal(S("sub-setter").hash, S("discover").hash, bug9172)
+  end
+
+  def test_hex
+    assert_equal(255,  S("0xff").hex)
+    assert_equal(-255, S("-0xff").hex)
+    assert_equal(255,  S("ff").hex)
+    assert_equal(-255, S("-ff").hex)
+    assert_equal(0,    S("-ralph").hex)
+    assert_equal(-15,  S("-fred").hex)
+    assert_equal(15,   S("fred").hex)
+  end
+
+  def test_include?
+    assert_include(S("foobar"), ?f)
+    assert_include(S("foobar"), S("foo"))
+    assert_not_include(S("foobar"), S("baz"))
+    assert_not_include(S("foobar"), ?z)
+  end
+
+  def test_index
+    assert_equal(0, S("hello").index(?h))
+    assert_equal(1, S("hello").index(S("ell")))
+    assert_equal(2, S("hello").index(/ll./))
+
+    assert_equal(3, S("hello").index(?l, 3))
+    assert_equal(3, S("hello").index(S("l"), 3))
+    assert_equal(3, S("hello").index(/l./, 3))
+
+    assert_nil(S("hello").index(?z, 3))
+    assert_nil(S("hello").index(S("z"), 3))
+    assert_nil(S("hello").index(/z./, 3))
+
+    assert_nil(S("hello").index(?z))
+    assert_nil(S("hello").index(S("z")))
+    assert_nil(S("hello").index(/z./))
+
+    assert_equal(0, S("").index(S("")))
+    assert_equal(0, S("").index(//))
+    assert_nil(S("").index(S("hello")))
+    assert_nil(S("").index(/hello/))
+    assert_equal(0, S("hello").index(S("")))
+    assert_equal(0, S("hello").index(//))
+
+    s = S("long") * 1000 << "x"
+    assert_nil(s.index(S("y")))
+    assert_equal(4 * 1000, s.index(S("x")))
+    s << "yx"
+    assert_equal(4 * 1000, s.index(S("x")))
+    assert_equal(4 * 1000, s.index(S("xyx")))
+
+    o = Object.new
+    def o.to_str; "bar"; end
+    assert_equal(3, "foobarbarbaz".index(o))
+    assert_raise(TypeError) { "foo".index(Object.new) }
+
+    assert_nil("foo".index(//, -100))
+    assert_nil($~)
+
+    assert_equal(2, S("abcdbce").index(/b\Kc/))
+  end
+
+  def test_insert
+    assert_equal("Xabcd", S("abcd").insert(0, 'X'))
+    assert_equal("abcXd", S("abcd").insert(3, 'X'))
+    assert_equal("abcdX", S("abcd").insert(4, 'X'))
+    assert_equal("abXcd", S("abcd").insert(-3, 'X'))
+    assert_equal("abcdX", S("abcd").insert(-1, 'X'))
+  end
+
+  def test_intern
+    assert_equal(:koala, S("koala").intern)
+    assert_not_equal(:koala, S("Koala").intern)
+  end
+
+  def test_length
+    assert_equal(0, S("").length)
+    assert_equal(4, S("1234").length)
+    assert_equal(6, S("1234\r\n").length)
+    assert_equal(7, S("\0011234\r\n").length)
+  end
+
+  def test_ljust
+    assert_equal(S("hello"),       S("hello").ljust(4))
+    assert_equal(S("hello      "), S("hello").ljust(11))
+    assert_equal(S("ababababab"), S("").ljust(10, "ab"), Bug2463)
+    assert_equal(S("abababababa"), S("").ljust(11, "ab"), Bug2463)
+  end
+
+  def test_next
+    assert_equal(S("abd"), S("abc").next)
+    assert_equal(S("z"),   S("y").next)
+    assert_equal(S("aaa"), S("zz").next)
+
+    assert_equal(S("124"),  S("123").next)
+    assert_equal(S("1000"), S("999").next)
+
+    assert_equal(S("2000aaa"),  S("1999zzz").next)
+    assert_equal(S("AAAAA000"), S("ZZZZ999").next)
+
+    assert_equal(S("*+"), S("**").next)
+
+    assert_equal(S("!"), S(" ").next)
+    assert_equal(S(""), S("").next)
+  end
+
+  def test_next!
+    a = S("abc")
+    b = a.dup
+    assert_equal(S("abd"), a.next!)
+    assert_equal(S("abd"), a)
+    assert_equal(S("abc"), b)
+
+    a = S("y")
+    assert_equal(S("z"), a.next!)
+    assert_equal(S("z"), a)
+
+    a = S("zz")
+    assert_equal(S("aaa"), a.next!)
+    assert_equal(S("aaa"), a)
+
+    a = S("123")
+    assert_equal(S("124"), a.next!)
+    assert_equal(S("124"), a)
+
+    a = S("999")
+    assert_equal(S("1000"), a.next!)
+    assert_equal(S("1000"), a)
+
+    a = S("1999zzz")
+    assert_equal(S("2000aaa"), a.next!)
+    assert_equal(S("2000aaa"), a)
+
+    a = S("ZZZZ999")
+    assert_equal(S("AAAAA000"), a.next!)
+    assert_equal(S("AAAAA000"), a)
+
+    a = S("**")
+    assert_equal(S("*+"), a.next!)
+    assert_equal(S("*+"), a)
+
+    a = S(" ")
+    assert_equal(S("!"), a.next!)
+    assert_equal(S("!"), a)
+  end
+
+  def test_oct
+    assert_equal(255,  S("0377").oct)
+    assert_equal(255,  S("377").oct)
+    assert_equal(-255, S("-0377").oct)
+    assert_equal(-255, S("-377").oct)
+    assert_equal(0,    S("OO").oct)
+    assert_equal(24,   S("030OO").oct)
+  end
+
+  def test_replace
+    a = S("foo")
+    assert_equal(S("f"), a.replace(S("f")))
+
+    a = S("foo")
+    assert_equal(S("foobar"), a.replace(S("foobar")))
+
+    a = S("foo")
+    b = a.replace(S("xyz"))
+    assert_equal(S("xyz"), b)
+
+    s = "foo" * 100
+    s2 = ("bar" * 100).dup
+    s.replace(s2)
+    assert_equal(s2, s)
+
+    s2 = ["foo"].pack("p")
+    s.replace(s2)
+    assert_equal(s2, s)
+
+    fs = "".freeze
+    assert_raise(FrozenError) { fs.replace("a") }
+    assert_raise(FrozenError) { fs.replace(fs) }
+    assert_raise(ArgumentError) { fs.replace() }
+    assert_raise(FrozenError) { fs.replace(42) }
+  end
+
+  def test_reverse
+    assert_equal(S("beta"), S("ateb").reverse)
+    assert_equal(S("madamImadam"), S("madamImadam").reverse)
+
+    a=S("beta")
+    assert_equal(S("ateb"), a.reverse)
+    assert_equal(S("beta"), a)
+  end
+
+  def test_reverse!
+    a = S("beta")
+    b = a.dup
+    assert_equal(S("ateb"), a.reverse!)
+    ass
