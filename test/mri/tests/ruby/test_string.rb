@@ -1471,4 +1471,241 @@ CODE
     a = S("beta")
     b = a.dup
     assert_equal(S("ateb"), a.reverse!)
-    ass
+    assert_equal(S("ateb"), a)
+    assert_equal(S("beta"), b)
+
+    assert_equal(S("madamImadam"), S("madamImadam").reverse!)
+
+    a = S("madamImadam")
+    assert_equal(S("madamImadam"), a.reverse!)  # ??
+    assert_equal(S("madamImadam"), a)
+  end
+
+  def test_rindex
+    assert_equal(3, S("hello").rindex(?l))
+    assert_equal(6, S("ell, hello").rindex(S("ell")))
+    assert_equal(7, S("ell, hello").rindex(/ll./))
+
+    assert_equal(3, S("hello,lo").rindex(?l, 3))
+    assert_equal(3, S("hello,lo").rindex(S("l"), 3))
+    assert_equal(3, S("hello,lo").rindex(/l./, 3))
+
+    assert_nil(S("hello").rindex(?z,     3))
+    assert_nil(S("hello").rindex(S("z"), 3))
+    assert_nil(S("hello").rindex(/z./,   3))
+
+    assert_nil(S("hello").rindex(?z))
+    assert_nil(S("hello").rindex(S("z")))
+    assert_nil(S("hello").rindex(/z./))
+
+    o = Object.new
+    def o.to_str; "bar"; end
+    assert_equal(6, "foobarbarbaz".rindex(o))
+    assert_raise(TypeError) { "foo".rindex(Object.new) }
+
+    assert_nil("foo".rindex(//, -100))
+    assert_nil($~)
+
+    assert_equal(3, "foo".rindex(//))
+    assert_equal([3, 3], $~.offset(0))
+
+    assert_equal(5, S("abcdbce").rindex(/b\Kc/))
+  end
+
+  def test_rjust
+    assert_equal(S("hello"), S("hello").rjust(4))
+    assert_equal(S("      hello"), S("hello").rjust(11))
+    assert_equal(S("ababababab"), S("").rjust(10, "ab"), Bug2463)
+    assert_equal(S("abababababa"), S("").rjust(11, "ab"), Bug2463)
+  end
+
+  def test_scan
+    a = S("cruel world")
+    assert_equal([S("cruel"), S("world")],a.scan(/\w+/))
+    assert_equal([S("cru"), S("el "), S("wor")],a.scan(/.../))
+    assert_equal([[S("cru")], [S("el ")], [S("wor")]],a.scan(/(...)/))
+
+    res = []
+    a.scan(/\w+/) { |w| res << w }
+    assert_equal([S("cruel"), S("world") ],res)
+
+    res = []
+    a.scan(/.../) { |w| res << w }
+    assert_equal([S("cru"), S("el "), S("wor")],res)
+
+    res = []
+    a.scan(/(...)/) { |w| res << w }
+    assert_equal([[S("cru")], [S("el ")], [S("wor")]],res)
+
+    /h/ =~ a
+    a.scan(/x/)
+    assert_nil($~)
+
+    /h/ =~ a
+    a.scan('x')
+    assert_nil($~)
+
+    assert_equal(%w[1 2 3], S("a1 a2 a3").scan(/a\K./))
+  end
+
+  def test_size
+    assert_equal(0, S("").size)
+    assert_equal(4, S("1234").size)
+    assert_equal(6, S("1234\r\n").size)
+    assert_equal(7, S("\0011234\r\n").size)
+  end
+
+  def test_slice
+    assert_equal(?A, S("AooBar").slice(0))
+    assert_equal(?B, S("FooBaB").slice(-1))
+    assert_nil(S("FooBar").slice(6))
+    assert_nil(S("FooBar").slice(-7))
+
+    assert_equal(S("Foo"), S("FooBar").slice(0,3))
+    assert_equal(S(S("Bar")), S("FooBar").slice(-3,3))
+    assert_nil(S("FooBar").slice(7,2))     # Maybe should be six?
+    assert_nil(S("FooBar").slice(-7,10))
+
+    assert_equal(S("Foo"), S("FooBar").slice(0..2))
+    assert_equal(S("Bar"), S("FooBar").slice(-3..-1))
+    assert_equal(S(""), S("FooBar").slice(6..2))
+    assert_nil(S("FooBar").slice(-10..-7))
+
+    assert_equal(S("Foo"), S("FooBar").slice(/^F../))
+    assert_equal(S("Bar"), S("FooBar").slice(/..r$/))
+    assert_nil(S("FooBar").slice(/xyzzy/))
+    assert_nil(S("FooBar").slice(/plugh/))
+
+    assert_equal(S("Foo"), S("FooBar").slice(S("Foo")))
+    assert_equal(S("Bar"), S("FooBar").slice(S("Bar")))
+    assert_nil(S("FooBar").slice(S("xyzzy")))
+    assert_nil(S("FooBar").slice(S("plugh")))
+
+    bug9882 = '[ruby-core:62842] [Bug #9882]'
+    substr = S("\u{30c6 30b9 30c8 2019}#{bug9882}").slice(4..-1)
+    assert_equal(S(bug9882).hash, substr.hash, bug9882)
+    assert_predicate(substr, :ascii_only?, bug9882)
+  end
+
+  def test_slice!
+    a = S("AooBar")
+    b = a.dup
+    assert_equal(?A, a.slice!(0))
+    assert_equal(S("ooBar"), a)
+    assert_equal(S("AooBar"), b)
+
+    a = S("FooBar")
+    assert_equal(?r,a.slice!(-1))
+    assert_equal(S("FooBa"), a)
+
+    a = S("FooBar")
+    if @aref_slicebang_silent
+      assert_nil( a.slice!(6) )
+      assert_nil( a.slice!(6r) )
+    else
+      assert_raise(IndexError) { a.slice!(6) }
+      assert_raise(IndexError) { a.slice!(6r) }
+    end
+    assert_equal(S("FooBar"), a)
+
+    if @aref_slicebang_silent
+      assert_nil( a.slice!(-7) )
+    else
+      assert_raise(IndexError) { a.slice!(-7) }
+    end
+    assert_equal(S("FooBar"), a)
+
+    a = S("FooBar")
+    assert_equal(S("Foo"), a.slice!(0,3))
+    assert_equal(S("Bar"), a)
+
+    a = S("FooBar")
+    assert_equal(S("Bar"), a.slice!(-3,3))
+    assert_equal(S("Foo"), a)
+
+    a=S("FooBar")
+    if @aref_slicebang_silent
+    assert_nil(a.slice!(7,2))      # Maybe should be six?
+    else
+    assert_raise(IndexError) {a.slice!(7,2)}     # Maybe should be six?
+    end
+    assert_equal(S("FooBar"), a)
+    if @aref_slicebang_silent
+    assert_nil(a.slice!(-7,10))
+    else
+    assert_raise(IndexError) {a.slice!(-7,10)}
+    end
+    assert_equal(S("FooBar"), a)
+
+    a=S("FooBar")
+    assert_equal(S("Foo"), a.slice!(0..2))
+    assert_equal(S("Bar"), a)
+
+    a=S("FooBar")
+    assert_equal(S("Bar"), a.slice!(-3..-1))
+    assert_equal(S("Foo"), a)
+
+    a=S("FooBar")
+    if @aref_slicebang_silent
+    assert_equal(S(""), a.slice!(6..2))
+    else
+    assert_raise(RangeError) {a.slice!(6..2)}
+    end
+    assert_equal(S("FooBar"), a)
+    if @aref_slicebang_silent
+    assert_nil(a.slice!(-10..-7))
+    else
+    assert_raise(RangeError) {a.slice!(-10..-7)}
+    end
+    assert_equal(S("FooBar"), a)
+
+    a=S("FooBar")
+    assert_equal(S("Foo"), a.slice!(/^F../))
+    assert_equal(S("Bar"), a)
+
+    a=S("FooBar")
+    assert_equal(S("Bar"), a.slice!(/..r$/))
+    assert_equal(S("Foo"), a)
+
+    a=S("FooBar")
+    if @aref_slicebang_silent
+      assert_nil(a.slice!(/xyzzy/))
+    else
+      assert_raise(IndexError) {a.slice!(/xyzzy/)}
+    end
+    assert_equal(S("FooBar"), a)
+    if @aref_slicebang_silent
+      assert_nil(a.slice!(/plugh/))
+    else
+      assert_raise(IndexError) {a.slice!(/plugh/)}
+    end
+    assert_equal(S("FooBar"), a)
+
+    a=S("FooBar")
+    assert_equal(S("Foo"), a.slice!(S("Foo")))
+    assert_equal(S("Bar"), a)
+
+    a=S("FooBar")
+    assert_equal(S("Bar"), a.slice!(S("Bar")))
+    assert_equal(S("Foo"), a)
+
+    assert_raise(ArgumentError) { "foo".slice! }
+  end
+
+  def test_split
+    fs, $; = $;, nil
+    assert_equal([S("a"), S("b"), S("c")], S(" a   b\t c ").split)
+    assert_equal([S("a"), S("b"), S("c")], S(" a   b\t c ").split(S(" ")))
+
+    assert_equal([S(" a "), S(" b "), S(" c ")], S(" a | b | c ").split(S("|")))
+
+    assert_equal([S("a"), S("b"), S("c")], S("aXXbXXcXX").split(/X./))
+
+    assert_equal([S("a"), S("b"), S("c")], S("abc").split(//))
+
+    assert_equal([S("a|b|c")], S("a|b|c").split(S('|'), 1))
+
+    assert_equal([S("a"), S("b|c")], S("a|b|c").split(S('|'), 2))
+    assert_equal([S("a"), S("b"), S("c")], S("a|b|c").split(S('|'), 3))
+
+    assert_equal([S("a"), S("b"), S("c"),
