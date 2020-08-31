@@ -1915,4 +1915,240 @@ CODE
 		 S("abababababababababab").sub(/(b)/, '-\9-'))
     assert_equal(S("1-b-0"),
 		 S("1b2b3b4b5b6b7b8b9b0").
-		 
+		 sub(/(b).(b).(b).(b).(b).(b).(b).(b).(b)/, '-\9-'))
+    assert_equal(S("1-b-0"),
+		 S("1b2b3b4b5b6b7b8b9b0").
+		 sub(/(b).(b).(b).(b).(b).(b).(b).(b).(b)/, '-\\9-'))
+    assert_equal(S("1-\\9-0"),
+		 S("1b2b3b4b5b6b7b8b9b0").
+		 sub(/(b).(b).(b).(b).(b).(b).(b).(b).(b)/, '-\\\9-'))
+    assert_equal(S("k"),
+		 S("1a2b3c4d5e6f7g8h9iAjBk").
+		 sub(/.(.).(.).(.).(.).(.).(.).(.).(.).(.).(.).(.)/, '\+'))
+
+    assert_equal(S("ab\\aba"), S("ababa").sub(/b/, '\&\\'))
+    assert_equal(S("ababa"), S("ababa").sub(/b/, '\&'))
+    assert_equal(S("ababa"), S("ababa").sub(/b/, '\\&'))
+    assert_equal(S("a\\&aba"), S("ababa").sub(/b/, '\\\&'))
+    assert_equal(S("a\\&aba"), S("ababa").sub(/b/, '\\\\&'))
+    assert_equal(S("a\\baba"), S("ababa").sub(/b/, '\\\\\&'))
+
+    o = Object.new
+    def o.to_str; "bar"; end
+    assert_equal("fooBARbaz", "foobarbaz".sub(o, "BAR"))
+
+    assert_raise(TypeError) { "foo".sub(Object.new, "") }
+
+    assert_raise(ArgumentError) { "foo".sub }
+
+    assert_raise(IndexError) { "foo"[/(?:(o$)|(x))/, 2] = 'bar' }
+
+    o = Object.new
+    def o.to_s; self; end
+    assert_match(/^foo#<Object:0x.*>baz$/, "foobarbaz".sub("bar") { o })
+
+    assert_equal(S("Abc"), S("abc").sub("a", "A"))
+    m = nil
+    assert_equal(S("Abc"), S("abc").sub("a") {m = $~; "A"})
+    assert_equal(S("a"), m[0])
+    assert_equal(/a/, m.regexp)
+    bug = '[ruby-core:78686] [Bug #13042] other than regexp has no name references'
+    assert_raise_with_message(IndexError, /oops/, bug) {
+      'hello'.gsub('hello', '\k<oops>')
+    }
+  end
+
+  def test_sub!
+    a = S("hello")
+    b = a.dup
+    a.sub!(/[aeiou]/, S('*'))
+    assert_equal(S("h*llo"), a)
+    assert_equal(S("hello"), b)
+
+    a = S("hello")
+    a.sub!(/([aeiou])/, S('<\1>'))
+    assert_equal(S("h<e>llo"), a)
+
+    a = S("hello")
+    a.sub!(/./) { |s| s[0].to_s + S(' ')}
+    assert_equal(S("h ello"), a)
+
+    a = S("hello")
+    a.sub!(/(hell)(.)/) { |s| $1.upcase + S('-') + $2 }
+    assert_equal(S("HELL-o"), a)
+
+    a=S("hello")
+    assert_nil(a.sub!(/X/, S('Y')))
+
+    bug16105 = '[Bug #16105] heap-use-after-free'
+    a = S("ABCDEFGHIJKLMNOPQRSTUVWXYZ012345678")
+    b = a.dup
+    c = a.slice(1, 100)
+    assert_equal("AABCDEFGHIJKLMNOPQRSTUVWXYZ012345678", b.sub!(c, b), bug16105)
+  end
+
+  def test_succ
+    assert_equal(S("abd"), S("abc").succ)
+    assert_equal(S("z"),   S("y").succ)
+    assert_equal(S("aaa"), S("zz").succ)
+
+    assert_equal(S("124"),  S("123").succ)
+    assert_equal(S("1000"), S("999").succ)
+    assert_equal(S("2.000"), S("1.999").succ)
+
+    assert_equal(S("No.10"), S("No.9").succ)
+    assert_equal(S("2000aaa"),  S("1999zzz").succ)
+    assert_equal(S("AAAAA000"), S("ZZZZ999").succ)
+    assert_equal(S("*+"), S("**").succ)
+
+    assert_equal("abce", "abcd".succ)
+    assert_equal("THX1139", "THX1138".succ)
+    assert_equal("<\<koalb>>", "<\<koala>>".succ)
+    assert_equal("2000aaa", "1999zzz".succ)
+    assert_equal("AAAA0000", "ZZZ9999".succ)
+    assert_equal("**+", "***".succ)
+
+    assert_equal("!", " ".succ)
+    assert_equal("", "".succ)
+
+    bug = '[ruby-core:83062] [Bug #13952]'
+    s = "\xff".b
+    assert_not_predicate(s, :ascii_only?)
+    assert_predicate(s.succ, :ascii_only?, bug)
+  end
+
+  def test_succ!
+    a = S("abc")
+    b = a.dup
+    assert_equal(S("abd"), a.succ!)
+    assert_equal(S("abd"), a)
+    assert_equal(S("abc"), b)
+
+    a = S("y")
+    assert_equal(S("z"), a.succ!)
+    assert_equal(S("z"), a)
+
+    a = S("zz")
+    assert_equal(S("aaa"), a.succ!)
+    assert_equal(S("aaa"), a)
+
+    a = S("123")
+    assert_equal(S("124"), a.succ!)
+    assert_equal(S("124"), a)
+
+    a = S("999")
+    assert_equal(S("1000"), a.succ!)
+    assert_equal(S("1000"), a)
+
+    a = S("1999zzz")
+    assert_equal(S("2000aaa"), a.succ!)
+    assert_equal(S("2000aaa"), a)
+
+    a = S("ZZZZ999")
+    assert_equal(S("AAAAA000"), a.succ!)
+    assert_equal(S("AAAAA000"), a)
+
+    a = S("**")
+    assert_equal(S("*+"), a.succ!)
+    assert_equal(S("*+"), a)
+
+    a = S("No.9")
+    assert_equal(S("No.10"), a.succ!)
+    assert_equal(S("No.10"), a)
+
+    a = S(" ")
+    assert_equal(S("!"), a.succ!)
+    assert_equal(S("!"), a)
+
+    a = S("")
+    assert_equal(S(""), a.succ!)
+    assert_equal(S(""), a)
+
+    assert_equal("aaaaaaaaaaaa", "zzzzzzzzzzz".succ!)
+    assert_equal("aaaaaaaaaaaaaaaaaaaaaaaa", "zzzzzzzzzzzzzzzzzzzzzzz".succ!)
+  end
+
+  def test_sum
+    n = S("\001\001\001\001\001\001\001\001\001\001\001\001\001\001\001")
+    assert_equal(15, n.sum)
+    n += S("\001")
+    assert_equal(16, n.sum(17))
+    n[0] = 2.chr
+    assert_not_equal(15, n.sum)
+    assert_equal(17, n.sum(0))
+    assert_equal(17, n.sum(-1))
+  end
+
+  def check_sum(str, bits=16)
+    sum = 0
+    str.each_byte {|c| sum += c}
+    sum = sum & ((1 << bits) - 1) if bits != 0
+    assert_equal(sum, str.sum(bits))
+  end
+
+  def test_sum_2
+    assert_equal(0, "".sum)
+    assert_equal(294, "abc".sum)
+    check_sum("abc")
+    check_sum("\x80")
+    -3.upto(70) {|bits|
+      check_sum("xyz", bits)
+    }
+  end
+
+  def test_sum_long
+    s8421505 = "\xff" * 8421505
+    assert_equal(127, s8421505.sum(31))
+    assert_equal(2147483775, s8421505.sum(0))
+    s16843010 = ("\xff" * 16843010)
+    assert_equal(254, s16843010.sum(32))
+    assert_equal(4294967550, s16843010.sum(0))
+  end
+
+  def test_swapcase
+    assert_equal(S("hi&LOW"), S("HI&low").swapcase)
+    s = S("")
+    assert_not_same(s, s.swapcase)
+  end
+
+  def test_swapcase!
+    a = S("hi&LOW")
+    b = a.dup
+    assert_equal(S("HI&low"), a.swapcase!)
+    assert_equal(S("HI&low"), a)
+    assert_equal(S("hi&LOW"), b)
+
+    a = S("$^#^%$#!!")
+    assert_nil(a.swapcase!)
+    assert_equal(S("$^#^%$#!!"), a)
+  end
+
+  def test_to_f
+    assert_equal(344.3,     S("344.3").to_f)
+    assert_equal(5.9742e24, S("5.9742e24").to_f)
+    assert_equal(98.6,      S("98.6 degrees").to_f)
+    assert_equal(0.0,       S("degrees 100.0").to_f)
+    assert_equal([ 0.0].pack('G'), [S(" 0.0").to_f].pack('G'))
+    assert_equal([-0.0].pack('G'), [S("-0.0").to_f].pack('G'))
+  end
+
+  def test_to_i
+    assert_equal(1480, S("1480ft/sec").to_i)
+    assert_equal(0,    S("speed of sound in water @20C = 1480ft/sec)").to_i)
+    assert_equal(0, " 0".to_i)
+    assert_equal(0, "+0".to_i)
+    assert_equal(0, "-0".to_i)
+    assert_equal(0, "--0".to_i)
+    assert_equal(16, "0x10".to_i(0))
+    assert_equal(16, "0X10".to_i(0))
+    assert_equal(2, "0b10".to_i(0))
+    assert_equal(2, "0B10".to_i(0))
+    assert_equal(8, "0o10".to_i(0))
+    assert_equal(8, "0O10".to_i(0))
+    assert_equal(10, "0d10".to_i(0))
+    assert_equal(10, "0D10".to_i(0))
+    assert_equal(8, "010".to_i(0))
+    assert_raise(ArgumentError) { "010".to_i(-10) }
+    2.upto(36) {|radix|
+      assert_equal(radix, "10".to_i(radix))
+      as
