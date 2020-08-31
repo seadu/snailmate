@@ -1708,4 +1708,211 @@ CODE
     assert_equal([S("a"), S("b|c")], S("a|b|c").split(S('|'), 2))
     assert_equal([S("a"), S("b"), S("c")], S("a|b|c").split(S('|'), 3))
 
-    assert_equal([S("a"), S("b"), S("c"),
+    assert_equal([S("a"), S("b"), S("c"), S("")], S("a|b|c|").split(S('|'), -1))
+    assert_equal([S("a"), S("b"), S("c"), S(""), S("")], S("a|b|c||").split(S('|'), -1))
+
+    assert_equal([S("a"), S(""), S("b"), S("c")], S("a||b|c|").split(S('|')))
+    assert_equal([S("a"), S(""), S("b"), S("c"), S("")], S("a||b|c|").split(S('|'), -1))
+
+    assert_equal([], "".split(//, 1))
+  ensure
+    EnvUtil.suppress_warning {$; = fs}
+  end
+
+  def test_split_with_block
+    fs, $; = $;, nil
+    result = []; S(" a   b\t c ").split {|s| result << s}
+    assert_equal([S("a"), S("b"), S("c")], result)
+    result = []; S(" a   b\t c ").split(S(" ")) {|s| result << s}
+    assert_equal([S("a"), S("b"), S("c")], result)
+
+    result = []; S(" a | b | c ").split(S("|")) {|s| result << s}
+    assert_equal([S(" a "), S(" b "), S(" c ")], result)
+
+    result = []; S("aXXbXXcXX").split(/X./) {|s| result << s}
+    assert_equal([S("a"), S("b"), S("c")], result)
+
+    result = []; S("abc").split(//) {|s| result << s}
+    assert_equal([S("a"), S("b"), S("c")], result)
+
+    result = []; S("a|b|c").split(S('|'), 1) {|s| result << s}
+    assert_equal([S("a|b|c")], result)
+
+    result = []; S("a|b|c").split(S('|'), 2) {|s| result << s}
+    assert_equal([S("a"), S("b|c")], result)
+    result = []; S("a|b|c").split(S('|'), 3) {|s| result << s}
+    assert_equal([S("a"), S("b"), S("c")], result)
+
+    result = []; S("a|b|c|").split(S('|'), -1) {|s| result << s}
+    assert_equal([S("a"), S("b"), S("c"), S("")], result)
+    result = []; S("a|b|c||").split(S('|'), -1) {|s| result << s}
+    assert_equal([S("a"), S("b"), S("c"), S(""), S("")], result)
+
+    result = []; S("a||b|c|").split(S('|')) {|s| result << s}
+    assert_equal([S("a"), S(""), S("b"), S("c")], result)
+    result = []; S("a||b|c|").split(S('|'), -1) {|s| result << s}
+    assert_equal([S("a"), S(""), S("b"), S("c"), S("")], result)
+
+    result = []; "".split(//, 1) {|s| result << s}
+    assert_equal([], result)
+
+    result = []; "aaa,bbb,ccc,ddd".split(/,/) {|s| result << s.gsub(/./, "A")}
+    assert_equal(["AAA"]*4, result)
+  ensure
+    EnvUtil.suppress_warning {$; = fs}
+  end
+
+  def test_fs
+    assert_raise_with_message(TypeError, /\$;/) {
+      $; = []
+    }
+
+    assert_separately(%W[-W0], "#{<<~"begin;"}\n#{<<~'end;'}")
+    bug = '[ruby-core:79582] $; must not be GCed'
+    begin;
+      $; = " "
+      $a = nil
+      alias $; $a
+      alias $-F $a
+      GC.start
+      assert_equal([], "".split, bug)
+    end;
+  end
+
+  def test_split_encoding
+    bug6206 = '[ruby-dev:45441]'
+    Encoding.list.each do |enc|
+      next unless enc.ascii_compatible?
+      s = S("a:".force_encoding(enc))
+      assert_equal([enc]*2, s.split(":", 2).map(&:encoding), bug6206)
+    end
+  end
+
+  def test_split_wchar
+    bug8642 = '[ruby-core:56036] [Bug #8642]'
+    WIDE_ENCODINGS.each do |enc|
+      s = S("abc,def".encode(enc))
+      assert_equal(["abc", "def"].map {|c| c.encode(enc)},
+                   s.split(",".encode(enc)),
+                   "#{bug8642} in #{enc.name}")
+    end
+  end
+
+  def test_split_invalid_sequence
+    bug10886 = '[ruby-core:68229] [Bug #10886]'
+    broken = S("\xa1".force_encoding("utf-8"))
+    assert_raise(ArgumentError, bug10886) {
+      S("a,b").split(broken)
+    }
+  end
+
+  def test_split_invalid_argument
+    assert_raise(TypeError) {
+      S("a,b").split(BasicObject.new)
+    }
+  end
+
+  def test_split_dupped
+    s = "abc"
+    s.split("b", 1).map(&:upcase!)
+    assert_equal("abc", s)
+  end
+
+  def test_split_lookbehind
+    assert_equal([S("ab"), S("d")], S("abcd").split(/(?<=b)c/))
+    assert_equal([S("ab"), S("d")], S("abcd").split(/b\Kc/))
+  end
+
+  def test_squeeze
+    assert_equal(S("abc"), S("aaabbbbccc").squeeze)
+    assert_equal(S("aa bb cc"), S("aa   bb      cc").squeeze(S(" ")))
+    assert_equal(S("BxTyWz"), S("BxxxTyyyWzzzzz").squeeze(S("a-z")))
+  end
+
+  def test_squeeze!
+    a = S("aaabbbbccc")
+    b = a.dup
+    assert_equal(S("abc"), a.squeeze!)
+    assert_equal(S("abc"), a)
+    assert_equal(S("aaabbbbccc"), b)
+
+    a = S("aa   bb      cc")
+    assert_equal(S("aa bb cc"), a.squeeze!(S(" ")))
+    assert_equal(S("aa bb cc"), a)
+
+    a = S("BxxxTyyyWzzzzz")
+    assert_equal(S("BxTyWz"), a.squeeze!(S("a-z")))
+    assert_equal(S("BxTyWz"), a)
+
+    a=S("The quick brown fox")
+    assert_nil(a.squeeze!)
+  end
+
+  def test_start_with?
+    assert_send([S("hello"), :start_with?, S("hel")])
+    assert_not_send([S("hello"), :start_with?, S("el")])
+    assert_send([S("hello"), :start_with?, S("el"), S("he")])
+
+    bug5536 = '[ruby-core:40623]'
+    assert_raise(TypeError, bug5536) {S("str").start_with? :not_convertible_to_string}
+
+    assert_equal(true, "hello".start_with?(/hel/))
+    assert_equal("hel", $&)
+    assert_equal(false, "hello".start_with?(/el/))
+    assert_nil($&)
+  end
+
+  def test_strip
+    assert_equal(S("x"), S("      x        ").strip)
+    assert_equal(S("x"), S(" \n\r\t     x  \t\r\n\n      ").strip)
+    assert_equal(S("x"), S("\x00x\x00").strip)
+
+    assert_equal("0b0 ".force_encoding("UTF-16BE"),
+                 "\x00 0b0 ".force_encoding("UTF-16BE").strip)
+    assert_equal("0\x000b0 ".force_encoding("UTF-16BE"),
+                 "0\x000b0 ".force_encoding("UTF-16BE").strip)
+  end
+
+  def test_strip!
+    a = S("      x        ")
+    b = a.dup
+    assert_equal(S("x") ,a.strip!)
+    assert_equal(S("x") ,a)
+    assert_equal(S("      x        "), b)
+
+    a = S(" \n\r\t     x  \t\r\n\n      ")
+    assert_equal(S("x"), a.strip!)
+    assert_equal(S("x"), a)
+
+    a = S("\x00x\x00")
+    assert_equal(S("x"), a.strip!)
+    assert_equal(S("x"), a)
+
+    a = S("x")
+    assert_nil(a.strip!)
+    assert_equal(S("x") ,a)
+  end
+
+  def test_sub
+    assert_equal(S("h*llo"),    S("hello").sub(/[aeiou]/, S('*')))
+    assert_equal(S("h<e>llo"),  S("hello").sub(/([aeiou])/, S('<\1>')))
+    assert_equal(S("h ello"), S("hello").sub(/./) {
+                   |s| s[0].to_s + S(' ')})
+    assert_equal(S("HELL-o"),   S("hello").sub(/(hell)(.)/) {
+                   |s| $1.upcase + S('-') + $2
+                   })
+    assert_equal(S("h<e>llo"),  S("hello").sub('e', S('<\0>')))
+
+    assert_equal(S("a\\aba"), S("ababa").sub(/b/, '\\'))
+    assert_equal(S("ab\\aba"), S("ababa").sub(/(b)/, '\1\\'))
+    assert_equal(S("ababa"), S("ababa").sub(/(b)/, '\1'))
+    assert_equal(S("ababa"), S("ababa").sub(/(b)/, '\\1'))
+    assert_equal(S("a\\1aba"), S("ababa").sub(/(b)/, '\\\1'))
+    assert_equal(S("a\\1aba"), S("ababa").sub(/(b)/, '\\\\1'))
+    assert_equal(S("a\\baba"), S("ababa").sub(/(b)/, '\\\\\1'))
+
+    assert_equal(S("a--ababababababababab"),
+		 S("abababababababababab").sub(/(b)/, '-\9-'))
+    assert_equal(S("1-b-0"),
+		 S("1b2b3b4b5b6b7b8b9b0").
+		 
