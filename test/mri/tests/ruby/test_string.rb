@@ -2151,4 +2151,183 @@ CODE
     assert_raise(ArgumentError) { "010".to_i(-10) }
     2.upto(36) {|radix|
       assert_equal(radix, "10".to_i(radix))
-      as
+      assert_equal(radix**2, "100".to_i(radix))
+    }
+    assert_raise(ArgumentError) { "0".to_i(1) }
+    assert_raise(ArgumentError) { "0".to_i(37) }
+    assert_equal(0, "z".to_i(10))
+    assert_equal(12, "1_2".to_i(10))
+    assert_equal(0x40000000, "1073741824".to_i(10))
+    assert_equal(0x4000000000000000, "4611686018427387904".to_i(10))
+    assert_equal(1, "1__2".to_i(10))
+    assert_equal(1, "1_z".to_i(10))
+
+    bug6192 = '[ruby-core:43566]'
+    assert_raise(Encoding::CompatibilityError, bug6192) {"0".encode("utf-16be").to_i}
+    assert_raise(Encoding::CompatibilityError, bug6192) {"0".encode("utf-16le").to_i}
+    assert_raise(Encoding::CompatibilityError, bug6192) {"0".encode("utf-32be").to_i}
+    assert_raise(Encoding::CompatibilityError, bug6192) {"0".encode("utf-32le").to_i}
+    assert_raise(Encoding::CompatibilityError, bug6192) {"0".encode("iso-2022-jp").to_i}
+  end
+
+  def test_to_s
+    a = S("me")
+    assert_equal("me", a.to_s)
+    assert_equal(a.__id__, a.to_s.__id__) if @cls == String
+  end
+
+  def test_to_str
+    a = S("me")
+    assert_equal("me", a.to_s)
+    assert_equal(a.__id__, a.to_s.__id__) if @cls == String
+
+    o = Object.new
+    def o.to_str
+      "at"
+    end
+    assert_equal("meat", a.concat(o))
+
+    o = Object.new
+    def o.to_str
+      foo_bar()
+    end
+    assert_match(/foo_bar/, assert_raise(NoMethodError) {a.concat(o)}.message)
+  end
+
+  def test_tr
+    assert_equal(S("hippo"), S("hello").tr(S("el"), S("ip")))
+    assert_equal(S("*e**o"), S("hello").tr(S("^aeiou"), S("*")))
+    assert_equal(S("hal"),   S("ibm").tr(S("b-z"), S("a-z")))
+
+    a = "abc".force_encoding(Encoding::US_ASCII)
+    assert_equal(Encoding::US_ASCII, a.tr(S("z"), S("\u0101")).encoding, '[ruby-core:22326]')
+
+    assert_equal("a".hash, "a".tr("a", "\u0101").tr("\u0101", "a").hash, '[ruby-core:22328]')
+    assert_equal(true, "\u0101".tr("\u0101", "a").ascii_only?)
+    assert_equal(true, "\u3041".tr("\u3041", "a").ascii_only?)
+    assert_equal(false, "\u3041\u3042".tr("\u3041", "a").ascii_only?)
+
+    bug6156 = '[ruby-core:43335]'
+    bug13950 = '[ruby-core:83056] [Bug #13950]'
+    str, range, star = %w[b a-z *].map{|s|s.encode("utf-16le")}
+    result = str.tr(range, star)
+    assert_equal(star, result, bug6156)
+    assert_not_predicate(str, :ascii_only?)
+    assert_not_predicate(star, :ascii_only?)
+    assert_not_predicate(result, :ascii_only?, bug13950)
+  end
+
+  def test_tr!
+    a = S("hello")
+    b = a.dup
+    assert_equal(S("hippo"), a.tr!(S("el"), S("ip")))
+    assert_equal(S("hippo"), a)
+    assert_equal(S("hello"),b)
+
+    a = S("hello")
+    assert_equal(S("*e**o"), a.tr!(S("^aeiou"), S("*")))
+    assert_equal(S("*e**o"), a)
+
+    a = S("IBM")
+    assert_equal(S("HAL"), a.tr!(S("B-Z"), S("A-Z")))
+    assert_equal(S("HAL"), a)
+
+    a = S("ibm")
+    assert_nil(a.tr!(S("B-Z"), S("A-Z")))
+    assert_equal(S("ibm"), a)
+
+    a = "abc".force_encoding(Encoding::US_ASCII)
+    assert_nil(a.tr!(S("z"), S("\u0101")), '[ruby-core:22326]')
+    assert_equal(Encoding::US_ASCII, a.encoding, '[ruby-core:22326]')
+  end
+
+  def test_tr_s
+    assert_equal(S("hypo"), S("hello").tr_s(S("el"), S("yp")))
+    assert_equal(S("h*o"),  S("hello").tr_s(S("el"), S("*")))
+    assert_equal("a".hash, "\u0101\u0101".tr_s("\u0101", "a").hash)
+    assert_equal(true, "\u3041\u3041".tr("\u3041", "a").ascii_only?)
+  end
+
+  def test_tr_s!
+    a = S("hello")
+    b = a.dup
+    assert_equal(S("hypo"),  a.tr_s!(S("el"), S("yp")))
+    assert_equal(S("hypo"),  a)
+    assert_equal(S("hello"), b)
+
+    a = S("hello")
+    assert_equal(S("h*o"), a.tr_s!(S("el"), S("*")))
+    assert_equal(S("h*o"), a)
+  end
+
+  def test_unpack
+    a = [S("cat"),  S("wom"), S("x"), S("yy")]
+    assert_equal(a, S("catwomx  yy ").unpack(S("A3A3A3A3")))
+
+    assert_equal([S("cat")], S("cat  \000\000").unpack(S("A*")))
+    assert_equal([S("cwx"), S("wx"), S("x"), S("yy")],
+                   S("cwx  yy ").unpack(S("A3@1A3@2A3A3")))
+    assert_equal([S("cat"), S("wom"), S("x\000\000"), S("yy\000")],
+                  S("catwomx\000\000yy\000").unpack(S("a3a3a3a3")))
+    assert_equal([S("cat \000\000")], S("cat \000\000").unpack(S("a*")))
+    assert_equal([S("ca")], S("catdog").unpack(S("a2")))
+
+    assert_equal([S("cat\000\000")],
+                  S("cat\000\000\000\000\000dog").unpack(S("a5")))
+
+    assert_equal([S("01100001")], S("\x61").unpack(S("B8")))
+    assert_equal([S("01100001")], S("\x61").unpack(S("B*")))
+    assert_equal([S("0110000100110111")], S("\x61\x37").unpack(S("B16")))
+    assert_equal([S("01100001"), S("00110111")], S("\x61\x37").unpack(S("B8B8")))
+    assert_equal([S("0110")], S("\x60").unpack(S("B4")))
+
+    assert_equal([S("01")], S("\x40").unpack(S("B2")))
+
+    assert_equal([S("01100001")], S("\x86").unpack(S("b8")))
+    assert_equal([S("01100001")], S("\x86").unpack(S("b*")))
+
+    assert_equal([S("0110000100110111")], S("\x86\xec").unpack(S("b16")))
+    assert_equal([S("01100001"), S("00110111")], S("\x86\xec").unpack(S("b8b8")))
+
+    assert_equal([S("0110")], S("\x06").unpack(S("b4")))
+    assert_equal([S("01")], S("\x02").unpack(S("b2")))
+
+    assert_equal([ 65, 66, 67 ],  S("ABC").unpack(S("C3")))
+    assert_equal([ 255, 66, 67 ], S("\377BC").unpack("C*"))
+    assert_equal([ 65, 66, 67 ],  S("ABC").unpack("c3"))
+    assert_equal([ -1, 66, 67 ],  S("\377BC").unpack("c*"))
+
+
+    assert_equal([S("4142"), S("0a"), S("1")], S("AB\n\x10").unpack(S("H4H2H1")))
+    assert_equal([S("1424"), S("a0"), S("2")], S("AB\n\x02").unpack(S("h4h2h1")))
+
+    assert_equal([S("abc\002defcat\001"), S(""), S("")],
+                 S("abc=02def=\ncat=\n=01=\n").unpack(S("M9M3M4")))
+
+    assert_equal([S("hello\n")], S("aGVsbG8K\n").unpack(S("m")))
+
+    assert_equal([S("hello\nhello\n")], S(",:&5L;&\\*:&5L;&\\*\n").unpack(S("u")))
+
+    assert_equal([0xa9, 0x42, 0x2260], S("\xc2\xa9B\xe2\x89\xa0").unpack(S("U*")))
+
+=begin
+    skipping "Not tested:
+        D,d & double-precision float, native format\\
+        E & double-precision float, little-endian byte order\\
+        e & single-precision float, little-endian byte order\\
+        F,f & single-precision float, native format\\
+        G & double-precision float, network (big-endian) byte order\\
+        g & single-precision float, network (big-endian) byte order\\
+        I & unsigned integer\\
+        i & integer\\
+        L & unsigned long\\
+        l & long\\
+
+        m & string encoded in base64 (uuencoded)\\
+        N & long, network (big-endian) byte order\\
+        n & short, network (big-endian) byte-order\\
+        P & pointer to a structure (fixed-length string)\\
+        p & pointer to a null-terminated string\\
+        S & unsigned short\\
+        s & short\\
+        V & long, little-
