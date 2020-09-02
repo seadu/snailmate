@@ -2330,4 +2330,249 @@ CODE
         p & pointer to a null-terminated string\\
         S & unsigned short\\
         s & short\\
-        V & long, little-
+        V & long, little-endian byte order\\
+        v & short, little-endian byte order\\
+        X & back up a byte\\
+        x & null byte\\
+        Z & ASCII string (null padded, count is width)\\
+"
+=end
+  end
+
+  def test_upcase
+    assert_equal(S("HELLO"), S("hello").upcase)
+    assert_equal(S("HELLO"), S("hello").upcase)
+    assert_equal(S("HELLO"), S("HELLO").upcase)
+    assert_equal(S("ABC HELLO 123"), S("abc HELLO 123").upcase)
+    assert_equal(S("H\0""ELLO"), S("H\0""ello").upcase)
+  end
+
+  def test_upcase!
+    a = S("hello")
+    b = a.dup
+    assert_equal(S("HELLO"), a.upcase!)
+    assert_equal(S("HELLO"), a)
+    assert_equal(S("hello"), b)
+
+    a = S("HELLO")
+    assert_nil(a.upcase!)
+    assert_equal(S("HELLO"), a)
+
+    a = S("H\0""ello")
+    b = a.dup
+    assert_equal(S("H\0""ELLO"), a.upcase!)
+    assert_equal(S("H\0""ELLO"), a)
+    assert_equal(S("H\0""ello"), b)
+  end
+
+  def test_upto
+    a     = S("aa")
+    start = S("aa")
+    count = 0
+    assert_equal(S("aa"), a.upto(S("zz")) {|s|
+                   assert_equal(start, s)
+                   start.succ!
+                   count += 1
+                   })
+    assert_equal(676, count)
+  end
+
+  def test_upto_numeric
+    a     = S("00")
+    start = S("00")
+    count = 0
+    assert_equal(S("00"), a.upto(S("23")) {|s|
+                   assert_equal(start, s, "[ruby-dev:39361]")
+                   assert_equal(Encoding::US_ASCII, s.encoding)
+                   start.succ!
+                   count += 1
+                   })
+    assert_equal(24, count, "[ruby-dev:39361]")
+  end
+
+  def test_upto_nonalnum
+    first = S("\u3041")
+    last  = S("\u3093")
+    count = 0
+    assert_equal(first, first.upto(last) {|s|
+                   count += 1
+                   s.replace(last)
+                   })
+    assert_equal(83, count, "[ruby-dev:39626]")
+  end
+
+  def test_mod_check
+    assert_raise(RuntimeError) {
+      s = ""
+      s.sub!(/\A/) { s.replace "z" * 2000; "zzz" }
+    }
+  end
+
+  def test_frozen_check
+    assert_raise(FrozenError) {
+      s = ""
+      s.sub!(/\A/) { s.freeze; "zzz" }
+    }
+  end
+
+  class S2 < String
+  end
+  def test_str_new4
+    s = (0..54).to_a.join # length = 100
+    s2 = S2.new(s[10,90])
+    s3 = s2[10,80]
+    assert_equal((10..54).to_a.to_a.join, s2)
+    assert_equal((15..54).to_a.to_a.join, s3)
+  end
+
+  def test_rb_str_new4
+    s = "a" * 100
+    s2 = s[10,90]
+    assert_equal("a" * 90, s2)
+    s3 = s2[10,80]
+    assert_equal("a" * 80, s3)
+  end
+
+  class StringLike
+    def initialize(str)
+      @str = str
+    end
+
+    def to_str
+      @str
+    end
+  end
+
+  def test_rb_str_to_str
+    assert_equal("ab", "a" + StringLike.new("b"))
+  end
+
+  def test_rb_str_shared_replace
+    s = "a" * 100
+    s.succ!
+    assert_equal("a" * 99 + "b", s)
+    s = ""
+    s.succ!
+    assert_equal("", s)
+  end
+
+  def test_times
+    assert_raise(ArgumentError) { "a" * (-1) }
+  end
+
+  def test_splice!
+    l = S("1234\n234\n34\n4\n")
+    assert_equal(S("1234\n"), l.slice!(/\A.*\n/), "[ruby-dev:31665]")
+    assert_equal(S("234\n"), l.slice!(/\A.*\n/), "[ruby-dev:31665]")
+    assert_equal(S("34\n"), l.slice!(/\A.*\n/), "[ruby-dev:31665]")
+    assert_equal(S("4\n"), l.slice!(/\A.*\n/), "[ruby-dev:31665]")
+    assert_nil(l.slice!(/\A.*\n/), "[ruby-dev:31665]")
+  end
+
+  def test_times2
+    s1 = ''
+    100.times {|n|
+      s2 = "a" * n
+      assert_equal(s1, s2)
+      s1 << 'a'
+    }
+
+    assert_raise(ArgumentError) { "foo" * (-1) }
+  end
+
+  def test_respond_to
+    o = Object.new
+    def o.respond_to?(arg) [:to_str].include?(arg) ? nil : super end
+    def o.to_str() "" end
+    def o.==(other) "" == other end
+    assert_equal(false, "" == o)
+  end
+
+  def test_match_method
+    assert_equal("bar", "foobarbaz".match(/bar/).to_s)
+
+    o = Regexp.new('foo')
+    def o.match(x, y, z); x + y + z; end
+    assert_equal("foobarbaz", "foo".match(o, "bar", "baz"))
+    x = nil
+    "foo".match(o, "bar", "baz") {|y| x = y }
+    assert_equal("foobarbaz", x)
+
+    assert_raise(ArgumentError) { "foo".match }
+  end
+
+  def test_match_p_regexp
+    /backref/ =~ 'backref'
+    # must match here, but not in a separate method, e.g., assert_send,
+    # to check if $~ is affected or not.
+    assert_equal(true, "".match?(//))
+    assert_equal(true, :abc.match?(/.../))
+    assert_equal(true, 'abc'.match?(/b/))
+    assert_equal(true, 'abc'.match?(/b/, 1))
+    assert_equal(true, 'abc'.match?(/../, 1))
+    assert_equal(true, 'abc'.match?(/../, -2))
+    assert_equal(false, 'abc'.match?(/../, -4))
+    assert_equal(false, 'abc'.match?(/../, 4))
+    assert_equal(true, "\u3042xx".match?(/../, 1))
+    assert_equal(false, "\u3042x".match?(/../, 1))
+    assert_equal(true, ''.match?(/\z/))
+    assert_equal(true, 'abc'.match?(/\z/))
+    assert_equal(true, 'Ruby'.match?(/R.../))
+    assert_equal(false, 'Ruby'.match?(/R.../, 1))
+    assert_equal(false, 'Ruby'.match?(/P.../))
+    assert_equal('backref', $&)
+  end
+
+  def test_match_p_string
+    /backref/ =~ 'backref'
+    # must match here, but not in a separate method, e.g., assert_send,
+    # to check if $~ is affected or not.
+    assert_equal(true, "".match?(''))
+    assert_equal(true, :abc.match?('...'))
+    assert_equal(true, 'abc'.match?('b'))
+    assert_equal(true, 'abc'.match?('b', 1))
+    assert_equal(true, 'abc'.match?('..', 1))
+    assert_equal(true, 'abc'.match?('..', -2))
+    assert_equal(false, 'abc'.match?('..', -4))
+    assert_equal(false, 'abc'.match?('..', 4))
+    assert_equal(true, "\u3042xx".match?('..', 1))
+    assert_equal(false, "\u3042x".match?('..', 1))
+    assert_equal(true, ''.match?('\z'))
+    assert_equal(true, 'abc'.match?('\z'))
+    assert_equal(true, 'Ruby'.match?('R...'))
+    assert_equal(false, 'Ruby'.match?('R...', 1))
+    assert_equal(false, 'Ruby'.match?('P...'))
+    assert_equal('backref', $&)
+  end
+
+  def test_clear
+    s = "foo" * 100
+    s.clear
+    assert_equal("", s)
+  end
+
+  def test_to_s_2
+    c = Class.new(String)
+    s = c.new
+    s.replace("foo")
+    assert_equal("foo", s.to_s)
+    assert_instance_of(String, s.to_s)
+  end
+
+  def test_inspect_nul
+    bug8290 = '[ruby-core:54458]'
+    s = "\0" + "12"
+    assert_equal '"\u000012"', s.inspect, bug8290
+    s = "\0".b + "12"
+    assert_equal '"\x0012"', s.inspect, bug8290
+  end
+
+  def test_partition
+    assert_equal(%w(he l lo), "hello".partition(/l/))
+    assert_equal(%w(he l lo), "hello".partition("l"))
+    assert_raise(TypeError) { "hello".partition(1) }
+    def (hyphen = Object.new).to_str; "-"; end
+    assert_equal(%w(foo - bar), "foo-bar".partition(hyphen), '[ruby-core:23540]')
+
+    bug6206 = '[ruby-dev:45441]'
+    Encoding
