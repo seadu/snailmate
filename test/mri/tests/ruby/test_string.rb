@@ -2575,4 +2575,244 @@ CODE
     assert_equal(%w(foo - bar), "foo-bar".partition(hyphen), '[ruby-core:23540]')
 
     bug6206 = '[ruby-dev:45441]'
-    Encoding
+    Encoding.list.each do |enc|
+      next unless enc.ascii_compatible?
+      s = S("a:".force_encoding(enc))
+      assert_equal([enc]*3, s.partition("|").map(&:encoding), bug6206)
+    end
+
+    assert_equal(["\u30E6\u30FC\u30B6", "@", "\u30C9\u30E1.\u30A4\u30F3"],
+                 "\u30E6\u30FC\u30B6@\u30C9\u30E1.\u30A4\u30F3".partition(/[@.]/))
+
+    bug = '[ruby-core:82911]'
+    hello = "hello"
+    hello.partition("hi").map(&:upcase!)
+    assert_equal("hello", hello, bug)
+
+    assert_equal(["", "", "foo"], "foo".partition(/^=*/))
+
+    assert_equal([S("ab"), S("c"), S("dbce")], S("abcdbce").partition(/b\Kc/))
+  end
+
+  def test_rpartition
+    assert_equal(%w(hel l o), "hello".rpartition(/l/))
+    assert_equal(%w(hel l o), "hello".rpartition("l"))
+    assert_raise(TypeError) { "hello".rpartition(1) }
+    def (hyphen = Object.new).to_str; "-"; end
+    assert_equal(%w(foo - bar), "foo-bar".rpartition(hyphen), '[ruby-core:23540]')
+
+    bug6206 = '[ruby-dev:45441]'
+    Encoding.list.each do |enc|
+      next unless enc.ascii_compatible?
+      s = S("a:".force_encoding(enc))
+      assert_equal([enc]*3, s.rpartition("|").map(&:encoding), bug6206)
+    end
+
+    bug8138 = '[ruby-dev:47183]'
+    assert_equal(["\u30E6\u30FC\u30B6@\u30C9\u30E1", ".", "\u30A4\u30F3"],
+      "\u30E6\u30FC\u30B6@\u30C9\u30E1.\u30A4\u30F3".rpartition(/[@.]/), bug8138)
+
+    bug = '[ruby-core:82911]'
+    hello = "hello"
+    hello.rpartition("hi").map(&:upcase!)
+    assert_equal("hello", hello, bug)
+
+    assert_equal([S("abcdb"), S("c"), S("e")], S("abcdbce").rpartition(/b\Kc/))
+  end
+
+  def test_setter
+    assert_raise(TypeError) { $/ = 1 }
+    name = "\u{5206 884c}"
+    assert_separately([], <<-"end;") #    do
+      alias $#{name} $/
+      assert_raise_with_message(TypeError, /\\$#{name}/) { $#{name} = 1 }
+    end;
+  end
+
+  def test_to_id
+    c = Class.new
+    c.class_eval do
+      def initialize
+        @foo = :foo
+      end
+    end
+
+    assert_raise(TypeError) do
+      c.class_eval { attr 1 }
+    end
+
+    o = Object.new
+    def o.to_str; :foo; end
+    assert_raise(TypeError) do
+      c.class_eval { attr 1 }
+    end
+
+    class << o;remove_method :to_str;end
+    def o.to_str; "foo"; end
+    assert_nothing_raised do
+      c.class_eval { attr o }
+    end
+    assert_equal(:foo, c.new.foo)
+  end
+
+  def test_gsub_enumerator
+    assert_normal_exit %q{"abc".gsub(/./).next}, "[ruby-dev:34828]"
+  end
+
+  def test_clear_nonasciicompat
+    assert_equal("", "\u3042".encode("ISO-2022-JP").clear)
+  end
+
+  def test_try_convert
+    assert_equal(nil, String.try_convert(1))
+    assert_equal("foo", String.try_convert("foo"))
+  end
+
+  def test_substr_negative_begin
+    assert_equal("\u3042", ("\u3042" * 100)[-1])
+  end
+
+=begin
+  def test_compare_different_encoding_string
+    s1 = "\xff".force_encoding("UTF-8")
+    s2 = "\xff".force_encoding("ISO-2022-JP")
+    assert_equal([-1, 1], [s1 <=> s2, s2 <=> s1].sort)
+  end
+=end
+
+  def test_casecmp
+    assert_equal(0, "FoO".casecmp("fOO"))
+    assert_equal(1, "FoO".casecmp("BaR"))
+    assert_equal(-1, "baR".casecmp("FoO"))
+    assert_equal(1, "\u3042B".casecmp("\u3042a"))
+    assert_equal(-1, "foo".casecmp("foo\0"))
+
+    assert_nil("foo".casecmp(:foo))
+    assert_nil("foo".casecmp(Object.new))
+
+    o = Object.new
+    def o.to_str; "fOO"; end
+    assert_equal(0, "FoO".casecmp(o))
+  end
+
+  def test_casecmp?
+    assert_equal(true, 'FoO'.casecmp?('fOO'))
+    assert_equal(false, 'FoO'.casecmp?('BaR'))
+    assert_equal(false, 'baR'.casecmp?('FoO'))
+    assert_equal(true, 'äöü'.casecmp?('ÄÖÜ'))
+    assert_equal(false, "foo".casecmp?("foo\0"))
+
+    assert_nil("foo".casecmp?(:foo))
+    assert_nil("foo".casecmp?(Object.new))
+
+    o = Object.new
+    def o.to_str; "fOO"; end
+    assert_equal(true, "FoO".casecmp?(o))
+  end
+
+  def test_upcase2
+    assert_equal("\u3042AB", "\u3042aB".upcase)
+  end
+
+  def test_downcase2
+    assert_equal("\u3042ab", "\u3042aB".downcase)
+  end
+
+  def test_rstrip
+    assert_equal("  hello", "  hello  ".rstrip)
+    assert_equal("\u3042", "\u3042   ".rstrip)
+    assert_equal("\u3042", "\u3042\u0000".rstrip)
+    assert_raise(Encoding::CompatibilityError) { "\u3042".encode("ISO-2022-JP").rstrip }
+  end
+
+  def test_rstrip_bang
+    s1 = S("  hello  ")
+    assert_equal("  hello", s1.rstrip!)
+    assert_equal("  hello", s1)
+
+    s2 = S("\u3042  ")
+    assert_equal("\u3042", s2.rstrip!)
+    assert_equal("\u3042", s2)
+
+    s3 = S("  \u3042")
+    assert_equal(nil, s3.rstrip!)
+    assert_equal("  \u3042", s3)
+
+    s4 = S("\u3042")
+    assert_equal(nil, s4.rstrip!)
+    assert_equal("\u3042", s4)
+
+    s5 = S("\u3042\u0000")
+    assert_equal("\u3042", s5.rstrip!)
+    assert_equal("\u3042", s5)
+
+    assert_raise(Encoding::CompatibilityError) { "\u3042".encode("ISO-2022-JP").rstrip! }
+  end
+
+  def test_lstrip
+    assert_equal("hello  ", "  hello  ".lstrip)
+    assert_equal("\u3042", "   \u3042".lstrip)
+    assert_equal("hello  ", "\x00hello  ".lstrip)
+  end
+
+  def test_lstrip_bang
+    s1 = S("  hello  ")
+    assert_equal("hello  ", s1.lstrip!)
+    assert_equal("hello  ", s1)
+
+    s2 = S("\u3042  ")
+    assert_equal(nil, s2.lstrip!)
+    assert_equal("\u3042  ", s2)
+
+    s3 = S("  \u3042")
+    assert_equal("\u3042", s3.lstrip!)
+    assert_equal("\u3042", s3)
+
+    s4 = S("\u3042")
+    assert_equal(nil, s4.lstrip!)
+    assert_equal("\u3042", s4)
+
+    s5 = S("\u0000\u3042")
+    assert_equal("\u3042", s5.lstrip!)
+    assert_equal("\u3042", s5)
+
+  end
+
+  def test_delete_prefix
+    assert_raise(TypeError) { 'hello'.delete_prefix(nil) }
+    assert_raise(TypeError) { 'hello'.delete_prefix(1) }
+    assert_raise(TypeError) { 'hello'.delete_prefix(/hel/) }
+
+    s = S("hello")
+    assert_equal("lo", s.delete_prefix('hel'))
+    assert_equal("hello", s)
+
+    s = S("hello")
+    assert_equal("hello", s.delete_prefix('lo'))
+    assert_equal("hello", s)
+
+    s = S("\u{3053 3093 306b 3061 306f}")
+    assert_equal("\u{306b 3061 306f}", s.delete_prefix("\u{3053 3093}"))
+    assert_equal("\u{3053 3093 306b 3061 306f}", s)
+
+    s = S("\u{3053 3093 306b 3061 306f}")
+    assert_equal("\u{3053 3093 306b 3061 306f}", s.delete_prefix('hel'))
+    assert_equal("\u{3053 3093 306b 3061 306f}", s)
+
+    s = S("hello")
+    assert_equal("hello", s.delete_prefix("\u{3053 3093}"))
+    assert_equal("hello", s)
+
+    # skip if argument is a broken string
+    s = S("\xe3\x81\x82")
+    assert_equal("\xe3\x81\x82", s.delete_prefix("\xe3"))
+    assert_equal("\xe3\x81\x82", s)
+
+    s = S("\x95\x5c").force_encoding("Shift_JIS")
+    assert_equal("\x95\x5c".force_encoding("Shift_JIS"), s.delete_prefix("\x95"))
+    assert_equal("\x95\x5c".force_encoding("Shift_JIS"), s)
+
+    # clear coderange
+    s = S("\u{3053 3093}hello")
+    assert_not_predicate(s, :ascii_only?)
+    assert_predicate(s.delete_prefix("\u{3053 3093}"), :ascii_o
