@@ -3034,4 +3034,209 @@ CODE
 
   def test_ascii_incomat_inspect
     bug4081 = '[ruby-core:33283]'
-   
+    WIDE_ENCODINGS.each do |e|
+      assert_equal('"abc"', "abc".encode(e).inspect)
+      assert_equal('"\\u3042\\u3044\\u3046"', "\u3042\u3044\u3046".encode(e).inspect)
+      assert_equal('"ab\\"c"', "ab\"c".encode(e).inspect, bug4081)
+    end
+    begin
+      verbose, $VERBOSE = $VERBOSE, nil
+      ext = Encoding.default_external
+      Encoding.default_external = "us-ascii"
+      $VERBOSE = verbose
+      i = "abc\"\\".force_encoding("utf-8").inspect
+    ensure
+      $VERBOSE = nil
+      Encoding.default_external = ext
+      $VERBOSE = verbose
+    end
+    assert_equal('"abc\\"\\\\"', i, bug4081)
+  end
+
+  def test_dummy_inspect
+    assert_equal('"\e\x24\x42\x22\x4C\x22\x68\e\x28\x42"',
+                 "\u{ffe2}\u{2235}".encode("cp50220").inspect)
+  end
+
+  def test_prepend
+    assert_equal(S("hello world!"), "!".prepend("hello ", "world"))
+    b = S("ue")
+    assert_equal(S("ueueue"), b.prepend(b, b))
+
+    foo = Object.new
+    def foo.to_str
+      "b"
+    end
+    assert_equal(S("ba"), "a".prepend(foo))
+
+    a = S("world")
+    b = S("hello ")
+    a.prepend(b)
+    assert_equal(S("hello world"), a)
+    assert_equal(S("hello "), b)
+  end
+
+  def u(str)
+    str.force_encoding(Encoding::UTF_8)
+  end
+
+  def test_byteslice
+    assert_equal("h", "hello".byteslice(0))
+    assert_equal(nil, "hello".byteslice(5))
+    assert_equal("o", "hello".byteslice(-1))
+    assert_equal(nil, "hello".byteslice(-6))
+
+    assert_equal("", "hello".byteslice(0, 0))
+    assert_equal("hello", "hello".byteslice(0, 6))
+    assert_equal("hello", "hello".byteslice(0, 6))
+    assert_equal("", "hello".byteslice(5, 1))
+    assert_equal("o", "hello".byteslice(-1, 6))
+    assert_equal(nil, "hello".byteslice(-6, 1))
+    assert_equal(nil, "hello".byteslice(0, -1))
+
+    assert_equal("h", "hello".byteslice(0..0))
+    assert_equal("", "hello".byteslice(5..0))
+    assert_equal("o", "hello".byteslice(4..5))
+    assert_equal(nil, "hello".byteslice(6..0))
+    assert_equal("", "hello".byteslice(-1..0))
+    assert_equal("llo", "hello".byteslice(-3..5))
+
+    assert_equal(u("\x81"), "\u3042".byteslice(1))
+    assert_equal(u("\x81\x82"), "\u3042".byteslice(1, 2))
+    assert_equal(u("\x81\x82"), "\u3042".byteslice(1..2))
+
+    assert_equal(u("\x82")+("\u3042"*9), ("\u3042"*10).byteslice(2, 28))
+
+    bug7954 = '[ruby-dev:47108]'
+    assert_equal(false, "\u3042".byteslice(0, 2).valid_encoding?, bug7954)
+    assert_equal(false, ("\u3042"*10).byteslice(0, 20).valid_encoding?, bug7954)
+  end
+
+  def test_unknown_string_option
+    str = nil
+    assert_nothing_raised(SyntaxError) do
+      eval(%{
+        str = begin"hello"end
+      })
+    end
+    assert_equal "hello", str
+  end
+
+  def test_eq_tilde_can_be_overridden
+    assert_separately([], <<-RUBY)
+      class String
+        undef =~
+        def =~(str)
+          "foo"
+        end
+      end
+
+      assert_equal("foo", "" =~ //)
+    RUBY
+  end
+
+  class Bug9581 < String
+    def =~ re; :foo end
+  end
+
+  def test_regexp_match_subclass
+    s = Bug9581.new("abc")
+    r = /abc/
+    assert_equal(:foo, s =~ r)
+    assert_equal(:foo, s.send(:=~, r))
+    assert_equal(:foo, s.send(:=~, /abc/))
+    assert_equal(:foo, s =~ /abc/, "should not use optimized instruction")
+  end
+
+  def test_LSHIFT_neary_long_max
+    return unless @cls == String
+    assert_ruby_status([], <<-'end;', '[ruby-core:61886] [Bug #9709]', timeout: 20)
+      begin
+        a = "a" * 0x4000_0000
+        a << "a" * 0x1_0000
+      rescue NoMemoryError
+      end
+    end;
+  end if [0].pack("l!").bytesize < [nil].pack("p").bytesize
+  # enable only when string size range is smaller than memory space
+
+  def test_uplus_minus
+    str = "foo"
+    assert_not_predicate(str, :frozen?)
+    assert_not_predicate(+str, :frozen?)
+    assert_predicate(-str, :frozen?)
+
+    assert_same(str, +str)
+    assert_not_same(str, -str)
+
+    str = "bar".freeze
+    assert_predicate(str, :frozen?)
+    assert_not_predicate(+str, :frozen?)
+    assert_predicate(-str, :frozen?)
+
+    assert_not_same(str, +str)
+    assert_same(str, -str)
+
+    bar = %w(b a r).join('')
+    assert_same(str, -bar, "uminus deduplicates [Feature #13077]")
+  end
+
+  def test_uminus_frozen
+    # embedded
+    str1 = ("foobar" * 3).freeze
+    str2 = ("foobar" * 3).freeze
+    assert_not_same str1, str2
+    assert_same str1, -str1
+    assert_same str1, -str2
+
+    # regular
+    str1 = ("foobar" * 4).freeze
+    str2 = ("foobar" * 4).freeze
+    assert_not_same str1, str2
+    assert_same str1, -str1
+    assert_same str1, -str2
+  end
+
+  def test_uminus_no_freeze_not_bare
+    str = @cls.new("foo")
+    assert_instance_of(@cls, -str)
+    assert_equal(false, str.frozen?)
+
+    str = @cls.new("foo")
+    str.instance_variable_set(:@iv, 1)
+    assert_instance_of(@cls, -str)
+    assert_equal(false, str.frozen?)
+    assert_equal(1, str.instance_variable_get(:@iv))
+
+    str = @cls.new("foo")
+    assert_instance_of(@cls, -str)
+    assert_equal(false, str.frozen?)
+  end
+
+  def test_ord
+    assert_equal(97, "a".ord)
+    assert_equal(97, "abc".ord)
+    assert_equal(0x3042, "\u3042\u3043".ord)
+    assert_raise(ArgumentError) { "".ord }
+  end
+
+  def test_chr
+    assert_equal("a", "abcde".chr)
+    assert_equal("a", "a".chr)
+    assert_equal("\u3042", "\u3042\u3043".chr)
+    assert_equal('', ''.chr)
+  end
+
+  def test_substr_code_range
+    data = "\xff" + "a"*200
+    assert_not_predicate(data, :valid_encoding?)
+    assert_predicate(data[100..-1], :valid_encoding?)
+  end
+end
+
+class TestString2 < TestString
+  def initialize(*args)
+    super
+    @cls = S2
+  end
+end
