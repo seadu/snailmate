@@ -217,4 +217,95 @@ module REXML
     # _internal_ DTD subset. Notations in the external DTD subset are not
     # listed.
     #
-    # Method contributed by Henrik 
+    # Method contributed by Henrik Martensson
+    def notations
+      children().select {|node| node.kind_of?(REXML::NotationDecl)}
+    end
+
+    # Retrieves a named notation. Only notations declared in the internal
+    # DTD subset can be retrieved.
+    #
+    # Method contributed by Henrik Martensson
+    def notation(name)
+      notations.find { |notation_decl|
+        notation_decl.name == name
+      }
+    end
+  end
+
+  # We don't really handle any of these since we're not a validating
+  # parser, so we can be pretty dumb about them.  All we need to be able
+  # to do is spew them back out on a write()
+
+  # This is an abstract class.  You never use this directly; it serves as a
+  # parent class for the specific declarations.
+  class Declaration < Child
+    def initialize src
+      super()
+      @string = src
+    end
+
+    def to_s
+      @string+'>'
+    end
+
+    # == DEPRECATED
+    # See REXML::Formatters
+    #
+    def write( output, indent )
+      output << to_s
+    end
+  end
+
+  public
+  class ElementDecl < Declaration
+    def initialize( src )
+      super
+    end
+  end
+
+  class ExternalEntity < Child
+    def initialize( src )
+      super()
+      @entity = src
+    end
+    def to_s
+      @entity
+    end
+    def write( output, indent )
+      output << @entity
+    end
+  end
+
+  class NotationDecl < Child
+    attr_accessor :public, :system
+    def initialize name, middle, pub, sys
+      super(nil)
+      @name = name
+      @middle = middle
+      @public = pub
+      @system = sys
+    end
+
+    def to_s
+      context = nil
+      context = parent.context if parent
+      notation = "<!NOTATION #{@name}"
+      reference_writer = ReferenceWriter.new(@middle, @public, @system, context)
+      reference_writer.write(notation)
+      notation << ">"
+      notation
+    end
+
+    def write( output, indent=-1 )
+      output << to_s
+    end
+
+    # This method retrieves the name of the notation.
+    #
+    # Method contributed by Henrik Martensson
+    def name
+      @name
+    end
+  end
+end
