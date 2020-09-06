@@ -1,0 +1,14 @@
+module RBS
+  # Location is the range on buffer, `start_pos..end_pos`.
+  # The index is based on characters.
+  #
+  # A location can have _child_ locations.
+  #
+  class Location[in RequiredChildKeys, in OptionalChildKeys]
+    # The buffer this location points on.
+    attr_reader buffer (): Buffer
+
+    # The index of character the range starts from.
+    attr_reader start_pos (): Integer
+
+    # The index of character the range end

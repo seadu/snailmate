@@ -287,4 +287,78 @@ def foo96
 end
 
 def foo97
-e
+end
+
+def foo98
+end
+
+def foo99
+end
+
+def foo100
+end
+
+def foo101
+end
+
+def foo102
+end
+
+def foo103
+end
+
+def foo104
+end
+
+def foo105
+end
+
+def foo106
+end
+
+def foo107
+end
+
+def foo108
+end
+
+def foo109
+end
+
+def foo110
+end
+
+def foo111
+end
+
+def foo112
+end
+
+def foo113
+end
+
+def foo114
+end
+
+def foo115
+end
+
+def foo116
+end
+
+def foo117
+end
+
+def foo118
+end
+
+def foo119
+end
+
+def foo120
+end
+
+def foo121
+end
+
+ScratchPad << :loaded
