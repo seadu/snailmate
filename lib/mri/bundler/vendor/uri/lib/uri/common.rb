@@ -380,3 +380,227 @@ module Bundler::URI
   # This refers http://url.spec.whatwg.org/#concept-urlencoded-parser,
   # so this supports only &-separator, and doesn't support ;-separator.
   #
+  #    ary = Bundler::URI.decode_www_form("a=1&a=2&b=3")
+  #    ary                   #=> [['a', '1'], ['a', '2'], ['b', '3']]
+  #    ary.assoc('a').last   #=> '1'
+  #    ary.assoc('b').last   #=> '3'
+  #    ary.rassoc('a').last  #=> '2'
+  #    Hash[ary]             #=> {"a"=>"2", "b"=>"3"}
+  #
+  # See Bundler::URI.decode_www_form_component, Bundler::URI.encode_www_form.
+  def self.decode_www_form(str, enc=Encoding::UTF_8, separator: '&', use__charset_: false, isindex: false)
+    raise ArgumentError, "the input of #{self.name}.#{__method__} must be ASCII only string" unless str.ascii_only?
+    ary = []
+    return ary if str.empty?
+    enc = Encoding.find(enc)
+    str.b.each_line(separator) do |string|
+      string.chomp!(separator)
+      key, sep, val = string.partition('=')
+      if isindex
+        if sep.empty?
+          val = key
+          key = +''
+        end
+        isindex = false
+      end
+
+      if use__charset_ and key == '_charset_' and e = get_encoding(val)
+        enc = e
+        use__charset_ = false
+      end
+
+      key.gsub!(/\+|%\h\h/, TBLDECWWWCOMP_)
+      if val
+        val.gsub!(/\+|%\h\h/, TBLDECWWWCOMP_)
+      else
+        val = +''
+      end
+
+      ary << [key, val]
+    end
+    ary.each do |k, v|
+      k.force_encoding(enc)
+      k.scrub!
+      v.force_encoding(enc)
+      v.scrub!
+    end
+    ary
+  end
+
+  private
+=begin command for WEB_ENCODINGS_
+  curl https://encoding.spec.whatwg.org/encodings.json|
+  ruby -rjson -e 'H={}
+  h={
+    "shift_jis"=>"Windows-31J",
+    "euc-jp"=>"cp51932",
+    "iso-2022-jp"=>"cp50221",
+    "x-mac-cyrillic"=>"macCyrillic",
+  }
+  JSON($<.read).map{|x|x["encodings"]}.flatten.each{|x|
+    Encoding.find(n=h.fetch(n=x["name"].downcase,n))rescue next
+    x["labels"].each{|y|H[y]=n}
+  }
+  puts "{"
+  H.each{|k,v|puts %[  #{k.dump}=>#{v.dump},]}
+  puts "}"
+'
+=end
+  WEB_ENCODINGS_ = {
+    "unicode-1-1-utf-8"=>"utf-8",
+    "utf-8"=>"utf-8",
+    "utf8"=>"utf-8",
+    "866"=>"ibm866",
+    "cp866"=>"ibm866",
+    "csibm866"=>"ibm866",
+    "ibm866"=>"ibm866",
+    "csisolatin2"=>"iso-8859-2",
+    "iso-8859-2"=>"iso-8859-2",
+    "iso-ir-101"=>"iso-8859-2",
+    "iso8859-2"=>"iso-8859-2",
+    "iso88592"=>"iso-8859-2",
+    "iso_8859-2"=>"iso-8859-2",
+    "iso_8859-2:1987"=>"iso-8859-2",
+    "l2"=>"iso-8859-2",
+    "latin2"=>"iso-8859-2",
+    "csisolatin3"=>"iso-8859-3",
+    "iso-8859-3"=>"iso-8859-3",
+    "iso-ir-109"=>"iso-8859-3",
+    "iso8859-3"=>"iso-8859-3",
+    "iso88593"=>"iso-8859-3",
+    "iso_8859-3"=>"iso-8859-3",
+    "iso_8859-3:1988"=>"iso-8859-3",
+    "l3"=>"iso-8859-3",
+    "latin3"=>"iso-8859-3",
+    "csisolatin4"=>"iso-8859-4",
+    "iso-8859-4"=>"iso-8859-4",
+    "iso-ir-110"=>"iso-8859-4",
+    "iso8859-4"=>"iso-8859-4",
+    "iso88594"=>"iso-8859-4",
+    "iso_8859-4"=>"iso-8859-4",
+    "iso_8859-4:1988"=>"iso-8859-4",
+    "l4"=>"iso-8859-4",
+    "latin4"=>"iso-8859-4",
+    "csisolatincyrillic"=>"iso-8859-5",
+    "cyrillic"=>"iso-8859-5",
+    "iso-8859-5"=>"iso-8859-5",
+    "iso-ir-144"=>"iso-8859-5",
+    "iso8859-5"=>"iso-8859-5",
+    "iso88595"=>"iso-8859-5",
+    "iso_8859-5"=>"iso-8859-5",
+    "iso_8859-5:1988"=>"iso-8859-5",
+    "arabic"=>"iso-8859-6",
+    "asmo-708"=>"iso-8859-6",
+    "csiso88596e"=>"iso-8859-6",
+    "csiso88596i"=>"iso-8859-6",
+    "csisolatinarabic"=>"iso-8859-6",
+    "ecma-114"=>"iso-8859-6",
+    "iso-8859-6"=>"iso-8859-6",
+    "iso-8859-6-e"=>"iso-8859-6",
+    "iso-8859-6-i"=>"iso-8859-6",
+    "iso-ir-127"=>"iso-8859-6",
+    "iso8859-6"=>"iso-8859-6",
+    "iso88596"=>"iso-8859-6",
+    "iso_8859-6"=>"iso-8859-6",
+    "iso_8859-6:1987"=>"iso-8859-6",
+    "csisolatingreek"=>"iso-8859-7",
+    "ecma-118"=>"iso-8859-7",
+    "elot_928"=>"iso-8859-7",
+    "greek"=>"iso-8859-7",
+    "greek8"=>"iso-8859-7",
+    "iso-8859-7"=>"iso-8859-7",
+    "iso-ir-126"=>"iso-8859-7",
+    "iso8859-7"=>"iso-8859-7",
+    "iso88597"=>"iso-8859-7",
+    "iso_8859-7"=>"iso-8859-7",
+    "iso_8859-7:1987"=>"iso-8859-7",
+    "sun_eu_greek"=>"iso-8859-7",
+    "csiso88598e"=>"iso-8859-8",
+    "csisolatinhebrew"=>"iso-8859-8",
+    "hebrew"=>"iso-8859-8",
+    "iso-8859-8"=>"iso-8859-8",
+    "iso-8859-8-e"=>"iso-8859-8",
+    "iso-ir-138"=>"iso-8859-8",
+    "iso8859-8"=>"iso-8859-8",
+    "iso88598"=>"iso-8859-8",
+    "iso_8859-8"=>"iso-8859-8",
+    "iso_8859-8:1988"=>"iso-8859-8",
+    "visual"=>"iso-8859-8",
+    "csisolatin6"=>"iso-8859-10",
+    "iso-8859-10"=>"iso-8859-10",
+    "iso-ir-157"=>"iso-8859-10",
+    "iso8859-10"=>"iso-8859-10",
+    "iso885910"=>"iso-8859-10",
+    "l6"=>"iso-8859-10",
+    "latin6"=>"iso-8859-10",
+    "iso-8859-13"=>"iso-8859-13",
+    "iso8859-13"=>"iso-8859-13",
+    "iso885913"=>"iso-8859-13",
+    "iso-8859-14"=>"iso-8859-14",
+    "iso8859-14"=>"iso-8859-14",
+    "iso885914"=>"iso-8859-14",
+    "csisolatin9"=>"iso-8859-15",
+    "iso-8859-15"=>"iso-8859-15",
+    "iso8859-15"=>"iso-8859-15",
+    "iso885915"=>"iso-8859-15",
+    "iso_8859-15"=>"iso-8859-15",
+    "l9"=>"iso-8859-15",
+    "iso-8859-16"=>"iso-8859-16",
+    "cskoi8r"=>"koi8-r",
+    "koi"=>"koi8-r",
+    "koi8"=>"koi8-r",
+    "koi8-r"=>"koi8-r",
+    "koi8_r"=>"koi8-r",
+    "koi8-ru"=>"koi8-u",
+    "koi8-u"=>"koi8-u",
+    "dos-874"=>"windows-874",
+    "iso-8859-11"=>"windows-874",
+    "iso8859-11"=>"windows-874",
+    "iso885911"=>"windows-874",
+    "tis-620"=>"windows-874",
+    "windows-874"=>"windows-874",
+    "cp1250"=>"windows-1250",
+    "windows-1250"=>"windows-1250",
+    "x-cp1250"=>"windows-1250",
+    "cp1251"=>"windows-1251",
+    "windows-1251"=>"windows-1251",
+    "x-cp1251"=>"windows-1251",
+    "ansi_x3.4-1968"=>"windows-1252",
+    "ascii"=>"windows-1252",
+    "cp1252"=>"windows-1252",
+    "cp819"=>"windows-1252",
+    "csisolatin1"=>"windows-1252",
+    "ibm819"=>"windows-1252",
+    "iso-8859-1"=>"windows-1252",
+    "iso-ir-100"=>"windows-1252",
+    "iso8859-1"=>"windows-1252",
+    "iso88591"=>"windows-1252",
+    "iso_8859-1"=>"windows-1252",
+    "iso_8859-1:1987"=>"windows-1252",
+    "l1"=>"windows-1252",
+    "latin1"=>"windows-1252",
+    "us-ascii"=>"windows-1252",
+    "windows-1252"=>"windows-1252",
+    "x-cp1252"=>"windows-1252",
+    "cp1253"=>"windows-1253",
+    "windows-1253"=>"windows-1253",
+    "x-cp1253"=>"windows-1253",
+    "cp1254"=>"windows-1254",
+    "csisolatin5"=>"windows-1254",
+    "iso-8859-9"=>"windows-1254",
+    "iso-ir-148"=>"windows-1254",
+    "iso8859-9"=>"windows-1254",
+    "iso88599"=>"windows-1254",
+    "iso_8859-9"=>"windows-1254",
+    "iso_8859-9:1989"=>"windows-1254",
+    "l5"=>"windows-1254",
+    "latin5"=>"windows-1254",
+    "windows-1254"=>"windows-1254",
+    "x-cp1254"=>"windows-1254",
+    "cp1255"=>"windows-1255",
+    "windows-1255"=>"windows-1255",
+    "x-cp1255"=>"windows-1255",
+    "cp1256"=>"windows-1256",
+    "windows-1256"=>"windows-1256",
+    "x-cp1256"=>"windows-1256",
+    "cp1257"=>"wi
