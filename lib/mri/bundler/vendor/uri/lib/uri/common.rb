@@ -603,4 +603,79 @@ module Bundler::URI
     "cp1256"=>"windows-1256",
     "windows-1256"=>"windows-1256",
     "x-cp1256"=>"windows-1256",
-    "cp1257"=>"wi
+    "cp1257"=>"windows-1257",
+    "windows-1257"=>"windows-1257",
+    "x-cp1257"=>"windows-1257",
+    "cp1258"=>"windows-1258",
+    "windows-1258"=>"windows-1258",
+    "x-cp1258"=>"windows-1258",
+    "x-mac-cyrillic"=>"macCyrillic",
+    "x-mac-ukrainian"=>"macCyrillic",
+    "chinese"=>"gbk",
+    "csgb2312"=>"gbk",
+    "csiso58gb231280"=>"gbk",
+    "gb2312"=>"gbk",
+    "gb_2312"=>"gbk",
+    "gb_2312-80"=>"gbk",
+    "gbk"=>"gbk",
+    "iso-ir-58"=>"gbk",
+    "x-gbk"=>"gbk",
+    "gb18030"=>"gb18030",
+    "big5"=>"big5",
+    "big5-hkscs"=>"big5",
+    "cn-big5"=>"big5",
+    "csbig5"=>"big5",
+    "x-x-big5"=>"big5",
+    "cseucpkdfmtjapanese"=>"cp51932",
+    "euc-jp"=>"cp51932",
+    "x-euc-jp"=>"cp51932",
+    "csiso2022jp"=>"cp50221",
+    "iso-2022-jp"=>"cp50221",
+    "csshiftjis"=>"Windows-31J",
+    "ms932"=>"Windows-31J",
+    "ms_kanji"=>"Windows-31J",
+    "shift-jis"=>"Windows-31J",
+    "shift_jis"=>"Windows-31J",
+    "sjis"=>"Windows-31J",
+    "windows-31j"=>"Windows-31J",
+    "x-sjis"=>"Windows-31J",
+    "cseuckr"=>"euc-kr",
+    "csksc56011987"=>"euc-kr",
+    "euc-kr"=>"euc-kr",
+    "iso-ir-149"=>"euc-kr",
+    "korean"=>"euc-kr",
+    "ks_c_5601-1987"=>"euc-kr",
+    "ks_c_5601-1989"=>"euc-kr",
+    "ksc5601"=>"euc-kr",
+    "ksc_5601"=>"euc-kr",
+    "windows-949"=>"euc-kr",
+    "utf-16be"=>"utf-16be",
+    "utf-16"=>"utf-16le",
+    "utf-16le"=>"utf-16le",
+  } # :nodoc:
+
+  # :nodoc:
+  # return encoding or nil
+  # http://encoding.spec.whatwg.org/#concept-encoding-get
+  def self.get_encoding(label)
+    Encoding.find(WEB_ENCODINGS_[label.to_str.strip.downcase]) rescue nil
+  end
+end # module Bundler::URI
+
+module Bundler
+
+  #
+  # Returns +uri+ converted to an Bundler::URI object.
+  #
+  def URI(uri)
+    if uri.is_a?(Bundler::URI::Generic)
+      uri
+    elsif uri = String.try_convert(uri)
+      Bundler::URI.parse(uri)
+    else
+      raise ArgumentError,
+        "bad argument (expected Bundler::URI object or Bundler::URI string)"
+    end
+  end
+  module_function :URI
+end
