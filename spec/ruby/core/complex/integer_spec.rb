@@ -5,4 +5,7 @@ describe "Complex#integer?" do
     Complex(20).integer?.should be_false
   end
 
-  it "returns false 
+  it "returns false for a Complex with an imaginary part" do
+    Complex(20,3).integer?.should be_false
+  end
+end
