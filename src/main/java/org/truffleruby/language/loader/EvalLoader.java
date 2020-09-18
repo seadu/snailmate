@@ -37,4 +37,48 @@ public abstract class EvalLoader {
 
         if (!sourceEncoding.isAsciiCompatible) {
             throw new RaiseException(context, context.getCoreExceptions()
-            
+                    .argumentError(sourceEncoding + " is not ASCII compatible", currentNode));
+        }
+
+        final String sourceString;
+        try {
+            sourceString = sourceTString.toJavaStringOrThrow();
+        } catch (CannotConvertBinaryRubyStringToJavaString e) {
+            // In such a case, we have no way to build a Java String for the Truffle Source that
+            // could accurately represent the source string, so we throw an error.
+            final String message = file + ":" + line + ": cannot " + method +
+                    "() a String with binary encoding, with no magic encoding comment and containing a non-US-ASCII character: \\x" +
+                    String.format("%02X", e.getNonAsciiCharacter());
+            throw new RaiseException(
+                    context,
+                    context.getCoreExceptions().syntaxErrorAlreadyWithFileLine(
+                            message,
+                            currentNode,
+                            currentNode.getEncapsulatingSourceSection()));
+        }
+
+        final Source source = Source.newBuilder(TruffleRuby.LANGUAGE_ID, sourceString, file).build();
+
+        final RubySource rubySource = new RubySource(source, file, sourceTString, true, line - 1);
+
+        context.getSourceLineOffsets().put(source, line - 1);
+        return rubySource;
+    }
+
+    private static TStringWithEncoding createEvalTString(TStringWithEncoding source) {
+        final RubyEncoding[] encoding = { source.getEncoding() };
+
+        RubyLexer.parseMagicComment(source, (name, value) -> {
+            if (RubyLexer.isMagicEncodingComment(name)) {
+                encoding[0] = Encodings.getBuiltInEncoding(EncodingManager.getEncoding(value));
+            }
+        });
+
+        if (source.getEncoding() != encoding[0]) {
+            source = source.forceEncoding(encoding[0]);
+        }
+
+        return source;
+    }
+
+}
