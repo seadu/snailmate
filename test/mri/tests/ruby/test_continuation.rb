@@ -57,4 +57,89 @@ class TestContinuation < Test::Unit::TestCase
   def test_ary_flatten
     assert_normal_exit %q{
       require 'continuation'
-   
+      n = 0
+      o = Object.new
+      def o.to_ary() callcc {|k| $k = k; [1,2,3]} end
+      [10,20,o,30,o,40].flatten.inspect
+      n += 1
+      $k.call if n < 100
+    }, '[ruby-dev:34798]'
+  end
+
+  def test_marshal_dump
+    assert_normal_exit %q{
+      require 'continuation'
+      n = 0
+      o = Object.new
+      def o.marshal_dump() callcc {|k| $k = k };  "fofof" end
+      a = [1,2,3,o,4,5,6]
+      Marshal.dump(a).inspect
+      n += 1
+      $k.call if n < 100
+    }, '[ruby-dev:34802]'
+  end
+
+  def tracing_with_set_trace_func
+    orig_thread = Thread.current
+    cont = nil
+    func = lambda do |*args|
+      if orig_thread == Thread.current
+        if cont
+          @memo += 1
+          c = cont
+          cont = nil
+          begin
+            c.call(nil)
+          rescue RuntimeError
+            set_trace_func(nil)
+          end
+        end
+      end
+    end
+    cont = callcc { |cc| cc }
+
+    if cont
+      set_trace_func(func)
+    else
+      set_trace_func(nil)
+    end
+  end
+
+  def _test_tracing_with_set_trace_func
+    @memo = 0
+    tracing_with_set_trace_func
+    tracing_with_set_trace_func
+    tracing_with_set_trace_func
+    assert_equal 0, @memo
+  end
+
+  def tracing_with_thread_set_trace_func
+    cont = nil
+    func = lambda do |*args|
+      if cont
+        @memo += 1
+        c = cont
+        cont = nil
+        begin
+          c.call(nil)
+        rescue RuntimeError
+          Thread.current.set_trace_func(nil)
+        end
+      end
+    end
+    cont = callcc { |cc| cc }
+    if cont
+      Thread.current.set_trace_func(func)
+    else
+      Thread.current.set_trace_func(nil)
+    end
+  end
+
+  def test_tracing_with_thread_set_trace_func
+    @memo = 0
+    tracing_with_thread_set_trace_func
+    tracing_with_thread_set_trace_func
+    tracing_with_thread_set_trace_func
+    assert_equal 3, @memo
+  end
+end
