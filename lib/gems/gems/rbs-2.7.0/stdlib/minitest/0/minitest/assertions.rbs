@@ -1,0 +1,34 @@
+
+# <!-- rdoc-file=lib/minitest/assertions.rb -->
+# Minitest Assertions.  All assertion methods accept a `msg` which is printed if
+# the assertion fails.
+#
+# Protocol: Nearly everything here boils up to `assert`, which expects to be
+# able to increment an instance accessor named `assertions`. This is not
+# provided by Assertions and must be provided by the thing including Assertions.
+# See Minitest::Runnable for an example.
+#
+module Minitest::Assertions
+  def self.inspect: () -> "UNDEFINED"
+
+  # <!--
+  #   rdoc-file=lib/minitest/assertions.rb
+  #   - diff()
+  # -->
+  # Returns the diff command to use in #diff. Tries to intelligently figure out
+  # what diff to use.
+  #
+  def self.diff: () -> untyped
+
+  # <!--
+  #   rdoc-file=lib/minitest/assertions.rb
+  #   - diff=(o)
+  # -->
+  # Set the diff command to use in #diff.
+  #
+  def self.diff=: (untyped o) -> untyped
+
+  # <!--
+  #   rdoc-file=lib/minitest/assertions.rb
+  #   - diff(exp, act)
+  # -->

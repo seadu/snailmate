@@ -11,4 +11,52 @@ package org.truffleruby.core.cast;
 
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Fallback;
-import org.truffle
+import org.truffleruby.language.RubyBaseNode;
+import org.truffleruby.language.NotProvided;
+import org.truffleruby.language.control.RaiseException;
+
+import com.oracle.truffle.api.dsl.Specialization;
+import com.oracle.truffle.api.profiles.ConditionProfile;
+import org.truffleruby.language.dispatch.DispatchNode;
+
+import java.util.concurrent.TimeUnit;
+
+public abstract class DurationToNanoSecondsNode extends RubyBaseNode {
+
+    private final ConditionProfile durationLessThanZeroProfile = ConditionProfile.create();
+
+    public abstract long execute(Object duration);
+
+    @Specialization
+    protected long noDuration(NotProvided duration) {
+        return Long.MAX_VALUE;
+    }
+
+    @Specialization
+    protected long duration(long duration) {
+        return validate(TimeUnit.SECONDS.toNanos(duration));
+    }
+
+    @Specialization
+    protected long duration(double duration) {
+        return validate((long) (duration * 1e9));
+    }
+
+    @Fallback
+    protected long duration(Object duration,
+            @Cached DispatchNode durationToNanoSeconds,
+            @Cached ToLongNode toLongNode) {
+        final Object nanoseconds = durationToNanoSeconds.call(
+                coreLibrary().truffleKernelOperationsModule,
+                "convert_duration_to_nanoseconds",
+                duration);
+        return validate(toLongNode.execute(nanoseconds));
+    }
+
+    private long validate(long durationInNanos) {
+        if (durationLessThanZeroProfile.profile(durationInNanos < 0)) {
+            throw new RaiseException(getContext(), coreExceptions().argumentErrorTimeIntervalPositive(this));
+        }
+        return durationInNanos;
+    }
+}
