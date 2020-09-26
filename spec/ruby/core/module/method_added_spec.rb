@@ -94,4 +94,53 @@ describe "Module#method_added" do
       end
 
       # Create an instance as that might initialize some method lookup caches, which is interesting to test
-      self
+      self.new.foo
+
+      private :foo
+      public :foo
+    end
+
+    ScratchPad.recorded.should == [:foo]
+  end
+
+  it "is not called when a method is copied via module_function, rather #singleton_method_added is called" do
+    Module.new do
+      def mod_function
+      end
+
+      def self.method_added(name)
+        ScratchPad << [:method_added, name]
+      end
+
+      def self.singleton_method_added(name)
+        ScratchPad << [:singleton_method_added, name]
+      end
+
+      ScratchPad.record []
+
+      module_function :mod_function
+    end
+
+    ScratchPad.recorded.should == [[:singleton_method_added, :mod_function]]
+  end
+
+  it "is called with a precise caller location with the line of the 'def'" do
+    line = nil
+
+    Module.new do
+      def self.method_added(name)
+        location = caller_locations(1, 1)[0]
+        ScratchPad << location.lineno
+      end
+
+      line = __LINE__
+      def first
+      end
+
+      def second
+      end
+    end
+
+    ScratchPad.recorded.should == [line + 1, line + 4]
+  end
+end
