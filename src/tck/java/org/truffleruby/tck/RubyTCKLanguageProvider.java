@@ -85,4 +85,104 @@ public class RubyTCKLanguageProvider implements LanguageProvider {
 
         // Everything but interop primitives have members in Ruby, so they are also OBJECT
         vals.add(createValueConstructor(context, "Rational(1, 3)", OBJECT));
-        vals.add(createValueConstructor(co
+        vals.add(createValueConstructor(context, "Complex(1, 2)", OBJECT));
+        vals.add(createValueConstructor(context, "Time.now", DATE_TIME_ZONE_OBJECT));
+        vals.add(createValueConstructor(context, "[1, 2]", NUMBER_ARRAY_OBJECT));
+        vals.add(createValueConstructor(context, "[1.2, 3.4]", NUMBER_ARRAY_OBJECT));
+        vals.add(createValueConstructor(context, "[1<<33, 1<<34]", NUMBER_ARRAY_OBJECT));
+        vals.add(createValueConstructor(context, "[]", ARRAY_OBJECT));
+        vals.add(createValueConstructor(context, "[Object.new]", ARRAY_OBJECT));
+        vals.add(createValueConstructor(context, "[true, false]", ARRAY_OBJECT));
+        vals.add(createValueConstructor(context, "[Object.new, 65]", ARRAY_OBJECT));
+        vals.add(createValueConstructor(context, "{ 'name' => 'test' }", HASH_ITERABLE_OBJECT));
+        vals.add(createValueConstructor(context, "Struct.new(:foo, :bar).new(1, 'two')", ITERABLE_OBJECT));
+        String objectWithIVar = "Object.new.tap { |obj| obj.instance_variable_set(:@name, 'test') }";
+        vals.add(createValueConstructor(context, objectWithIVar, OBJECT));
+        vals.add(createValueConstructor(context, "proc { }", intersection(OBJECT, executable(ANY, true))));
+        vals.add(createValueConstructor(context, "lambda { }", intersection(OBJECT, executable(ANY, false))));
+        // vals.add(createValueConstructor(context, ":itself.to_proc", alsoRegularObject(executable(ANY, false, ANY))));
+        // vals.add(createValueConstructor(context, "1.method(:itself)", alsoRegularObject(executable(NUMBER, false))));
+        return Collections.unmodifiableList(vals);
+    }
+
+    @Override
+    public Collection<? extends Snippet> createExpressions(Context context) {
+        final List<Snippet> ops = new ArrayList<>();
+
+        // arithmetic
+        ops.add(createBinaryOperator(context, "a + b", NUMBER, NUMBER, NUMBER));
+        ops.add(createBinaryOperator(context, "a + b", STRING, STRING, STRING));
+        // ops.add(createBinaryOperator(context, "a + b", ARRAY, ARRAY, ARRAY));
+        ops.add(createBinaryOperator(context, "a - b", NUMBER, NUMBER, NUMBER));
+        // ops.add(createBinaryOperator(context, "a - b", ARRAY, ARRAY, ARRAY));
+        // ops.add(createBinaryOperator(context, "a * b", NUMBER, NUMBER, NUMBER));
+        // ops.add(createBinaryOperator(context, "a * b", STRING, NUMBER, STRING));
+        // ops.add(createBinaryOperator(context, "a * b", ARRAY, NUMBER, ARRAY));
+        ops.add(createBinaryOperator(context, "a / b", NUMBER, NUMBER, NUMBER));
+        // ops.add(createBinaryOperator(context, "a % b", NUMBER, NUMBER, NUMBER));
+        // ops.add(createBinaryOperator(context, "a ** b", NUMBER, NUMBER, NUMBER));
+
+        // comparison
+        // ops.add(createBinaryOperator(context, "a.equal?(b)", ANY, ANY, BOOLEAN));
+        // ops.add(createBinaryOperator(context, "a == b", ANY, ANY, BOOLEAN));
+        // ops.add(createBinaryOperator(context, "a != b", ANY, ANY, BOOLEAN));
+        // ops.add(createBinaryOperator(context, "a < b", NUMBER, NUMBER, BOOLEAN));
+        // ops.add(createBinaryOperator(context, "a > b", NUMBER, NUMBER, BOOLEAN));
+        // ops.add(createBinaryOperator(context, "a <= b", NUMBER, NUMBER, BOOLEAN));
+        // ops.add(createBinaryOperator(context, "a >= b", NUMBER, NUMBER, BOOLEAN));
+
+        // bitwise
+        // ops.add(createBinaryOperator(context, "a << b", NUMBER, NUMBER, NUMBER));
+        // ops.add(createBinaryOperator(context, "a >> b", NUMBER, NUMBER, NUMBER));
+        // ops.add(createBinaryOperator(context, "a & b", NUMBER, NUMBER, NUMBER));
+        // ops.add(createBinaryOperator(context, "a | b", NUMBER, NUMBER, NUMBER));
+        // ops.add(createBinaryOperator(context, "a ^ b", NUMBER, NUMBER, NUMBER));
+
+        // logical
+        // ops.add(createBinaryOperator(context, "a && b", ANY, ANY, ANY));
+        // ops.add(createBinaryOperator(context, "a || b", ANY, ANY, ANY));
+
+        // unary operators
+        // ops.add(createUnaryOperator(context, "+a", NUMBER, NUMBER));
+        // ops.add(createUnaryOperator(context, "-a", NUMBER, NUMBER));
+        // ops.add(createUnaryOperator(context, "~a", NUMBER, NUMBER));
+        // ops.add(createUnaryOperator(context, "!a", ANY, BOOLEAN));
+
+        return Collections.unmodifiableList(ops);
+    }
+
+    @Override
+    public Collection<? extends Snippet> createStatements(Context context) {
+        final List<Snippet> res = new ArrayList<>();
+        res.add(createStatement(context, "if", "-> c { if c; true else false end };", ANY, BOOLEAN));
+        res.add(createStatement(context, "unless", "-> c { unless c; true else false end };", ANY, BOOLEAN));
+        res.add(createStatement(context, "postfix if", "-> c { true if c };", ANY, union(BOOLEAN, NULL)));
+        res.add(createStatement(context, "postfix unless", "-> c { true unless c };", ANY, union(BOOLEAN, NULL)));
+        res.add(createStatement(context, "while", "-> c { while c; break; end }", ANY, NULL));
+        res.add(createStatement(context, "until", "-> c { until c; break; end }", ANY, NULL));
+        res.add(createStatement(context, "do while", "-> c { begin; break; end while c }", ANY, NULL));
+        res.add(createStatement(context, "do until", "-> c { begin; break; end until c }", ANY, NULL));
+        // res.add(createStatement(context, "for", "-> array { for e in array do; end }", ARRAY, ARRAY));
+        res.add(createStatement(context, "case", "-> e { case e; when Integer; 1; else 2; end }", ANY, NUMBER));
+        // res.add(createStatement(context, "raise", "-> msg { begin; raise msg; rescue => e; e; end}", STRING, OBJECT));
+        return Collections.unmodifiableList(res);
+    }
+
+    @Override
+    public Collection<? extends Snippet> createScripts(Context context) {
+        final List<Snippet> res = new ArrayList<>();
+
+        Snippet.newBuilder("array of points", context.eval(getSource("points.rb")), array(OBJECT)).resultVerifier(
+                run -> {
+                    ResultVerifier.getDefaultResultVerifier().accept(run);
+                    final Value result = run.getResult();
+                    Assert.assertEquals("array size", 2, result.getArraySize());
+                    Value p1 = result.getArrayElement(0);
+                    Value p2 = result.getArrayElement(1);
+                    Assert.assertEquals("res[0].x", 30, p1.getMember("x").asInt());
+                    Assert.assertEquals("res[0].y", 15, p1.getMember("y").asInt());
+                    Assert.assertEquals("res[1].x", 5, p2.getMember("x").asInt());
+                    Assert.assertEquals("res[1].y", 7, p2.getMember("y").asInt());
+                });
+
+        Snippet.newBuilder
