@@ -185,4 +185,100 @@ public class RubyTCKLanguageProvider implements LanguageProvider {
                     Assert.assertEquals("res[1].y", 7, p2.getMember("y").asInt());
                 });
 
-        Snippet.newBuilder
+        Snippet.newBuilder("recursion", context.eval(getSource("recursion.rb")), array(NUMBER)).resultVerifier(run -> {
+            ResultVerifier.getDefaultResultVerifier().accept(run);
+            final Value result = run.getResult();
+            Assert.assertEquals("array size", 3, result.getArraySize());
+            Assert.assertEquals("res[0]", 3628800, result.getArrayElement(0).asInt());
+            Assert.assertEquals("res[1]", 55, result.getArrayElement(1).asInt());
+            Assert.assertEquals("res[2]", 125, result.getArrayElement(2).asInt());
+        });
+
+        return Collections.unmodifiableList(res);
+    }
+
+    @Override
+    public Collection<? extends InlineSnippet> createInlineScripts(Context context) {
+        List<InlineSnippet> res = new ArrayList<>();
+        res.add(createInlineSnippet(
+                context,
+                getSource("lexical-context.rb"),
+                16,
+                "a + b + c",
+                14 + 2 + 6));
+        res.add(createInlineSnippet(
+                context,
+                getSource("lexical-context.rb"),
+                16,
+                "binding.local_variable_get(:a) + binding.local_variable_get(:b) + binding.local_variable_get(:c)",
+                14 + 2 + 6));
+        return Collections.unmodifiableList(res);
+    }
+
+    private InlineSnippet createInlineSnippet(Context context, Source mainSource, int line, String inlineSource,
+            int expected) {
+        final Snippet mainSnippet = Snippet
+                .newBuilder(mainSource.getName(), context.eval(mainSource), TypeDescriptor.ANY)
+                .build();
+
+        return InlineSnippet
+                .newBuilder(mainSnippet, inlineSource)
+                .locationPredicate(
+                        sourceSection -> sourceSection.getSource().getName().endsWith(mainSource.getName()) &&
+                                sourceSection.getStartLine() == line)
+                .resultVerifier(snippetRun -> {
+                    final PolyglotException exception = snippetRun.getException();
+                    if (exception != null) {
+                        throw exception;
+                    }
+                    Assert.assertEquals(expected, snippetRun.getResult().asInt());
+                })
+                .build();
+    }
+
+    private Snippet createValueConstructor(Context context, String value, TypeDescriptor type) {
+        return Snippet.newBuilder(value, context.eval(getId(), String.format("-> { %s }", value)), type).build();
+    }
+
+    // private Snippet createUnaryOperator(Context context, String operator, TypeDescriptor operandType,
+    //         TypeDescriptor returnType) {
+    //     final Value function = context.eval(getId(), String.format("-> a { %s }", operator));
+    //     return Snippet.newBuilder(operator, function, returnType).parameterTypes(operandType).build();
+    // }
+
+    private Snippet createBinaryOperator(Context context, String operator, TypeDescriptor lhsType,
+            TypeDescriptor rhsType, TypeDescriptor returnType) {
+        final Value function = context.eval(getId(), String.format("-> a, b { %s }", operator));
+
+        return Snippet
+                .newBuilder(operator, function, returnType)
+                .parameterTypes(lhsType, rhsType)
+                .build();
+    }
+
+    private Snippet createStatement(Context context, String name, String expression, TypeDescriptor argumentType,
+            TypeDescriptor returnType) {
+        final Value function = context.eval(getId(), expression);
+        return Snippet.newBuilder(name, function, returnType).parameterTypes(argumentType).build();
+    }
+
+    private Source getSource(String path) {
+        try {
+            final InputStream stream = ClassLoader.getSystemResourceAsStream(path);
+            if (stream == null) {
+                throw new FileNotFoundException(path);
+            }
+
+            final Reader reader = new InputStreamReader(stream);
+            return Source.newBuilder(getId(), reader, new File(path).getName()).build();
+        } catch (IOException e) {
+            throw new Error(e);
+        }
+    }
+
+    private static final TypeDescriptor DATE_TIME_ZONE_OBJECT = intersection(OBJECT, DATE, TIME, TIME_ZONE);
+    private static final TypeDescriptor ARRAY_OBJECT = intersection(OBJECT, ARRAY);
+    private static final TypeDescriptor NUMBER_ARRAY_OBJECT = intersection(OBJECT, array(NUMBER));
+    private static final TypeDescriptor ITERABLE_OBJECT = intersection(ITERABLE, OBJECT);
+    private static final TypeDescriptor HASH_ITERABLE_OBJECT = intersection(HASH, ITERABLE, OBJECT);
+}
