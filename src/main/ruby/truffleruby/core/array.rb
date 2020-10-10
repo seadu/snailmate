@@ -455,4 +455,289 @@ class Array
       left = 0 if left < 0
 
       if !Primitive.undefined?(length) and length
-        
+        right = Primitive.rb_num2int length
+        return self if right == 0
+        right += left
+      else
+        right = size
+      end
+    end
+
+    unless Truffle::Type.fits_into_int?(left) && Truffle::Type.fits_into_int?(right)
+      raise ArgumentError, 'argument too big'
+    end
+
+    i = left
+    if block_given?
+      while i < right
+        self[i] = yield(i)
+        i += 1
+      end
+    else
+      while i < right
+        self[i] = obj
+        i += 1
+      end
+    end
+
+    self
+  end
+
+  def first(n = undefined)
+    return at(0) if Primitive.undefined?(n)
+
+    n = Primitive.rb_num2int n
+    raise ArgumentError, 'Size must be positive' if n < 0
+
+    Array.new self[0, n]
+  end
+
+  def flatten(level=-1)
+    level = Primitive.rb_num2int level
+    return Array.new(self) if level == 0
+
+    out = [] # new_reserved size
+    Primitive.array_flatten_helper(self, out, level)
+    out
+  end
+
+  def flatten!(level=-1)
+    Primitive.check_frozen self
+
+    level = Primitive.rb_num2int level
+    return nil if level == 0
+
+    out = self.class.allocate # new_reserved size
+    if Primitive.array_flatten_helper(self, out, level)
+      Primitive.steal_array_storage(self, out)
+      return self
+    end
+
+    nil
+  end
+
+  def hash
+    unless Primitive.object_can_contain_object(self)
+      # Primitive arrays do not need the recursion check
+      return hash_internal
+    end
+
+    hash_val = size
+
+    # This is duplicated and manually inlined code from Thread for performance
+    # reasons. Before refactoring it, please benchmark it and compare your
+    # refactoring against the original.
+
+    id = object_id
+    objects = Primitive.thread_recursive_objects
+
+    # If there is already an our version running...
+    if objects.key? :__detect_outermost_recursion__
+
+      # If we've seen self, unwind back to the outer version
+      if objects.key? id
+        raise Truffle::ThreadOperations::InnerRecursionDetected
+      end
+
+      # .. or compute the hash value like normal
+      begin
+        objects[id] = true
+
+        hash_val = hash_internal
+      ensure
+        objects.delete id
+      end
+
+      return hash_val
+    else
+      # Otherwise, we're the outermost version of this code..
+      begin
+        objects[:__detect_outermost_recursion__] = true
+        objects[id] = true
+
+        hash_val = hash_internal
+
+        # An inner version will raise to return back here, indicating that
+        # the whole structure is recursive. In which case, abandon most of
+        # the work and return a simple hash value.
+      rescue Truffle::ThreadOperations::InnerRecursionDetected
+        return size
+      ensure
+        objects.delete :__detect_outermost_recursion__
+        objects.delete id
+      end
+    end
+
+    hash_val
+  end
+  Truffle::Graal.always_split instance_method(:hash)
+
+  def find_index(obj=undefined)
+    super
+  end
+  alias_method :index, :find_index
+
+  def insert(idx, *items)
+    Primitive.check_frozen self
+    return self if items.length == 0
+
+    idx = Primitive.rb_num2int idx
+    idx += (size + 1) if idx < 0    # Negatives add AFTER the element
+    raise IndexError, "#{idx} out of bounds" if idx < 0
+
+    # This check avoids generalizing to Object[] needlessly when the element is an int/long/...
+    # We still generalize needlessly on bigger arrays, but avoiding this would require iterating the array.
+    if items.size == 1
+      self[idx, 0] = [items[0]]
+    else
+      self[idx, 0] = items
+    end
+    self
+  end
+  Truffle::Graal.always_split instance_method(:insert)
+
+  def inspect
+    return '[]'.encode(Encoding::US_ASCII) if empty?
+    result = +'['
+
+    return +'[...]' if Truffle::ThreadOperations.detect_recursion self do
+      each_with_index do |element, index|
+        temp = Truffle::Type.rb_inspect(element)
+        result.force_encoding(temp.encoding) if index == 0
+        result << temp << ', '
+      end
+    end
+
+    Truffle::StringOperations.shorten!(result, 2)
+    result << ']'
+    result
+  end
+  alias_method :to_s, :inspect
+
+  def intersect?(other)
+    other = Truffle::Type.coerce_to other, Array, :to_ary
+
+    shorter, longer = size > other.size ? [other, self] : [self, other]
+    return false if shorter.empty?
+
+    shorter_set = {}
+    shorter.each { |e| shorter_set[e] = true }
+
+    longer.each do |e|
+      return true if shorter_set.include?(e)
+    end
+
+    false
+  end
+
+  def intersection(*others)
+    return self & others.first if others.size == 1
+
+    common = {}
+    each { |e| common[e] = true }
+
+    others.each do |other|
+      other = Truffle::Type.coerce_to other, Array, :to_ary
+
+      other_hash = {}
+      other.each { |e| other_hash[e] = true }
+
+      common.each_key do |x|
+        common.delete(x) unless other_hash.include?(x)
+      end
+    end
+
+    common.keys
+  end
+
+  def join(sep=nil)
+    return ''.encode(Encoding::US_ASCII) if size == 0
+
+    out = +''
+    raise ArgumentError, 'recursive array join' if Truffle::ThreadOperations.detect_recursion self do
+      sep = Primitive.nil?(sep) ? $, : StringValue(sep)
+
+      # We've manually unwound the first loop entry for performance
+      # reasons.
+      x = self[0]
+
+      if str = String.try_convert(x)
+        x = str
+      elsif ary = Array.try_convert(x)
+        x = ary.join(sep)
+      else
+        x = x.to_s
+      end
+
+      out.force_encoding(x.encoding)
+      out << x
+
+      total = size()
+      i = 1
+
+      while i < total
+        out << sep if sep
+
+        x = self[i]
+
+        if str = String.try_convert(x)
+          x = str
+        elsif ary = Array.try_convert(x)
+          x = ary.join(sep)
+        else
+          x = x.to_s
+        end
+
+        out << x
+        i += 1
+      end
+    end
+
+    out
+  end
+
+  def keep_if(&block)
+    return to_enum(:keep_if) { size } unless block_given?
+    select!(&block)
+    self
+  end
+
+  def last(n=undefined)
+    if Primitive.undefined?(n)
+      return at(-1)
+    elsif size < 1
+      return []
+    end
+
+    n = Primitive.rb_num2int n
+    return [] if n == 0
+
+    raise ArgumentError, 'count must be positive' if n < 0
+
+    n = size if n > size
+    Array.new self[-n..-1]
+  end
+
+  def permutation(num=undefined, &block)
+    unless block_given?
+      return to_enum(:permutation, num) do
+        permutation_size(num)
+      end
+    end
+
+    if Primitive.undefined? num
+      num = size
+    else
+      num = Primitive.rb_num2int num
+    end
+
+    if num < 0 || size < num
+      # no permutations, yield nothing
+    elsif num == 0
+      # exactly one permutation: the zero-length array
+      yield []
+    elsif num == 1
+      # this is a special, easy case
+      each { |val| yield [val] }
+    else
+      # this is the
