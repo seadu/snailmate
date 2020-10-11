@@ -740,4 +740,283 @@ class Array
       # this is a special, easy case
       each { |val| yield [val] }
     else
-      # this is the
+      # this is the general case
+      perm = Array.new(num)
+      used = Array.new(size, false)
+
+      if block
+        # offensive (both definitions) copy.
+        offensive = dup
+        offensive.__send__ :__permute__, num, perm, 0, used, &block
+      else
+        __permute__(num, perm, 0, used, &block)
+      end
+    end
+
+    self
+  end
+
+  def max(n=undefined)
+    super(n)
+  end
+
+  def min(n=undefined)
+    super(n)
+  end
+
+  def minmax(&block)
+    if block_given?
+      super(&block)
+    else
+      [self.min, self.max]
+    end
+  end
+
+  def permutation_size(num)
+    n = self.size
+    if Primitive.undefined? num
+      k = self.size
+    else
+      k = Primitive.rb_num2int num
+    end
+    descending_factorial(n, k)
+  end
+  private :permutation_size
+
+  def descending_factorial(from, how_many)
+    cnt = how_many >= 0 ? 1 : 0
+    while (how_many) > 0
+      cnt = cnt*(from)
+      from -= 1
+      how_many -= 1
+    end
+    cnt
+  end
+  private :descending_factorial
+
+  def __permute__(num, perm, index, used, &block)
+    # Recursively compute permutations of r elements of the set [0..n-1].
+    # When we have a complete permutation of array indexes, copy the values
+    # at those indexes into a new array and yield that array.
+    #
+    # num: the number of elements in each permutation
+    # perm: the array (of size num) that we're filling in
+    # index: what index we're filling in now
+    # used: an array of booleans: whether a given index is already used
+    #
+    # Note: not as efficient as could be for big num.
+    size.times do |i|
+      unless used[i]
+        perm[index] = i
+        if index < num-1
+          used[i] = true
+          __permute__(num, perm, index+1, used, &block)
+          used[i] = false
+        else
+          yield values_at(*perm)
+        end
+      end
+    end
+  end
+  private :__permute__
+
+  # Implementation notes: We build a block that will generate all the
+  # combinations by building it up successively using "inject" and starting
+  # with one responsible to append the values.
+  def product(*args)
+    args.map! { |x| Truffle::Type.coerce_to(x, Array, :to_ary) }
+
+    # Check the result size will fit in an Array.
+    sum = args.inject(size) { |n, x| n * x.size }
+
+    unless Primitive.integer_fits_into_long(sum)
+      raise RangeError, 'product result is too large'
+    end
+
+    # TODO rewrite this to not use a tree of Proc objects.
+
+    # to get the results in the same order as in MRI, vary the last argument first
+    args.reverse!
+
+    result = []
+    args.push self
+
+    outer_lambda = args.inject(result.method(:push)) do |trigger, values|
+      -> partial do
+        values.each do |val|
+          trigger.call(partial.dup << val)
+        end
+      end
+    end
+
+    outer_lambda.call([])
+
+    if block_given?
+      result.each { |v| yield(v) }
+      self
+    else
+      result
+    end
+  end
+
+  def rassoc(obj)
+    each do |elem|
+      if Primitive.object_kind_of?(elem, Array) and elem.at(1) == obj
+        return elem
+      end
+    end
+
+    nil
+  end
+
+  def reject!
+    return to_enum(:reject!) { size } unless block_given?
+
+    Primitive.check_frozen self
+
+    original_size = size
+    kept = 0
+    each_with_index do |e, i|
+      begin
+        exception = true
+        remove = yield e
+        exception = false
+      ensure
+        if exception
+          self[kept..-1] = self[i..-1]
+        end
+      end
+
+      unless remove
+        self[kept] = e
+        kept += 1
+      end
+    end
+
+    self[kept..-1] = []
+
+    self unless kept == original_size
+  end
+
+  def repeated_combination(combination_size, &block)
+    combination_size = combination_size.to_i
+    unless block_given?
+      return to_enum(:repeated_combination, combination_size) do
+        repeated_combination_size(combination_size)
+      end
+    end
+
+    if combination_size < 0
+      # yield nothing
+    else
+      dup.__send__ :compile_repeated_combinations, combination_size, [], 0, combination_size, &block
+    end
+
+    self
+  end
+
+  def compile_repeated_combinations(combination_size, place, index, depth, &block)
+    if depth > 0
+      (length - index).times do |i|
+        place[combination_size-depth] = index + i
+        compile_repeated_combinations(combination_size,place,index + i,depth-1, &block)
+      end
+    else
+      yield place.map { |element| self[element] }
+    end
+  end
+
+  private :compile_repeated_combinations
+
+  def repeated_permutation(combination_size, &block)
+    combination_size = combination_size.to_i
+    unless block_given?
+      return to_enum(:repeated_permutation, combination_size) do
+        repeated_permutation_size(combination_size)
+      end
+    end
+
+    if combination_size < 0
+      # yield nothing
+    elsif combination_size == 0
+      yield []
+    else
+      dup.__send__ :compile_repeated_permutations, combination_size, [], 0, &block
+    end
+
+    self
+  end
+
+  def repeated_permutation_size(combination_size)
+    return 0 if combination_size < 0
+    self.size ** combination_size
+  end
+  private :repeated_permutation_size
+
+  def repeated_combination_size(combination_size)
+    return 1 if combination_size == 0
+    binomial_coefficient(combination_size, self.size + combination_size - 1)
+  end
+  private :repeated_combination_size
+
+  def binomial_coefficient(comb, size)
+    comb = size-comb if (comb > size-comb)
+    return 0 if comb < 0
+    descending_factorial(size, comb) / descending_factorial(comb, comb)
+  end
+  private :binomial_coefficient
+
+  def combination_size(num)
+    binomial_coefficient(num, self.size)
+  end
+  private :combination_size
+
+  def compile_repeated_permutations(combination_size, place, index, &block)
+    length.times do |i|
+      place[index] = i
+      if index < (combination_size-1)
+        compile_repeated_permutations(combination_size, place, index + 1, &block)
+      else
+        yield place.map { |element| self[element] }
+      end
+    end
+  end
+  private :compile_repeated_permutations
+
+  def reverse
+    Array.new dup.reverse!
+  end
+
+  def reverse_each
+    return to_enum(:reverse_each) { size } unless block_given?
+
+    i = size - 1
+    while i >= 0
+      yield at(i)
+      i -= 1
+    end
+    self
+  end
+
+  def rindex(obj=undefined)
+    if Primitive.undefined?(obj)
+      return to_enum(:rindex, obj) unless block_given?
+
+      i = size - 1
+      while i >= 0
+        return i if yield at(i)
+
+        # Compensate for the array being modified by the block
+        i = size if i > size
+
+        i -= 1
+      end
+    else
+      Primitive.warn_given_block_not_used if block_given?
+
+      i = size - 1
+      while i >= 0
+        return i if at(i) == obj
+        i -= 1
+      end
+ 
