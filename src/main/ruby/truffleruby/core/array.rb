@@ -1019,4 +1019,334 @@ class Array
         return i if at(i) == obj
         i -= 1
       end
- 
+    end
+    nil
+  end
+
+  def rotate(n=1)
+    n = Primitive.rb_num2int n
+
+    len = self.length
+    return Array.new(self) if len <= 1
+
+    n = n % len
+    return Array.new(self) if n == 0
+    Primitive.array_rotate self, n
+  end
+
+  def rotate!(n=1)
+    n = Primitive.rb_num2int n
+    Primitive.check_frozen self
+
+    len = self.length
+    return self if len <= 1
+
+    n = n % len
+    return self if n == 0
+    Primitive.array_rotate_inplace self, n
+  end
+
+  class SampleRandom
+    def initialize(rng)
+      @rng = rng
+    end
+
+    def rand(size)
+      random = Primitive.rb_num2int @rng.rand(size)
+      raise RangeError, 'random value must be >= 0' if random < 0
+      raise RangeError, 'random value must be less than Array size' unless random < size
+
+      random
+    end
+  end
+
+  def sample(count = undefined, random: nil)
+    if random and random.respond_to?(:rand)
+      rng = SampleRandom.new random
+    else
+      rng = Kernel
+    end
+
+    if Primitive.undefined?(count)
+      return at(size < 2 ? 0 : rng.rand(size))
+    end
+
+    count = Primitive.rb_num2int count
+    raise ArgumentError, 'count must be >= 0' if count < 0
+
+    size = self.size
+    count = size if count > size
+
+    case count
+    when 0
+      []
+    when 1
+      [at(rng.rand(size))]
+    when 2
+      i = rng.rand(size)
+      j = rng.rand(size - 1)
+      if j >= i
+        j += 1
+      end
+      [at(i), at(j)]
+    else
+      sample_many(count, rng)
+    end
+  end
+
+  private def sample_many(count, rng)
+    if count <= 70 # three implementations; choice determined experimentally
+      if 2.0 * size / count  <= count  + 13
+        sample_many_swap(count, rng)
+      else
+        sample_many_quad(count, rng)
+      end
+    else
+      if size <= -1100.0 + 59.5 * count
+        sample_many_swap(count, rng)
+      else
+        sample_many_hash(count,rng)
+      end
+    end
+  end
+
+  private def sample_many_swap(count, rng)
+    # linear dependence on count,
+    result = Array.new(self)
+
+    count.times do |i|
+      r = i + rng.rand(result.size - i)
+      result.__send__ :swap, i, r
+    end
+
+    count == size ? result : result[0, count]
+  end
+
+  private def sample_many_quad(count, rng)
+    # quadratic time due to linear time collision check but low overhead
+    result = Array.new count
+    i = 1
+
+    result[0] = rng.rand(size)
+
+    while i < count
+      k = rng.rand(size)
+      spin = false
+
+      while true
+        j = 0
+        while j < i
+          if k == result[j]
+            spin = true
+            break
+          end
+
+          j += 1
+        end
+
+        if spin
+          k = rng.rand(size)
+          spin = false
+        else
+          break
+        end
+      end
+
+      result[i] = k
+      i += 1
+    end
+
+    i = 0
+    while i < count
+      result[i] = at result[i]
+      i += 1
+    end
+
+    result
+  end
+
+  private def sample_many_hash(count, rng)
+    # use hash for constant time collision check but higher overhead
+    result = Array.new count
+    i = 1
+
+    result[0] = rng.rand(size)
+    result_set = { result[0] => 0 }
+
+    while i < count
+      k = rng.rand(size)
+
+      while true
+        if result_set.include?(k)
+          k = rng.rand(size)
+        else
+          break
+        end
+      end
+
+      result[i] = k
+      result_set[i] = k
+
+      i += 1
+    end
+
+    i = 0
+    while i < count
+      result[i] = at result[i]
+      i += 1
+    end
+
+    result
+  end
+
+  def select!(&block)
+    return to_enum(:select!) { size } unless block_given?
+
+    Primitive.check_frozen self
+
+    original_size = size
+    selected_size = 0
+
+    each_with_index do |e, i|
+      abnormal_termination = true
+      to_select = yield e
+      abnormal_termination = false
+
+      if to_select
+        self[selected_size] = e
+        selected_size += 1
+      end
+    ensure
+      self[selected_size..-1] = self[i..-1] if abnormal_termination
+    end
+
+    self[selected_size..-1] = []
+    self unless selected_size == original_size
+  end
+  alias_method :filter!, :select!
+
+  def shuffle(options = undefined)
+    return dup.shuffle!(options) if instance_of? Array
+    Array.new(self).shuffle!(options)
+  end
+
+  def shuffle!(options = undefined)
+    Primitive.check_frozen self
+
+    random_generator = Kernel
+
+    unless Primitive.undefined? options
+      options = Truffle::Type.coerce_to options, Hash, :to_hash
+      random_generator = options[:random] if options[:random].respond_to?(:rand)
+    end
+
+    size.times do |i|
+      r = i + random_generator.rand(size - i).to_int
+      raise RangeError, "random number too big #{r - i}" if r < 0 || r >= size
+      swap(i, r)
+    end
+    self
+  end
+
+  def drop(n)
+    n = Primitive.rb_num2int n
+    raise ArgumentError, 'attempt to drop negative size' if n < 0
+
+    new_size = size - n
+    return [] if new_size <= 0
+
+    self[n..-1]
+  end
+
+  def sort_by!(&block)
+    return to_enum(:sort_by!) { size } unless block_given?
+
+    Primitive.check_frozen self
+
+    Primitive.steal_array_storage(self, sort_by(&block))
+  end
+
+  def to_a
+    if self.instance_of? Array
+      self
+    else
+      Array.new(self)
+    end
+  end
+
+  def to_ary
+    self
+  end
+
+  def to_h
+    h = Hash.new
+    each_with_index do |elem, i|
+      elem = yield(elem) if block_given?
+      unless elem.respond_to?(:to_ary)
+        raise TypeError, "wrong element type #{elem.class} at #{i} (expected array)"
+      end
+
+      ary = elem.to_ary
+      if ary.size != 2
+        raise ArgumentError, "wrong array length at #{i} (expected 2, was #{ary.size})"
+      end
+
+      h[ary[0]] = ary[1]
+    end
+    h
+  end
+
+  def transpose
+    return [] if empty?
+
+    out = []
+    max = nil
+
+    each do |ary|
+      ary = Truffle::Type.coerce_to ary, Array, :to_ary
+      max ||= ary.size
+
+      # Catches too-large as well as too-small (for which #fetch would suffice)
+      raise IndexError, 'All arrays must be same length' if ary.size != max
+
+      ary.size.times do |i|
+        entry = (out[i] ||= [])
+        entry << ary.at(i)
+      end
+    end
+
+    out
+  end
+
+  def union(*others)
+    res = Array.new(self).uniq
+    others.each { |other| res = res | other }
+    res
+  end
+
+  alias_method :prepend, :unshift
+
+  def values_at(*args)
+    out = []
+
+    args.each do |elem|
+      # Cannot use #[] because of subtly different errors
+      if Primitive.object_kind_of?(elem, Range)
+        start, length = Primitive.range_normalized_start_length(elem, size)
+        finish = start + length - 1
+        next if start < 0
+        next if finish < start
+        start.upto(finish) { |i| out << at(i) }
+      else
+        i = Primitive.rb_num2int elem
+        out << at(i)
+      end
+    end
+
+    out
+  end
+
+  # Synchronize with Enumerator#zip and Enumerable#zip
+  def zip(*others)
+    if !block_given? and others.size == 1 and Array === others[0]
+      return
