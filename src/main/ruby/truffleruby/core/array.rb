@@ -1349,4 +1349,292 @@ class Array
   # Synchronize with Enumerator#zip and Enumerable#zip
   def zip(*others)
     if !block_given? and others.size == 1 and Array === others[0]
-      return
+      return Primitive.array_zip self, others[0]
+    end
+
+    out = Array.new(size) unless block_given?
+
+    others.map! do |other|
+      array = Truffle::Type.rb_check_convert_type(other, Array, :to_ary)
+
+      if array
+        array
+      elsif Primitive.object_respond_to?(other, :each, false)
+        other.to_enum(:each)
+      else
+        raise TypeError, "wrong argument type #{other.class} (must respond to :each)"
+      end
+    end
+
+    size.times do |i|
+      tuple = [at(i)]
+      others.each do |other|
+        tuple << case other
+                 when Array
+                   other.at(i)
+                 else
+                   begin
+                     other.next
+                   rescue StopIteration
+                     nil # the enumerator could change between next? and next leading to StopIteration
+                   end
+                 end
+      end
+
+      if block_given?
+        yield tuple
+      else
+        out[i] = tuple
+      end
+    end
+
+    if block_given?
+      nil
+    else
+      out
+    end
+  end
+
+  private def sort_fallback(&block)
+    # Use this instead of #dup as we want an instance of Array
+    sorted = Array.new(self)
+    if block
+      sorted.__send__ :mergesort_block!, block
+    else
+      sorted.__send__ :mergesort!
+    end
+    sorted
+  end
+
+  # Non-recursive sort using a temporary array for scratch storage.
+  # This is a hybrid mergesort; it's hybrid because for short runs under
+  # 8 elements long we use insertion sort and then merge those sorted
+  # runs back together.
+  def mergesort!
+    width = 7
+    source = self
+    scratch = Array.new(size, at(0))
+
+    # do a pre-loop to create a bunch of short sorted runs; isort on these
+    # 7-element sublists is more efficient than doing merge sort on 1-element
+    # sublists
+    left = 0
+    finish = size
+    while left < finish
+      right = left + width
+      right = Primitive.min(right, finish)
+      last = left + (2 * width)
+      last = Primitive.min(last, finish)
+
+      isort!(left, right)
+      isort!(right, last)
+
+      left += 2 * width
+    end
+
+    # now just merge together those sorted lists from the prior loop
+    width = 7
+    while width < size
+      left = 0
+      while left < finish
+        right = left + width
+        right = Primitive.min(right, finish)
+        last = left + (2 * width)
+        last = Primitive.min(last, finish)
+
+        bottom_up_merge(left, right, last, source, scratch)
+        left += 2 * width
+      end
+
+      source, scratch = scratch, source
+      width *= 2
+    end
+
+    Primitive.steal_array_storage(self, source)
+
+    self
+  end
+  private :mergesort!
+
+  def bottom_up_merge(left, right, last, source, scratch)
+    left_index = left
+    right_index = right
+    i = left
+
+    while i < last
+      left_element = source.at(left_index)
+      right_element = source.at(right_index)
+
+      if left_index < right && (right_index >= last || (left_element <=> right_element) <= 0)
+        scratch[i] = left_element
+        left_index += 1
+      else
+        scratch[i] = right_element
+        right_index += 1
+      end
+
+      i += 1
+    end
+  end
+  private :bottom_up_merge
+
+  def mergesort_block!(block)
+    width = 7
+    source = self
+    scratch = Array.new(size, at(0))
+
+    left = 0
+    finish = size
+    while left < finish
+      right = left + width
+      right = Primitive.min(right, finish)
+      last = left + (2 * width)
+      last = Primitive.min(last, finish)
+
+      isort_block!(left, right, block)
+      isort_block!(right, last, block)
+
+      left += 2 * width
+    end
+
+    width = 7
+    while width < size
+      left = 0
+      while left < finish
+        right = left + width
+        right = Primitive.min(right, finish)
+        last = left + (2 * width)
+        last = Primitive.min(last, finish)
+
+        bottom_up_merge_block(left, right, last, source, scratch, block)
+        left += 2 * width
+      end
+
+      source, scratch = scratch, source
+      width *= 2
+    end
+
+    Primitive.steal_array_storage(self, source)
+
+    self
+  end
+  private :mergesort_block!
+
+  def bottom_up_merge_block(left, right, last, source, scratch, block)
+    left_index = left
+    right_index = right
+    i = left
+
+    while i < last
+      left_element = source.at(left_index)
+      right_element = source.at(right_index)
+
+      if left_index < right && (right_index >= last || block.call(left_element, right_element) <= 0)
+        scratch[i] = left_element
+        left_index += 1
+      else
+        scratch[i] = right_element
+        right_index += 1
+      end
+
+      i += 1
+    end
+  end
+  private :bottom_up_merge_block
+
+  # Insertion sort in-place between the given indexes.
+  def isort!(left, right)
+    i = left + 1
+
+    while i < right
+      j = i
+
+      while j > left
+        jp = j - 1
+        el1 = at(jp)
+        el2 = at(j)
+
+        unless cmp = (el1 <=> el2)
+          raise ArgumentError, "comparison of #{el1.inspect} with #{el2.inspect} failed (#{j})"
+        end
+
+        break unless cmp > 0
+
+        self[j] = el1
+        self[jp] = el2
+
+        j = jp
+      end
+
+      i += 1
+    end
+  end
+  private :isort!
+
+  # Insertion sort in-place between the given indexes using a block.
+  def isort_block!(left, right, block)
+    i = left + 1
+
+    while i < right
+      j = i
+
+      while j > left
+        el1 = at(j - 1)
+        el2 = at(j)
+        block_result = block.call(el1, el2)
+
+        if Primitive.nil? block_result
+          raise ArgumentError, 'block returned nil'
+        elsif block_result > 0
+          self[j] = el1
+          self[j - 1] = el2
+          j -= 1
+        else
+          break
+        end
+      end
+
+      i += 1
+    end
+  end
+  private :isort_block!
+
+  def reverse!
+    Primitive.check_frozen self
+    return self unless size > 1
+
+    i = 0
+    while i < size / 2
+      swap i, size-i-1
+      i += 1
+    end
+
+    self
+  end
+
+  def slice!(start, length=undefined)
+    Primitive.check_frozen self
+
+    if Primitive.undefined? length
+      if Primitive.object_kind_of?(start, Range)
+        range = start
+        out = self[range]
+
+        range_start, range_length = Primitive.range_normalized_start_length(range, size)
+        range_end = range_start + range_length - 1
+        if range_end >= size
+          range_end = size - 1
+          range_length = size - range_start
+        end
+
+        if range_start < size && range_start >= 0 && range_end < size && range_end >= 0 && range_length > 0
+          delete_range(range_start, range_length)
+        end
+      else
+        # make sure that negative values are not passed through to the
+        # []= assignment
+        start = Primitive.rb_num2int start
+        start = start + size if start < 0
+
+        # This is to match the MRI behaviour of not extending the array
+        # with nil
