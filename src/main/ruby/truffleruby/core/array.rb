@@ -1637,4 +1637,77 @@ class Array
         start = start + size if start < 0
 
         # This is to match the MRI behaviour of not extending the array
-        # with nil
+        # with nil when specifying an index greater than the length
+        # of the array.
+        return out unless start >= 0 and start < size
+
+        out = at start
+
+        # Check for shift style.
+        if start == 0
+          self[0] = nil
+          self.shift
+        else
+          delete_range(start, 1)
+        end
+      end
+    else
+      start = Primitive.rb_num2int start
+      length = Primitive.rb_num2int length
+      return nil if length < 0
+
+      out = self[start, length]
+
+      if start < 0
+        start = size + start
+      end
+      if start + length > size
+        length = size - start
+      end
+
+      if start < size && start >= 0
+        delete_range(start, length)
+      end
+    end
+
+    out
+  end
+
+  def delete_range(index, del_length)
+    reg_start = index + del_length
+    reg_length = size - reg_start
+    if reg_start <= size
+      # copy tail
+      self[index, reg_length] = self[reg_start, reg_length]
+
+      self.pop(del_length)
+    end
+  end
+  private :delete_range
+
+  def uniq!(&block)
+    Primitive.check_frozen self
+    result = uniq(&block)
+
+    if self.size == result.size
+      nil
+    else
+      Primitive.steal_array_storage(self, result)
+      self
+    end
+  end
+
+  def sort!(&block)
+    Primitive.check_frozen self
+
+    Primitive.steal_array_storage(self, sort(&block))
+  end
+
+  private
+
+  def swap(a, b)
+    temp = at(a)
+    self[a] = at(b)
+    self[b] = temp
+  end
+end
