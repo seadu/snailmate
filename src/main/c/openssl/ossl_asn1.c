@@ -456,4 +456,215 @@ decode_eoc(unsigned char *der, long length)
     return rb_str_new("", 0);
 }
 
-/****
+/********/
+
+typedef struct {
+    const char *name;
+    VALUE *klass;
+} ossl_asn1_info_t;
+
+static const ossl_asn1_info_t ossl_asn1_info[] = {
+    { "EOC",               &cASN1EndOfContent,    },  /*  0 */
+    { "BOOLEAN",           &cASN1Boolean,         },  /*  1 */
+    { "INTEGER",           &cASN1Integer,         },  /*  2 */
+    { "BIT_STRING",        &cASN1BitString,       },  /*  3 */
+    { "OCTET_STRING",      &cASN1OctetString,     },  /*  4 */
+    { "NULL",              &cASN1Null,            },  /*  5 */
+    { "OBJECT",            &cASN1ObjectId,        },  /*  6 */
+    { "OBJECT_DESCRIPTOR", NULL,                  },  /*  7 */
+    { "EXTERNAL",          NULL,                  },  /*  8 */
+    { "REAL",              NULL,                  },  /*  9 */
+    { "ENUMERATED",        &cASN1Enumerated,      },  /* 10 */
+    { "EMBEDDED_PDV",      NULL,                  },  /* 11 */
+    { "UTF8STRING",        &cASN1UTF8String,      },  /* 12 */
+    { "RELATIVE_OID",      NULL,                  },  /* 13 */
+    { "[UNIVERSAL 14]",    NULL,                  },  /* 14 */
+    { "[UNIVERSAL 15]",    NULL,                  },  /* 15 */
+    { "SEQUENCE",          &cASN1Sequence,        },  /* 16 */
+    { "SET",               &cASN1Set,             },  /* 17 */
+    { "NUMERICSTRING",     &cASN1NumericString,   },  /* 18 */
+    { "PRINTABLESTRING",   &cASN1PrintableString, },  /* 19 */
+    { "T61STRING",         &cASN1T61String,       },  /* 20 */
+    { "VIDEOTEXSTRING",    &cASN1VideotexString,  },  /* 21 */
+    { "IA5STRING",         &cASN1IA5String,       },  /* 22 */
+    { "UTCTIME",           &cASN1UTCTime,         },  /* 23 */
+    { "GENERALIZEDTIME",   &cASN1GeneralizedTime, },  /* 24 */
+    { "GRAPHICSTRING",     &cASN1GraphicString,   },  /* 25 */
+    { "ISO64STRING",       &cASN1ISO64String,     },  /* 26 */
+    { "GENERALSTRING",     &cASN1GeneralString,   },  /* 27 */
+    { "UNIVERSALSTRING",   &cASN1UniversalString, },  /* 28 */
+    { "CHARACTER_STRING",  NULL,                  },  /* 29 */
+    { "BMPSTRING",         &cASN1BMPString,       },  /* 30 */
+};
+
+enum {ossl_asn1_info_size = (sizeof(ossl_asn1_info)/sizeof(ossl_asn1_info[0]))};
+
+static VALUE class_tag_map;
+
+static int ossl_asn1_default_tag(VALUE obj);
+
+ASN1_TYPE*
+ossl_asn1_get_asn1type(VALUE obj)
+{
+    ASN1_TYPE *ret;
+    VALUE value, rflag;
+    void *ptr;
+    void (*free_func)(void *);
+    int tag;
+
+    tag = ossl_asn1_default_tag(obj);
+    value = ossl_asn1_get_value(obj);
+    switch(tag){
+    case V_ASN1_BOOLEAN:
+	ptr = (void*)(VALUE)obj_to_asn1bool(value);
+	free_func = NULL;
+	break;
+    case V_ASN1_INTEGER:         /* FALLTHROUGH */
+    case V_ASN1_ENUMERATED:
+	ptr = obj_to_asn1int(value);
+	free_func = ASN1_INTEGER_free;
+	break;
+    case V_ASN1_BIT_STRING:
+        rflag = rb_attr_get(obj, sivUNUSED_BITS);
+	ptr = obj_to_asn1bstr(value, NUM2INT(rflag));
+	free_func = ASN1_BIT_STRING_free;
+	break;
+    case V_ASN1_NULL:
+	ptr = obj_to_asn1null(value);
+	free_func = ASN1_NULL_free;
+	break;
+    case V_ASN1_OCTET_STRING:    /* FALLTHROUGH */
+    case V_ASN1_UTF8STRING:      /* FALLTHROUGH */
+    case V_ASN1_NUMERICSTRING:   /* FALLTHROUGH */
+    case V_ASN1_PRINTABLESTRING: /* FALLTHROUGH */
+    case V_ASN1_T61STRING:       /* FALLTHROUGH */
+    case V_ASN1_VIDEOTEXSTRING:  /* FALLTHROUGH */
+    case V_ASN1_IA5STRING:       /* FALLTHROUGH */
+    case V_ASN1_GRAPHICSTRING:   /* FALLTHROUGH */
+    case V_ASN1_ISO64STRING:     /* FALLTHROUGH */
+    case V_ASN1_GENERALSTRING:   /* FALLTHROUGH */
+    case V_ASN1_UNIVERSALSTRING: /* FALLTHROUGH */
+    case V_ASN1_BMPSTRING:
+	ptr = obj_to_asn1str(value);
+	free_func = ASN1_STRING_free;
+	break;
+    case V_ASN1_OBJECT:
+	ptr = obj_to_asn1obj(value);
+	free_func = ASN1_OBJECT_free;
+	break;
+    case V_ASN1_UTCTIME:
+	ptr = obj_to_asn1utime(value);
+	free_func = ASN1_TIME_free;
+	break;
+    case V_ASN1_GENERALIZEDTIME:
+	ptr = obj_to_asn1gtime(value);
+	free_func = ASN1_TIME_free;
+	break;
+    case V_ASN1_SET:             /* FALLTHROUGH */
+    case V_ASN1_SEQUENCE:
+	ptr = obj_to_asn1derstr(obj);
+	free_func = ASN1_STRING_free;
+	break;
+    default:
+	ossl_raise(eASN1Error, "unsupported ASN.1 type");
+    }
+    if(!(ret = OPENSSL_malloc(sizeof(ASN1_TYPE)))){
+	if(free_func) free_func(ptr);
+	ossl_raise(eASN1Error, "ASN1_TYPE alloc failure");
+    }
+    memset(ret, 0, sizeof(ASN1_TYPE));
+    ASN1_TYPE_set(ret, tag, ptr);
+
+    return ret;
+}
+
+static int
+ossl_asn1_default_tag(VALUE obj)
+{
+    VALUE tmp_class, tag;
+
+    tmp_class = CLASS_OF(obj);
+    while (!NIL_P(tmp_class)) {
+	tag = rb_hash_lookup(class_tag_map, tmp_class);
+	if (tag != Qnil)
+	    return NUM2INT(tag);
+	tmp_class = rb_class_superclass(tmp_class);
+    }
+
+    return -1;
+}
+
+static int
+ossl_asn1_tag(VALUE obj)
+{
+    VALUE tag;
+
+    tag = ossl_asn1_get_tag(obj);
+    if(NIL_P(tag))
+	ossl_raise(eASN1Error, "tag number not specified");
+
+    return NUM2INT(tag);
+}
+
+static int
+ossl_asn1_tag_class(VALUE obj)
+{
+    VALUE s;
+
+    s = ossl_asn1_get_tag_class(obj);
+    if (NIL_P(s) || s == sym_UNIVERSAL)
+	return V_ASN1_UNIVERSAL;
+    else if (s == sym_APPLICATION)
+	return V_ASN1_APPLICATION;
+    else if (s == sym_CONTEXT_SPECIFIC)
+	return V_ASN1_CONTEXT_SPECIFIC;
+    else if (s == sym_PRIVATE)
+	return V_ASN1_PRIVATE;
+    else
+	ossl_raise(eASN1Error, "invalid tag class");
+}
+
+static VALUE
+ossl_asn1_class2sym(int tc)
+{
+    if((tc & V_ASN1_PRIVATE) == V_ASN1_PRIVATE)
+	return sym_PRIVATE;
+    else if((tc & V_ASN1_CONTEXT_SPECIFIC) == V_ASN1_CONTEXT_SPECIFIC)
+	return sym_CONTEXT_SPECIFIC;
+    else if((tc & V_ASN1_APPLICATION) == V_ASN1_APPLICATION)
+	return sym_APPLICATION;
+    else
+	return sym_UNIVERSAL;
+}
+
+/*
+ * call-seq:
+ *    OpenSSL::ASN1::ASN1Data.new(value, tag, tag_class) => ASN1Data
+ *
+ * _value_: Please have a look at Constructive and Primitive to see how Ruby
+ * types are mapped to ASN.1 types and vice versa.
+ *
+ * _tag_: An Integer indicating the tag number.
+ *
+ * _tag_class_: A Symbol indicating the tag class. Please cf. ASN1 for
+ * possible values.
+ *
+ * == Example
+ *   asn1_int = OpenSSL::ASN1Data.new(42, 2, :UNIVERSAL) # => Same as OpenSSL::ASN1::Integer.new(42)
+ *   tagged_int = OpenSSL::ASN1Data.new(42, 0, :CONTEXT_SPECIFIC) # implicitly 0-tagged INTEGER
+ */
+static VALUE
+ossl_asn1data_initialize(VALUE self, VALUE value, VALUE tag, VALUE tag_class)
+{
+    if(!SYMBOL_P(tag_class))
+	ossl_raise(eASN1Error, "invalid tag class");
+    ossl_asn1_set_tag(self, tag);
+    ossl_asn1_set_value(self, value);
+    ossl_asn1_set_tag_class(self, tag_class);
+    ossl_asn1_set_indefinite_length(self, Qfalse);
+
+    return self;
+}
+
+static VALUE
+to_der_internal(VALUE self, int const
