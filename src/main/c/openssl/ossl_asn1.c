@@ -902,4 +902,242 @@ ossl_asn1_decode0(unsigned char **pp, long length, long *offset, int depth,
 	rb_ary_push(arg, LONG2NUM(len));
 	rb_ary_push(arg, (j & V_ASN1_CONSTRUCTED) ? Qtrue : Qfalse);
 	rb_ary_push(arg, ossl_asn1_class2sym(tc));
-	rb_ary_push(ar
+	rb_ary_push(arg, INT2NUM(tag));
+	rb_yield(arg);
+    }
+
+    if(j & V_ASN1_CONSTRUCTED) {
+	*pp += hlen;
+	off += hlen;
+	asn1data = int_ossl_asn1_decode0_cons(pp, length - hlen, len, &off, depth, yield, j, tag, tag_class, &inner_read);
+	inner_read += hlen;
+    }
+    else {
+	if ((j & 0x01) && (len == 0))
+	    ossl_raise(eASN1Error, "indefinite length for primitive value");
+	asn1data = int_ossl_asn1_decode0_prim(pp, len, hlen, tag, tag_class, &inner_read);
+	off += hlen + len;
+    }
+    if (num_read)
+	*num_read = inner_read;
+    if (len != 0 && inner_read != hlen + len) {
+	ossl_raise(eASN1Error,
+		   "Type mismatch. Bytes read: %ld Bytes available: %ld",
+		   inner_read, hlen + len);
+    }
+
+    *offset = off;
+    return asn1data;
+}
+
+static void
+int_ossl_decode_sanity_check(long len, long read, long offset)
+{
+    if (len != 0 && (read != len || offset != len)) {
+	ossl_raise(eASN1Error,
+		   "Type mismatch. Total bytes read: %ld Bytes available: %ld Offset: %ld",
+		   read, len, offset);
+    }
+}
+
+/*
+ * call-seq:
+ *    OpenSSL::ASN1.traverse(asn1) -> nil
+ *
+ * If a block is given, it prints out each of the elements encountered.
+ * Block parameters are (in that order):
+ * * depth: The recursion depth, plus one with each constructed value being encountered (Integer)
+ * * offset: Current byte offset (Integer)
+ * * header length: Combined length in bytes of the Tag and Length headers. (Integer)
+ * * length: The overall remaining length of the entire data (Integer)
+ * * constructed: Whether this value is constructed or not (Boolean)
+ * * tag_class: Current tag class (Symbol)
+ * * tag: The current tag number (Integer)
+ *
+ * == Example
+ *   der = File.binread('asn1data.der')
+ *   OpenSSL::ASN1.traverse(der) do | depth, offset, header_len, length, constructed, tag_class, tag|
+ *     puts "Depth: #{depth} Offset: #{offset} Length: #{length}"
+ *     puts "Header length: #{header_len} Tag: #{tag} Tag class: #{tag_class} Constructed: #{constructed}"
+ *   end
+ */
+static VALUE
+ossl_asn1_traverse(VALUE self, VALUE obj)
+{
+    unsigned char *p;
+    VALUE tmp;
+    long len, read = 0, offset = 0;
+
+    obj = ossl_to_der_if_possible(obj);
+    tmp = rb_str_new4(StringValue(obj));
+    p = (unsigned char *)RSTRING_PTR(tmp);
+    len = RSTRING_LEN(tmp);
+    ossl_asn1_decode0(&p, len, &offset, 0, 1, &read);
+    RB_GC_GUARD(tmp);
+    int_ossl_decode_sanity_check(len, read, offset);
+    return Qnil;
+}
+
+/*
+ * call-seq:
+ *    OpenSSL::ASN1.decode(der) -> ASN1Data
+ *
+ * Decodes a BER- or DER-encoded value and creates an ASN1Data instance. _der_
+ * may be a String or any object that features a +.to_der+ method transforming
+ * it into a BER-/DER-encoded String+
+ *
+ * == Example
+ *   der = File.binread('asn1data')
+ *   asn1 = OpenSSL::ASN1.decode(der)
+ */
+static VALUE
+ossl_asn1_decode(VALUE self, VALUE obj)
+{
+    VALUE ret;
+    unsigned char *p;
+    VALUE tmp;
+    long len, read = 0, offset = 0;
+
+    obj = ossl_to_der_if_possible(obj);
+    tmp = rb_str_new4(StringValue(obj));
+    p = (unsigned char *)RSTRING_PTR(tmp);
+    len = RSTRING_LEN(tmp);
+    ret = ossl_asn1_decode0(&p, len, &offset, 0, 0, &read);
+    RB_GC_GUARD(tmp);
+    int_ossl_decode_sanity_check(len, read, offset);
+    return ret;
+}
+
+/*
+ * call-seq:
+ *    OpenSSL::ASN1.decode_all(der) -> Array of ASN1Data
+ *
+ * Similar to #decode with the difference that #decode expects one
+ * distinct value represented in _der_. #decode_all on the contrary
+ * decodes a sequence of sequential BER/DER values lined up in _der_
+ * and returns them as an array.
+ *
+ * == Example
+ *   ders = File.binread('asn1data_seq')
+ *   asn1_ary = OpenSSL::ASN1.decode_all(ders)
+ */
+static VALUE
+ossl_asn1_decode_all(VALUE self, VALUE obj)
+{
+    VALUE ary, val;
+    unsigned char *p;
+    long len, tmp_len = 0, read = 0, offset = 0;
+    VALUE tmp;
+
+    obj = ossl_to_der_if_possible(obj);
+    tmp = rb_str_new4(StringValue(obj));
+    p = (unsigned char *)RSTRING_PTR(tmp);
+    len = RSTRING_LEN(tmp);
+    tmp_len = len;
+    ary = rb_ary_new();
+    while (tmp_len > 0) {
+	long tmp_read = 0;
+	val = ossl_asn1_decode0(&p, tmp_len, &offset, 0, 0, &tmp_read);
+	rb_ary_push(ary, val);
+	read += tmp_read;
+	tmp_len -= tmp_read;
+    }
+    RB_GC_GUARD(tmp);
+    int_ossl_decode_sanity_check(len, read, offset);
+    return ary;
+}
+
+/*
+ * call-seq:
+ *    OpenSSL::ASN1::Primitive.new(value [, tag, tagging, tag_class ]) => Primitive
+ *
+ * _value_: is mandatory.
+ *
+ * _tag_: optional, may be specified for tagged values. If no _tag_ is
+ * specified, the UNIVERSAL tag corresponding to the Primitive sub-class
+ * is used by default.
+ *
+ * _tagging_: may be used as an encoding hint to encode a value either
+ * explicitly or implicitly, see ASN1 for possible values.
+ *
+ * _tag_class_: if _tag_ and _tagging_ are +nil+ then this is set to
+ * +:UNIVERSAL+ by default. If either _tag_ or _tagging_ are set then
+ * +:CONTEXT_SPECIFIC+ is used as the default. For possible values please
+ * cf. ASN1.
+ *
+ * == Example
+ *   int = OpenSSL::ASN1::Integer.new(42)
+ *   zero_tagged_int = OpenSSL::ASN1::Integer.new(42, 0, :IMPLICIT)
+ *   private_explicit_zero_tagged_int = OpenSSL::ASN1::Integer.new(42, 0, :EXPLICIT, :PRIVATE)
+ */
+static VALUE
+ossl_asn1_initialize(int argc, VALUE *argv, VALUE self)
+{
+    VALUE value, tag, tagging, tag_class;
+    int default_tag;
+
+    rb_scan_args(argc, argv, "13", &value, &tag, &tagging, &tag_class);
+    default_tag = ossl_asn1_default_tag(self);
+
+    if (default_tag == -1 || argc > 1) {
+	if(NIL_P(tag))
+	    ossl_raise(eASN1Error, "must specify tag number");
+	if(!NIL_P(tagging) && !SYMBOL_P(tagging))
+	    ossl_raise(eASN1Error, "invalid tagging method");
+	if(NIL_P(tag_class)) {
+	    if (NIL_P(tagging))
+		tag_class = sym_UNIVERSAL;
+	    else
+		tag_class = sym_CONTEXT_SPECIFIC;
+	}
+	if(!SYMBOL_P(tag_class))
+	    ossl_raise(eASN1Error, "invalid tag class");
+    }
+    else{
+	tag = INT2NUM(default_tag);
+	tagging = Qnil;
+	tag_class = sym_UNIVERSAL;
+    }
+    ossl_asn1_set_tag(self, tag);
+    ossl_asn1_set_value(self, value);
+    ossl_asn1_set_tagging(self, tagging);
+    ossl_asn1_set_tag_class(self, tag_class);
+    ossl_asn1_set_indefinite_length(self, Qfalse);
+    if (default_tag == V_ASN1_BIT_STRING)
+	rb_ivar_set(self, sivUNUSED_BITS, INT2FIX(0));
+
+    return self;
+}
+
+static VALUE
+ossl_asn1eoc_initialize(VALUE self) {
+    VALUE tag, tagging, tag_class, value;
+    tag = INT2FIX(0);
+    tagging = Qnil;
+    tag_class = sym_UNIVERSAL;
+    value = rb_str_new("", 0);
+    ossl_asn1_set_tag(self, tag);
+    ossl_asn1_set_value(self, value);
+    ossl_asn1_set_tagging(self, tagging);
+    ossl_asn1_set_tag_class(self, tag_class);
+    ossl_asn1_set_indefinite_length(self, Qfalse);
+    return self;
+}
+
+static VALUE
+ossl_asn1eoc_to_der(VALUE self)
+{
+    return rb_str_new("\0\0", 2);
+}
+
+/*
+ * call-seq:
+ *    asn1.to_der => DER-encoded String
+ *
+ * See ASN1Data#to_der for details.
+ */
+static VALUE
+ossl_asn1prim_to_der(VALUE self)
+{
+    ASN1_TYPE *asn1;
+    long a
