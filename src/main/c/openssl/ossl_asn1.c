@@ -1140,4 +1140,270 @@ static VALUE
 ossl_asn1prim_to_der(VALUE self)
 {
     ASN1_TYPE *asn1;
-    long a
+    long alllen, bodylen;
+    unsigned char *p0, *p1;
+    int j, tag, tc, state;
+    VALUE str;
+
+    if (ossl_asn1_default_tag(self) == -1) {
+	str = ossl_asn1_get_value(self);
+	return to_der_internal(self, 0, 0, StringValue(str));
+    }
+
+    asn1 = ossl_asn1_get_asn1type(self);
+    alllen = i2d_ASN1_TYPE(asn1, NULL);
+    if (alllen < 0) {
+	ASN1_TYPE_free(asn1);
+	ossl_raise(eASN1Error, "i2d_ASN1_TYPE");
+    }
+    str = ossl_str_new(NULL, alllen, &state);
+    if (state) {
+	ASN1_TYPE_free(asn1);
+	rb_jump_tag(state);
+    }
+    p0 = p1 = (unsigned char *)RSTRING_PTR(str);
+    i2d_ASN1_TYPE(asn1, &p0);
+    ASN1_TYPE_free(asn1);
+    assert(p0 - p1 == alllen);
+
+    /* Strip header since to_der_internal() wants only the payload */
+    j = ASN1_get_object((const unsigned char **)&p1, &bodylen, &tag, &tc, alllen);
+    if (j & 0x80)
+	ossl_raise(eASN1Error, "ASN1_get_object"); /* should not happen */
+
+    return to_der_internal(self, 0, 0, rb_str_drop_bytes(str, alllen - bodylen));
+}
+
+/*
+ * call-seq:
+ *    asn1.to_der => DER-encoded String
+ *
+ * See ASN1Data#to_der for details.
+ */
+static VALUE
+ossl_asn1cons_to_der(VALUE self)
+{
+    VALUE ary, str;
+    long i;
+    int indef_len;
+
+    indef_len = RTEST(ossl_asn1_get_indefinite_length(self));
+    ary = rb_convert_type(ossl_asn1_get_value(self), T_ARRAY, "Array", "to_a");
+    str = rb_str_new(NULL, 0);
+    for (i = 0; i < RARRAY_LEN(ary); i++) {
+	VALUE item = RARRAY_AREF(ary, i);
+
+	if (indef_len && rb_obj_is_kind_of(item, cASN1EndOfContent)) {
+	    if (i != RARRAY_LEN(ary) - 1)
+		ossl_raise(eASN1Error, "illegal EOC octets in value");
+
+	    /*
+	     * EOC is not really part of the content, but we required to add one
+	     * at the end in the past.
+	     */
+	    break;
+	}
+
+	item = ossl_to_der_if_possible(item);
+	StringValue(item);
+	rb_str_append(str, item);
+    }
+
+    return to_der_internal(self, 1, indef_len, str);
+}
+
+/*
+ * call-seq:
+ *    asn1_ary.each { |asn1| block } => asn1_ary
+ *
+ * Calls the given block once for each element in self, passing that element
+ * as parameter _asn1_. If no block is given, an enumerator is returned
+ * instead.
+ *
+ * == Example
+ *   asn1_ary.each do |asn1|
+ *     puts asn1
+ *   end
+ */
+static VALUE
+ossl_asn1cons_each(VALUE self)
+{
+    rb_block_call(ossl_asn1_get_value(self), id_each, 0, 0, 0, 0);
+
+    return self;
+}
+
+/*
+ * call-seq:
+ *    OpenSSL::ASN1::ObjectId.register(object_id, short_name, long_name)
+ *
+ * This adds a new ObjectId to the internal tables. Where _object_id_ is the
+ * numerical form, _short_name_ is the short name, and _long_name_ is the long
+ * name.
+ *
+ * Returns +true+ if successful. Raises an OpenSSL::ASN1::ASN1Error if it fails.
+ *
+ */
+static VALUE
+ossl_asn1obj_s_register(VALUE self, VALUE oid, VALUE sn, VALUE ln)
+{
+    StringValueCStr(oid);
+    StringValueCStr(sn);
+    StringValueCStr(ln);
+
+    if(!OBJ_create(RSTRING_PTR(oid), RSTRING_PTR(sn), RSTRING_PTR(ln)))
+	ossl_raise(eASN1Error, NULL);
+
+    return Qtrue;
+}
+
+/*
+ * call-seq:
+ *    oid.sn -> string
+ *    oid.short_name -> string
+ *
+ * The short name of the ObjectId, as defined in <openssl/objects.h>.
+ */
+static VALUE
+ossl_asn1obj_get_sn(VALUE self)
+{
+    VALUE val, ret = Qnil;
+    int nid;
+
+    val = ossl_asn1_get_value(self);
+    if ((nid = OBJ_txt2nid(StringValueCStr(val))) != NID_undef)
+	ret = rb_str_new2(OBJ_nid2sn(nid));
+
+    return ret;
+}
+
+/*
+ * call-seq:
+ *    oid.ln -> string
+ *    oid.long_name -> string
+ *
+ * The long name of the ObjectId, as defined in <openssl/objects.h>.
+ */
+static VALUE
+ossl_asn1obj_get_ln(VALUE self)
+{
+    VALUE val, ret = Qnil;
+    int nid;
+
+    val = ossl_asn1_get_value(self);
+    if ((nid = OBJ_txt2nid(StringValueCStr(val))) != NID_undef)
+	ret = rb_str_new2(OBJ_nid2ln(nid));
+
+    return ret;
+}
+
+/*
+ *  call-seq:
+ *     oid == other_oid => true or false
+ *
+ *  Returns +true+ if _other_oid_ is the same as _oid_
+ */
+static VALUE
+ossl_asn1obj_eq(VALUE self, VALUE other)
+{
+    VALUE valSelf, valOther;
+    int nidSelf, nidOther;
+
+    valSelf = ossl_asn1_get_value(self);
+    valOther = ossl_asn1_get_value(other);
+
+    if ((nidSelf = OBJ_txt2nid(StringValueCStr(valSelf))) == NID_undef)
+	ossl_raise(eASN1Error, "OBJ_txt2nid");
+
+    if ((nidOther = OBJ_txt2nid(StringValueCStr(valOther))) == NID_undef)
+	ossl_raise(eASN1Error, "OBJ_txt2nid");
+
+    return nidSelf == nidOther ? Qtrue : Qfalse;
+}
+
+static VALUE
+asn1obj_get_oid_i(VALUE vobj)
+{
+    ASN1_OBJECT *a1obj = (void *)vobj;
+    VALUE str;
+    int len;
+
+    str = rb_usascii_str_new(NULL, 127);
+    len = OBJ_obj2txt(RSTRING_PTR(str), RSTRING_LENINT(str), a1obj, 1);
+    if (len <= 0 || len == INT_MAX)
+	ossl_raise(eASN1Error, "OBJ_obj2txt");
+    if (len > RSTRING_LEN(str)) {
+	/* +1 is for the \0 terminator added by OBJ_obj2txt() */
+	rb_str_resize(str, len + 1);
+	len = OBJ_obj2txt(RSTRING_PTR(str), len + 1, a1obj, 1);
+	if (len <= 0)
+	    ossl_raise(eASN1Error, "OBJ_obj2txt");
+    }
+    rb_str_set_len(str, len);
+    return str;
+}
+
+/*
+ * call-seq:
+ *    oid.oid -> string
+ *
+ * Returns a String representing the Object Identifier in the dot notation,
+ * e.g. "1.2.3.4.5"
+ */
+static VALUE
+ossl_asn1obj_get_oid(VALUE self)
+{
+    VALUE str;
+    ASN1_OBJECT *a1obj;
+    int state;
+
+    a1obj = obj_to_asn1obj(ossl_asn1_get_value(self));
+    str = rb_protect(asn1obj_get_oid_i, (VALUE)a1obj, &state);
+    ASN1_OBJECT_free(a1obj);
+    if (state)
+	rb_jump_tag(state);
+    return str;
+}
+
+#define OSSL_ASN1_IMPL_FACTORY_METHOD(klass) \
+static VALUE ossl_asn1_##klass(int argc, VALUE *argv, VALUE self)\
+{ return rb_funcall3(cASN1##klass, rb_intern("new"), argc, argv); }
+
+OSSL_ASN1_IMPL_FACTORY_METHOD(Boolean)
+OSSL_ASN1_IMPL_FACTORY_METHOD(Integer)
+OSSL_ASN1_IMPL_FACTORY_METHOD(Enumerated)
+OSSL_ASN1_IMPL_FACTORY_METHOD(BitString)
+OSSL_ASN1_IMPL_FACTORY_METHOD(OctetString)
+OSSL_ASN1_IMPL_FACTORY_METHOD(UTF8String)
+OSSL_ASN1_IMPL_FACTORY_METHOD(NumericString)
+OSSL_ASN1_IMPL_FACTORY_METHOD(PrintableString)
+OSSL_ASN1_IMPL_FACTORY_METHOD(T61String)
+OSSL_ASN1_IMPL_FACTORY_METHOD(VideotexString)
+OSSL_ASN1_IMPL_FACTORY_METHOD(IA5String)
+OSSL_ASN1_IMPL_FACTORY_METHOD(GraphicString)
+OSSL_ASN1_IMPL_FACTORY_METHOD(ISO64String)
+OSSL_ASN1_IMPL_FACTORY_METHOD(GeneralString)
+OSSL_ASN1_IMPL_FACTORY_METHOD(UniversalString)
+OSSL_ASN1_IMPL_FACTORY_METHOD(BMPString)
+OSSL_ASN1_IMPL_FACTORY_METHOD(Null)
+OSSL_ASN1_IMPL_FACTORY_METHOD(ObjectId)
+OSSL_ASN1_IMPL_FACTORY_METHOD(UTCTime)
+OSSL_ASN1_IMPL_FACTORY_METHOD(GeneralizedTime)
+OSSL_ASN1_IMPL_FACTORY_METHOD(Sequence)
+OSSL_ASN1_IMPL_FACTORY_METHOD(Set)
+OSSL_ASN1_IMPL_FACTORY_METHOD(EndOfContent)
+
+void
+Init_ossl_asn1(void)
+{
+#undef rb_intern
+    VALUE ary;
+    int i;
+
+#if 0
+    mOSSL = rb_define_module("OpenSSL");
+    eOSSLError = rb_define_class_under(mOSSL, "OpenSSLError", rb_eStandardError);
+#endif
+
+    sym_UNIVERSAL = ID2SYM(rb_intern_const("UNIVERSAL"));
+    sym_CONTEXT_SPECIFIC 
