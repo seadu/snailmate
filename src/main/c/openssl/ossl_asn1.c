@@ -1552,4 +1552,150 @@ Init_ossl_asn1(void)
     eASN1Error = rb_define_class_under(mASN1, "ASN1Error", eOSSLError);
     rb_define_module_function(mASN1, "traverse", ossl_asn1_traverse, 1);
     rb_define_module_function(mASN1, "decode", ossl_asn1_decode, 1);
-    rb_define_module_function(mASN1, "decode_all", oss
+    rb_define_module_function(mASN1, "decode_all", ossl_asn1_decode_all, 1);
+    ary = rb_ary_new();
+
+    /*
+     * Array storing tag names at the tag's index.
+     */
+    rb_define_const(mASN1, "UNIVERSAL_TAG_NAME", ary);
+    for(i = 0; i < ossl_asn1_info_size; i++){
+	if(ossl_asn1_info[i].name[0] == '[') continue;
+	rb_define_const(mASN1, ossl_asn1_info[i].name, INT2NUM(i));
+	rb_ary_store(ary, i, rb_str_new2(ossl_asn1_info[i].name));
+    }
+
+    /* Document-class: OpenSSL::ASN1::ASN1Data
+     *
+     * The top-level class representing any ASN.1 object. When parsed by
+     * ASN1.decode, tagged values are always represented by an instance
+     * of ASN1Data.
+     *
+     * == The role of ASN1Data for parsing tagged values
+     *
+     * When encoding an ASN.1 type it is inherently clear what original
+     * type (e.g. INTEGER, OCTET STRING etc.) this value has, regardless
+     * of its tagging.
+     * But opposed to the time an ASN.1 type is to be encoded, when parsing
+     * them it is not possible to deduce the "real type" of tagged
+     * values. This is why tagged values are generally parsed into ASN1Data
+     * instances, but with a different outcome for implicit and explicit
+     * tagging.
+     *
+     * === Example of a parsed implicitly tagged value
+     *
+     * An implicitly 1-tagged INTEGER value will be parsed as an
+     * ASN1Data with
+     * * _tag_ equal to 1
+     * * _tag_class_ equal to +:CONTEXT_SPECIFIC+
+     * * _value_ equal to a String that carries the raw encoding
+     *   of the INTEGER.
+     * This implies that a subsequent decoding step is required to
+     * completely decode implicitly tagged values.
+     *
+     * === Example of a parsed explicitly tagged value
+     *
+     * An explicitly 1-tagged INTEGER value will be parsed as an
+     * ASN1Data with
+     * * _tag_ equal to 1
+     * * _tag_class_ equal to +:CONTEXT_SPECIFIC+
+     * * _value_ equal to an Array with one single element, an
+     *   instance of OpenSSL::ASN1::Integer, i.e. the inner element
+     *   is the non-tagged primitive value, and the tagging is represented
+     *   in the outer ASN1Data
+     *
+     * == Example - Decoding an implicitly tagged INTEGER
+     *   int = OpenSSL::ASN1::Integer.new(1, 0, :IMPLICIT) # implicit 0-tagged
+     *   seq = OpenSSL::ASN1::Sequence.new( [int] )
+     *   der = seq.to_der
+     *   asn1 = OpenSSL::ASN1.decode(der)
+     *   # pp asn1 => #<OpenSSL::ASN1::Sequence:0x87326e0
+     *   #              @indefinite_length=false,
+     *   #              @tag=16,
+     *   #              @tag_class=:UNIVERSAL,
+     *   #              @tagging=nil,
+     *   #              @value=
+     *   #                [#<OpenSSL::ASN1::ASN1Data:0x87326f4
+     *   #                   @indefinite_length=false,
+     *   #                   @tag=0,
+     *   #                   @tag_class=:CONTEXT_SPECIFIC,
+     *   #                   @value="\x01">]>
+     *   raw_int = asn1.value[0]
+     *   # manually rewrite tag and tag class to make it an UNIVERSAL value
+     *   raw_int.tag = OpenSSL::ASN1::INTEGER
+     *   raw_int.tag_class = :UNIVERSAL
+     *   int2 = OpenSSL::ASN1.decode(raw_int)
+     *   puts int2.value # => 1
+     *
+     * == Example - Decoding an explicitly tagged INTEGER
+     *   int = OpenSSL::ASN1::Integer.new(1, 0, :EXPLICIT) # explicit 0-tagged
+     *   seq = OpenSSL::ASN1::Sequence.new( [int] )
+     *   der = seq.to_der
+     *   asn1 = OpenSSL::ASN1.decode(der)
+     *   # pp asn1 => #<OpenSSL::ASN1::Sequence:0x87326e0
+     *   #              @indefinite_length=false,
+     *   #              @tag=16,
+     *   #              @tag_class=:UNIVERSAL,
+     *   #              @tagging=nil,
+     *   #              @value=
+     *   #                [#<OpenSSL::ASN1::ASN1Data:0x87326f4
+     *   #                   @indefinite_length=false,
+     *   #                   @tag=0,
+     *   #                   @tag_class=:CONTEXT_SPECIFIC,
+     *   #                   @value=
+     *   #                     [#<OpenSSL::ASN1::Integer:0x85bf308
+     *   #                        @indefinite_length=false,
+     *   #                        @tag=2,
+     *   #                        @tag_class=:UNIVERSAL
+     *   #                        @tagging=nil,
+     *   #                        @value=1>]>]>
+     *   int2 = asn1.value[0].value[0]
+     *   puts int2.value # => 1
+     */
+    cASN1Data = rb_define_class_under(mASN1, "ASN1Data", rb_cObject);
+    /*
+     * Carries the value of a ASN.1 type.
+     * Please confer Constructive and Primitive for the mappings between
+     * ASN.1 data types and Ruby classes.
+     */
+    rb_attr(cASN1Data, rb_intern("value"), 1, 1, 0);
+    /*
+     * An Integer representing the tag number of this ASN1Data. Never +nil+.
+     */
+    rb_attr(cASN1Data, rb_intern("tag"), 1, 1, 0);
+    /*
+     * A Symbol representing the tag class of this ASN1Data. Never +nil+.
+     * See ASN1Data for possible values.
+     */
+    rb_attr(cASN1Data, rb_intern("tag_class"), 1, 1, 0);
+    /*
+     * Never +nil+. A boolean value indicating whether the encoding uses
+     * indefinite length (in the case of parsing) or whether an indefinite
+     * length form shall be used (in the encoding case).
+     * In DER, every value uses definite length form. But in scenarios where
+     * large amounts of data need to be transferred it might be desirable to
+     * have some kind of streaming support available.
+     * For example, huge OCTET STRINGs are preferably sent in smaller-sized
+     * chunks, each at a time.
+     * This is possible in BER by setting the length bytes of an encoding
+     * to zero and by this indicating that the following value will be
+     * sent in chunks. Indefinite length encodings are always constructed.
+     * The end of such a stream of chunks is indicated by sending a EOC
+     * (End of Content) tag. SETs and SEQUENCEs may use an indefinite length
+     * encoding, but also primitive types such as e.g. OCTET STRINGS or
+     * BIT STRINGS may leverage this functionality (cf. ITU-T X.690).
+     */
+    rb_attr(cASN1Data, rb_intern("indefinite_length"), 1, 1, 0);
+    rb_define_alias(cASN1Data, "infinite_length", "indefinite_length");
+    rb_define_alias(cASN1Data, "infinite_length=", "indefinite_length=");
+    rb_define_method(cASN1Data, "initialize", ossl_asn1data_initialize, 3);
+    rb_define_method(cASN1Data, "to_der", ossl_asn1data_to_der, 0);
+
+    /* Document-class: OpenSSL::ASN1::Primitive
+     *
+     * The parent class for all primitive encodings. Attributes are the same as
+     * for ASN1Data, with the addition of _tagging_.
+     * Primitive values can never be encoded with indefinite length form, thus
+     * it is not possible to set the _indefinite_length_ attribute for Primitive
+     * and its sub-classes.
+ 
