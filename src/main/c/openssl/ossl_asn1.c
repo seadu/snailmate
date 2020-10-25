@@ -1836,4 +1836,55 @@ do{\
     OSSL_ASN1_DEFINE_CLASS(GeneralizedTime, Primitive);
 
     OSSL_ASN1_DEFINE_CLASS(Sequence, Constructive);
-    OSSL_ASN1_DEFINE_CLASS(
+    OSSL_ASN1_DEFINE_CLASS(Set, Constructive);
+
+    OSSL_ASN1_DEFINE_CLASS(EndOfContent, Data);
+
+
+    /* Document-class: OpenSSL::ASN1::ObjectId
+     *
+     * Represents the primitive object id for OpenSSL::ASN1
+     */
+#if 0
+    cASN1ObjectId = rb_define_class_under(mASN1, "ObjectId", cASN1Primitive);  /* let rdoc know */
+#endif
+    rb_define_singleton_method(cASN1ObjectId, "register", ossl_asn1obj_s_register, 3);
+    rb_define_method(cASN1ObjectId, "sn", ossl_asn1obj_get_sn, 0);
+    rb_define_method(cASN1ObjectId, "ln", ossl_asn1obj_get_ln, 0);
+    rb_define_method(cASN1ObjectId, "oid", ossl_asn1obj_get_oid, 0);
+    rb_define_alias(cASN1ObjectId, "short_name", "sn");
+    rb_define_alias(cASN1ObjectId, "long_name", "ln");
+    rb_define_method(cASN1ObjectId, "==", ossl_asn1obj_eq, 1);
+    rb_attr(cASN1BitString, rb_intern("unused_bits"), 1, 1, 0);
+
+    rb_define_method(cASN1EndOfContent, "initialize", ossl_asn1eoc_initialize, 0);
+    rb_define_method(cASN1EndOfContent, "to_der", ossl_asn1eoc_to_der, 0);
+
+    class_tag_map = rb_hash_new();
+    rb_gc_register_mark_object(class_tag_map);
+    rb_hash_aset(class_tag_map, cASN1EndOfContent, INT2NUM(V_ASN1_EOC));
+    rb_hash_aset(class_tag_map, cASN1Boolean, INT2NUM(V_ASN1_BOOLEAN));
+    rb_hash_aset(class_tag_map, cASN1Integer, INT2NUM(V_ASN1_INTEGER));
+    rb_hash_aset(class_tag_map, cASN1BitString, INT2NUM(V_ASN1_BIT_STRING));
+    rb_hash_aset(class_tag_map, cASN1OctetString, INT2NUM(V_ASN1_OCTET_STRING));
+    rb_hash_aset(class_tag_map, cASN1Null, INT2NUM(V_ASN1_NULL));
+    rb_hash_aset(class_tag_map, cASN1ObjectId, INT2NUM(V_ASN1_OBJECT));
+    rb_hash_aset(class_tag_map, cASN1Enumerated, INT2NUM(V_ASN1_ENUMERATED));
+    rb_hash_aset(class_tag_map, cASN1UTF8String, INT2NUM(V_ASN1_UTF8STRING));
+    rb_hash_aset(class_tag_map, cASN1Sequence, INT2NUM(V_ASN1_SEQUENCE));
+    rb_hash_aset(class_tag_map, cASN1Set, INT2NUM(V_ASN1_SET));
+    rb_hash_aset(class_tag_map, cASN1NumericString, INT2NUM(V_ASN1_NUMERICSTRING));
+    rb_hash_aset(class_tag_map, cASN1PrintableString, INT2NUM(V_ASN1_PRINTABLESTRING));
+    rb_hash_aset(class_tag_map, cASN1T61String, INT2NUM(V_ASN1_T61STRING));
+    rb_hash_aset(class_tag_map, cASN1VideotexString, INT2NUM(V_ASN1_VIDEOTEXSTRING));
+    rb_hash_aset(class_tag_map, cASN1IA5String, INT2NUM(V_ASN1_IA5STRING));
+    rb_hash_aset(class_tag_map, cASN1UTCTime, INT2NUM(V_ASN1_UTCTIME));
+    rb_hash_aset(class_tag_map, cASN1GeneralizedTime, INT2NUM(V_ASN1_GENERALIZEDTIME));
+    rb_hash_aset(class_tag_map, cASN1GraphicString, INT2NUM(V_ASN1_GRAPHICSTRING));
+    rb_hash_aset(class_tag_map, cASN1ISO64String, INT2NUM(V_ASN1_ISO64STRING));
+    rb_hash_aset(class_tag_map, cASN1GeneralString, INT2NUM(V_ASN1_GENERALSTRING));
+    rb_hash_aset(class_tag_map, cASN1UniversalString, INT2NUM(V_ASN1_UNIVERSALSTRING));
+    rb_hash_aset(class_tag_map, cASN1BMPString, INT2NUM(V_ASN1_BMPSTRING));
+
+    id_each = rb_intern_const("each");
+}

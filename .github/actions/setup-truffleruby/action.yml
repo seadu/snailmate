@@ -1,0 +1,8 @@
+name: 'Extract TruffleRuby, add bin/ to PATH and set RUBY_BIN'
+inputs:
+  archive:
+    description: 'basename of the archive'
+    required: true
+    default: 'truffleruby-jvm'
+runs:
+  using: "composite"
