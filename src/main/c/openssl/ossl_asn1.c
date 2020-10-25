@@ -1698,4 +1698,142 @@ Init_ossl_asn1(void)
      * Primitive values can never be encoded with indefinite length form, thus
      * it is not possible to set the _indefinite_length_ attribute for Primitive
      * and its sub-classes.
- 
+     *
+     * == Primitive sub-classes and their mapping to Ruby classes
+     * * OpenSSL::ASN1::EndOfContent    <=> _value_ is always +nil+
+     * * OpenSSL::ASN1::Boolean         <=> _value_ is +true+ or +false+
+     * * OpenSSL::ASN1::Integer         <=> _value_ is an OpenSSL::BN
+     * * OpenSSL::ASN1::BitString       <=> _value_ is a String
+     * * OpenSSL::ASN1::OctetString     <=> _value_ is a String
+     * * OpenSSL::ASN1::Null            <=> _value_ is always +nil+
+     * * OpenSSL::ASN1::Object          <=> _value_ is a String
+     * * OpenSSL::ASN1::Enumerated      <=> _value_ is an OpenSSL::BN
+     * * OpenSSL::ASN1::UTF8String      <=> _value_ is a String
+     * * OpenSSL::ASN1::NumericString   <=> _value_ is a String
+     * * OpenSSL::ASN1::PrintableString <=> _value_ is a String
+     * * OpenSSL::ASN1::T61String       <=> _value_ is a String
+     * * OpenSSL::ASN1::VideotexString  <=> _value_ is a String
+     * * OpenSSL::ASN1::IA5String       <=> _value_ is a String
+     * * OpenSSL::ASN1::UTCTime         <=> _value_ is a Time
+     * * OpenSSL::ASN1::GeneralizedTime <=> _value_ is a Time
+     * * OpenSSL::ASN1::GraphicString   <=> _value_ is a String
+     * * OpenSSL::ASN1::ISO64String     <=> _value_ is a String
+     * * OpenSSL::ASN1::GeneralString   <=> _value_ is a String
+     * * OpenSSL::ASN1::UniversalString <=> _value_ is a String
+     * * OpenSSL::ASN1::BMPString       <=> _value_ is a String
+     *
+     * == OpenSSL::ASN1::BitString
+     *
+     * === Additional attributes
+     * _unused_bits_: if the underlying BIT STRING's
+     * length is a multiple of 8 then _unused_bits_ is 0. Otherwise
+     * _unused_bits_ indicates the number of bits that are to be ignored in
+     * the final octet of the BitString's _value_.
+     *
+     * == OpenSSL::ASN1::ObjectId
+     *
+     * NOTE: While OpenSSL::ASN1::ObjectId.new will allocate a new ObjectId,
+     * it is not typically allocated this way, but rather that are received from
+     * parsed ASN1 encodings.
+     *
+     * === Additional attributes
+     * * _sn_: the short name as defined in <openssl/objects.h>.
+     * * _ln_: the long name as defined in <openssl/objects.h>.
+     * * _oid_: the object identifier as a String, e.g. "1.2.3.4.5"
+     * * _short_name_: alias for _sn_.
+     * * _long_name_: alias for _ln_.
+     *
+     * == Examples
+     * With the Exception of OpenSSL::ASN1::EndOfContent, each Primitive class
+     * constructor takes at least one parameter, the _value_.
+     *
+     * === Creating EndOfContent
+     *   eoc = OpenSSL::ASN1::EndOfContent.new
+     *
+     * === Creating any other Primitive
+     *   prim = <class>.new(value) # <class> being one of the sub-classes except EndOfContent
+     *   prim_zero_tagged_implicit = <class>.new(value, 0, :IMPLICIT)
+     *   prim_zero_tagged_explicit = <class>.new(value, 0, :EXPLICIT)
+     */
+    cASN1Primitive = rb_define_class_under(mASN1, "Primitive", cASN1Data);
+    /*
+     * May be used as a hint for encoding a value either implicitly or
+     * explicitly by setting it either to +:IMPLICIT+ or to +:EXPLICIT+.
+     * _tagging_ is not set when a ASN.1 structure is parsed using
+     * OpenSSL::ASN1.decode.
+     */
+    rb_attr(cASN1Primitive, rb_intern("tagging"), 1, 1, Qtrue);
+    rb_undef_method(cASN1Primitive, "indefinite_length=");
+    rb_undef_method(cASN1Primitive, "infinite_length=");
+    rb_define_method(cASN1Primitive, "initialize", ossl_asn1_initialize, -1);
+    rb_define_method(cASN1Primitive, "to_der", ossl_asn1prim_to_der, 0);
+
+    /* Document-class: OpenSSL::ASN1::Constructive
+     *
+     * The parent class for all constructed encodings. The _value_ attribute
+     * of a Constructive is always an Array. Attributes are the same as
+     * for ASN1Data, with the addition of _tagging_.
+     *
+     * == SET and SEQUENCE
+     *
+     * Most constructed encodings come in the form of a SET or a SEQUENCE.
+     * These encodings are represented by one of the two sub-classes of
+     * Constructive:
+     * * OpenSSL::ASN1::Set
+     * * OpenSSL::ASN1::Sequence
+     * Please note that tagged sequences and sets are still parsed as
+     * instances of ASN1Data. Find further details on tagged values
+     * there.
+     *
+     * === Example - constructing a SEQUENCE
+     *   int = OpenSSL::ASN1::Integer.new(1)
+     *   str = OpenSSL::ASN1::PrintableString.new('abc')
+     *   sequence = OpenSSL::ASN1::Sequence.new( [ int, str ] )
+     *
+     * === Example - constructing a SET
+     *   int = OpenSSL::ASN1::Integer.new(1)
+     *   str = OpenSSL::ASN1::PrintableString.new('abc')
+     *   set = OpenSSL::ASN1::Set.new( [ int, str ] )
+     */
+    cASN1Constructive = rb_define_class_under(mASN1,"Constructive", cASN1Data);
+    rb_include_module(cASN1Constructive, rb_mEnumerable);
+    /*
+     * May be used as a hint for encoding a value either implicitly or
+     * explicitly by setting it either to +:IMPLICIT+ or to +:EXPLICIT+.
+     * _tagging_ is not set when a ASN.1 structure is parsed using
+     * OpenSSL::ASN1.decode.
+     */
+    rb_attr(cASN1Constructive, rb_intern("tagging"), 1, 1, Qtrue);
+    rb_define_method(cASN1Constructive, "initialize", ossl_asn1_initialize, -1);
+    rb_define_method(cASN1Constructive, "to_der", ossl_asn1cons_to_der, 0);
+    rb_define_method(cASN1Constructive, "each", ossl_asn1cons_each, 0);
+
+#define OSSL_ASN1_DEFINE_CLASS(name, super) \
+do{\
+    cASN1##name = rb_define_class_under(mASN1, #name, cASN1##super);\
+    rb_define_module_function(mASN1, #name, ossl_asn1_##name, -1);\
+}while(0)
+
+    OSSL_ASN1_DEFINE_CLASS(Boolean, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(Integer, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(Enumerated, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(BitString, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(OctetString, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(UTF8String, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(NumericString, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(PrintableString, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(T61String, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(VideotexString, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(IA5String, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(GraphicString, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(ISO64String, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(GeneralString, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(UniversalString, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(BMPString, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(Null, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(ObjectId, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(UTCTime, Primitive);
+    OSSL_ASN1_DEFINE_CLASS(GeneralizedTime, Primitive);
+
+    OSSL_ASN1_DEFINE_CLASS(Sequence, Constructive);
+    OSSL_ASN1_DEFINE_CLASS(
