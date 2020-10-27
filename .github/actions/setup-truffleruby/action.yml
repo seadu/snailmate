@@ -6,3 +6,15 @@ inputs:
     default: 'truffleruby-jvm'
 runs:
   using: "composite"
+  steps:
+    - name: Extract the archive to truffleruby-build
+      run: tar xf ${{ inputs.archive }}.tar && mv ${{ inputs.archive }} truffleruby-build
+      shell: bash
+
+    - name: Add TruffleRuby bin/ to PATH
+      run: echo "$PWD/truffleruby-build/bin" >> $GITHUB_PATH
+      shell: bash
+
+    - name: Set RUBY_BIN for jt
+      run: echo "RUBY_BIN=$PWD/truffleruby-build/bin/truffleruby" >> $GITHUB_ENV
+      shell: bash
