@@ -424,4 +424,69 @@ VALUE rb_mutex_trylock(VALUE mutex);
  * @param[out]  mutex            The mutex to lock.
  * @exception   rb_eThreadError  Recursive deadlock situation.
  * @return      The passed mutex.
- * @post        The mutex is owned by the current thre
+ * @post        The mutex is owned by the current thread.
+ */
+VALUE rb_mutex_lock(VALUE mutex);
+
+/**
+ * Releases the mutex.
+ *
+ * @param[out]  mutex            The mutex to unlock.
+ * @exception   rb_eThreadError  The mutex is not owned by the current thread.
+ * @return      The passed mutex.
+ * @post        Upon successful return  the passed mutex is no  longer owned by
+ *              the current thread.
+ */
+VALUE rb_mutex_unlock(VALUE mutex);
+
+/**
+ * Releases  the lock  held in  the mutex  and waits  for the  period of  time;
+ * reacquires the lock on wakeup.
+ *
+ * @pre         The lock has to be owned by the current thread beforehand.
+ * @param[out]  self             The target mutex.
+ * @param[in]   timeout          Duration, in seconds, in ::rb_cNumeric.
+ * @exception   rb_eArgError     `timeout` is negative.
+ * @exception   rb_eRangeError   `timeout` is out of range of `time_t`.
+ * @exception   rb_eThreadError  The mutex is not owned by the current thread.
+ * @return      Number of seconds it actually slept.
+ * @warning     It is a  failure not to check the return  value.  This function
+ *              can return spuriously for various reasons.  Maybe other threads
+ *              can  rb_thread_wakeup().   Maybe  an  end user  can  press  the
+ *              Control and C  key from the interactive console.   On the other
+ *              hand it  can also  take longer than  the specified.   The mutex
+ *              could be locked by someone else.  It waits then.
+ * @post        Upon successful return the passed mutex is owned by the current
+ *              thread.
+ *
+ * @internal
+ *
+ * This  function is  called from  `ConditionVariable#wait`.   So it  is not  a
+ * deprecated feature.   However @shyouhei  have never  seen any  similar mutex
+ * primitive available in any other languages than Ruby.
+ *
+ * EDIT: In 2021,  @shyouhei asked @ko1 in person about  this API.  He answered
+ * that it is his invention.  The  motivation behind its design is to eliminate
+ * needs of condition variables as  primitives.  Unlike other languages, Ruby's
+ * `ConditionVariable` class was written in pure-Ruby initially.  We don't have
+ * to implement  machine-native condition  variables in  assembly each  time we
+ * port Ruby to a new architecture.  This function made it possible.  "I felt I
+ * was a genius when this idea came to me", said @ko1.
+ *
+ * `rb_cConditionVariable` is now written in C for speed, though.
+ */
+VALUE rb_mutex_sleep(VALUE self, VALUE timeout);
+
+/**
+ * Obtains the  lock, runs the passed  function, and releases the  lock when it
+ * completes.
+ *
+ * @param[out]     mutex  The mutex to lock.
+ * @param[in]      func   What to do during the mutex is locked.
+ * @param[in,out]  arg    Passed as-is to `func`.
+ */
+VALUE rb_mutex_synchronize(VALUE mutex, VALUE (*func)(VALUE arg), VALUE arg);
+
+RBIMPL_SYMBOL_EXPORT_END()
+
+#endif /* RBIMPL_INTERN_THREAD_H */
