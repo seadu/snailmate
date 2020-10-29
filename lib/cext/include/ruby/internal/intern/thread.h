@@ -243,4 +243,185 @@ VALUE rb_thread_local_aref(VALUE thread, ID key);
  * @exception  rb_eFrozenError  `thread` is frozen.
  * @return     The passed `val` as-is.
  * @post       Fiber local storage `key` has value of `val`.
- * @no
+ * @note       There in fact are "true"  thread local storage, but Ruby doesn't
+ *             provide any interface of them to you, C programmers.
+ */
+VALUE rb_thread_local_aset(VALUE thread, ID key, VALUE val);
+
+/**
+ * A `pthread_atfork(3posix)`-like  API.  Ruby  expects its child  processes to
+ * call this function at the very beginning of their processes.  If you plan to
+ * fork a process don't forget to call it.
+ */
+void rb_thread_atfork(void);
+
+/**
+ * :FIXME: situation  of this function  is unclear.   It seems nobody  uses it.
+ * Maybe a good idea to KonMari.
+ */
+void rb_thread_atfork_before_exec(void);
+
+/**
+ * "Recursion" API entry  point.  This basically calls the  given function with
+ * the given arguments, but additionally with  recursion flag.  The flag is set
+ * to 1  if the  execution have  already experienced  the passed  `g` parameter
+ * before.
+ *
+ * @param[in]      f  The function that possibly recurs.
+ * @param[in,out]  g  Passed as-is to `f`.
+ * @param[in,out]  h  Passed as-is to `f`.
+ * @return         The return value of f.
+ */
+VALUE rb_exec_recursive(VALUE (*f)(VALUE g, VALUE h, int r), VALUE g, VALUE h);
+
+/**
+ * Identical to rb_exec_recursive(), except it  checks for the recursion on the
+ * ordered pair of `{ g, p }` instead of just `g`.
+ *
+ * @param[in]      f  The function that possibly recurs.
+ * @param[in,out]  g  Passed as-is to `f`.
+ * @param[in]      p  Paired object for recursion detection.
+ * @param[in,out]  h  Passed as-is to `f`.
+ */
+VALUE rb_exec_recursive_paired(VALUE (*f)(VALUE g, VALUE h, int r), VALUE g, VALUE p, VALUE h);
+
+/**
+ * Identical  to  rb_exec_recursive(),  except   it  calls  `f`  for  outermost
+ * recursion only.  Inner recursions yield calls to rb_throw_obj().
+ *
+ * @param[in]      f  The function that possibly recurs.
+ * @param[in,out]  g  Passed as-is to `f`.
+ * @param[in,out]  h  Passed as-is to `f`.
+ * @return         The return value of f.
+ *
+ * @internal
+ *
+ * It seems  nobody uses the "it  calls rb_throw_obj()" part of  this function.
+ * @shyouhei doesn't understand the needs.
+ */
+VALUE rb_exec_recursive_outer(VALUE (*f)(VALUE g, VALUE h, int r), VALUE g, VALUE h);
+
+/**
+ * Identical to  rb_exec_recursive_outer(), except it checks  for the recursion
+ * on the ordered pair of `{ g, p }`  instead of just `g`.  It can also be seen
+ * as a  routine identical to  rb_exec_recursive_paired(), except it  calls `f`
+ * for   outermost   recursion  only.    Inner   recursions   yield  calls   to
+ * rb_throw_obj().
+ *
+ * @param[in]      f  The function that possibly recurs.
+ * @param[in,out]  g  Passed as-is to `f`.
+ * @param[in]      p  Paired object for recursion detection.
+ * @param[in,out]  h  Passed as-is to `f`.
+ *
+ * @internal
+ *
+ * It seems  nobody uses the "it  calls rb_throw_obj()" part of  this function.
+ * @shyouhei doesn't understand the needs.
+ */
+VALUE rb_exec_recursive_paired_outer(VALUE (*f)(VALUE g, VALUE h, int r), VALUE g, VALUE p, VALUE h);
+
+/**
+ * This is  the type of UBFs.   An UBF is  a function that unblocks  a blocking
+ * region.  For instance when a thread is blocking due to `pselect(3posix)`, it
+ * is highly expected that `pthread_kill(3posix)` can interrupt the system call
+ * and  the  thread  could  revive.   Or  when a  thread  is  blocking  due  to
+ * `waitpid(3posix)`, it  is highly  expected that  killing the  waited process
+ * should suffice.  An UBF is a function that does such things.  Designing your
+ * own UBF  needs deep understanding  of why  your blocking region  blocks, how
+ * threads work in ruby, and a matter of luck.  It often is the case you simply
+ * cannot cancel something that had already begun.
+ *
+ * @see rb_thread_call_without_gvl()
+ */
+typedef void rb_unblock_function_t(void *);
+
+/**
+ * @private
+ *
+ * This is an implementation detail.  Must be a mistake to be here.
+ *
+ * @internal
+ *
+ * Why is  this function type different  from what rb_thread_call_without_gvl()
+ * takes?
+ */
+typedef VALUE rb_blocking_function_t(void *);
+
+/**
+ * Checks for  interrupts.  In ruby,  signals are  masked by default.   You can
+ * call this function at  will to check if there are  pending signals.  In case
+ * there are, they would be handled in this function.
+ *
+ * If your  extension library has a  function that takes a  long time, consider
+ * calling it periodically.
+ *
+ * @note  It might switch to another thread.
+ */
+void rb_thread_check_ints(void);
+
+/**
+ * Checks if the  thread's execution was recently interrupted.   If called from
+ * that thread, this function can be used to detect spurious wake-ups.
+ *
+ * @param[in]  thval      Thread in question.
+ * @retval     0          The thread was not interrupted.
+ * @retval     otherwise  The thread was interrupted recently.
+ *
+ * @internal
+ *
+ * Above description is not a lie.  But  actually the return value is an opaque
+ * trap vector.  If you know which bit means which, you can know what happened.
+ */
+int rb_thread_interrupted(VALUE thval);
+
+/**
+ * A special  UBF for blocking IO  operations.  You need deep  understanding of
+ * what this  actually do before using.   Basically you should not  use it from
+ * extension libraries.  It is too easy to mess up.
+ */
+#define RUBY_UBF_IO RBIMPL_CAST((rb_unblock_function_t *)-1)
+
+/**
+ * A special UBF for blocking  process operations.  You need deep understanding
+ * of what this actually do before using.  Basically you should not use it from
+ * extension libraries.  It is too easy to mess up.
+ */
+#define RUBY_UBF_PROCESS RBIMPL_CAST((rb_unblock_function_t *)-1)
+
+/* thread_sync.c */
+
+/**
+ * Creates a mutex.
+ *
+ * @return An allocated instance of rb_cMutex.
+ */
+VALUE rb_mutex_new(void);
+
+/**
+ * Queries if there are any threads that holds the lock.
+ *
+ * @param[in]  mutex  The mutex in question.
+ * @retval     RUBY_Qtrue  The mutex is locked by someone.
+ * @retval     RUBY_Qfalse The mutex is not locked by anyone.
+ */
+VALUE rb_mutex_locked_p(VALUE mutex);
+
+/**
+ * Attempts to lock the mutex, without  waiting for other threads to unlock it.
+ * Failure in locking the mutex can be detected by the return value.
+ *
+ * @param[out]  mutex        The mutex to lock.
+ * @retval      RUBY_Qtrue   Successfully locked by the current thread.
+ * @retval      RUBY_Qfalse  Otherwise.
+ * @note        This  function also  returns  ::RUBY_Qfalse when  the mutex  is
+ *              already owned by the calling thread itself.
+ */
+VALUE rb_mutex_trylock(VALUE mutex);
+
+/**
+ * Attempts to lock the mutex.  It waits until the mutex gets available.
+ *
+ * @param[out]  mutex            The mutex to lock.
+ * @exception   rb_eThreadError  Recursive deadlock situation.
+ * @return      The passed mutex.
+ * @post        The mutex is owned by the current thre
