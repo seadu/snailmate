@@ -292,4 +292,251 @@ module Gem
   ##
   # The mode needed to read a file as straight binary.
 
-  def s
+  def self.binary_mode
+    "rb"
+  end
+
+  ##
+  # The path where gem executables are to be installed.
+
+  def self.bindir(install_dir=Gem.dir)
+    return File.join install_dir, "bin" unless
+      install_dir.to_s == Gem.default_dir.to_s
+    Gem.default_bindir
+  end
+
+  ##
+  # The path were rubygems plugins are to be installed.
+
+  def self.plugindir(install_dir=Gem.dir)
+    File.join install_dir, "plugins"
+  end
+
+  ##
+  # Reset the +dir+ and +path+ values.  The next time +dir+ or +path+
+  # is requested, the values will be calculated from scratch.  This is
+  # mainly used by the unit tests to provide test isolation.
+
+  def self.clear_paths
+    @paths         = nil
+    @user_home     = nil
+    Gem::Specification.reset
+    Gem::Security.reset if defined?(Gem::Security)
+  end
+
+  ##
+  # The standard configuration object for gems.
+
+  def self.configuration
+    @configuration ||= Gem::ConfigFile.new []
+  end
+
+  ##
+  # Use the given configuration object (which implements the ConfigFile
+  # protocol) as the standard configuration object.
+
+  def self.configuration=(config)
+    @configuration = config
+  end
+
+  ##
+  # The path to the data directory specified by the gem name.  If the
+  # package is not available as a gem, return nil.
+
+  def self.datadir(gem_name)
+    spec = @loaded_specs[gem_name]
+    return nil if spec.nil?
+    spec.datadir
+  end
+
+  ##
+  # A Zlib::Deflate.deflate wrapper
+
+  def self.deflate(data)
+    require "zlib"
+    Zlib::Deflate.deflate data
+  end
+
+  # Retrieve the PathSupport object that RubyGems uses to
+  # lookup files.
+
+  def self.paths
+    @paths ||= Gem::PathSupport.new(ENV)
+  end
+
+  # Initialize the filesystem paths to use from +env+.
+  # +env+ is a hash-like object (typically ENV) that
+  # is queried for 'GEM_HOME', 'GEM_PATH', and 'GEM_SPEC_CACHE'
+  # Keys for the +env+ hash should be Strings, and values of the hash should
+  # be Strings or +nil+.
+
+  def self.paths=(env)
+    clear_paths
+    target = {}
+    env.each_pair do |k,v|
+      case k
+      when "GEM_HOME", "GEM_PATH", "GEM_SPEC_CACHE"
+        case v
+        when nil, String
+          target[k] = v
+        when Array
+          unless Gem::Deprecate.skip
+            warn <<-EOWARN
+Array values in the parameter to `Gem.paths=` are deprecated.
+Please use a String or nil.
+An Array (#{env.inspect}) was passed in from #{caller[3]}
+            EOWARN
+          end
+          target[k] = v.join File::PATH_SEPARATOR
+        end
+      else
+        target[k] = v
+      end
+    end
+    @paths = Gem::PathSupport.new ENV.to_hash.merge(target)
+    Gem::Specification.dirs = @paths.path
+  end
+
+  ##
+  # The path where gems are to be installed.
+
+  def self.dir
+    paths.home
+  end
+
+  def self.path
+    paths.path
+  end
+
+  def self.spec_cache_dir
+    paths.spec_cache_dir
+  end
+
+  ##
+  # Quietly ensure the Gem directory +dir+ contains all the proper
+  # subdirectories.  If we can't create a directory due to a permission
+  # problem, then we will silently continue.
+  #
+  # If +mode+ is given, missing directories are created with this mode.
+  #
+  # World-writable directories will never be created.
+
+  def self.ensure_gem_subdirectories(dir = Gem.dir, mode = nil)
+    ensure_subdirectories(dir, mode, REPOSITORY_SUBDIRECTORIES)
+  end
+
+  ##
+  # Quietly ensure the Gem directory +dir+ contains all the proper
+  # subdirectories for handling default gems.  If we can't create a
+  # directory due to a permission problem, then we will silently continue.
+  #
+  # If +mode+ is given, missing directories are created with this mode.
+  #
+  # World-writable directories will never be created.
+
+  def self.ensure_default_gem_subdirectories(dir = Gem.dir, mode = nil)
+    ensure_subdirectories(dir, mode, REPOSITORY_DEFAULT_GEM_SUBDIRECTORIES)
+  end
+
+  def self.ensure_subdirectories(dir, mode, subdirs) # :nodoc:
+    old_umask = File.umask
+    File.umask old_umask | 002
+
+    options = {}
+
+    options[:mode] = mode if mode
+
+    subdirs.each do |name|
+      subdir = File.join dir, name
+      next if File.exist? subdir
+
+      require "fileutils"
+
+      begin
+        FileUtils.mkdir_p subdir, **options
+      rescue SystemCallError
+      end
+    end
+  ensure
+    File.umask old_umask
+  end
+
+  ##
+  # The extension API version of ruby.  This includes the static vs non-static
+  # distinction as extensions cannot be shared between the two.
+
+  def self.extension_api_version # :nodoc:
+    if "no" == RbConfig::CONFIG["ENABLE_SHARED"]
+      "#{ruby_api_version}-static"
+    else
+      ruby_api_version
+    end
+  end
+
+  ##
+  # Returns a list of paths matching +glob+ that can be used by a gem to pick
+  # up features from other gems.  For example:
+  #
+  #   Gem.find_files('rdoc/discover').each do |path| load path end
+  #
+  # if +check_load_path+ is true (the default), then find_files also searches
+  # $LOAD_PATH for files as well as gems.
+  #
+  # Note that find_files will return all files even if they are from different
+  # versions of the same gem.  See also find_latest_files
+
+  def self.find_files(glob, check_load_path=true)
+    files = []
+
+    files = find_files_from_load_path glob if check_load_path
+
+    gem_specifications = @gemdeps ? Gem.loaded_specs.values : Gem::Specification.stubs
+
+    files.concat gem_specifications.map {|spec|
+      spec.matches_for_glob("#{glob}#{Gem.suffix_pattern}")
+    }.flatten
+
+    # $LOAD_PATH might contain duplicate entries or reference
+    # the spec dirs directly, so we prune.
+    files.uniq! if check_load_path
+
+    return files
+  end
+
+  def self.find_files_from_load_path(glob) # :nodoc:
+    glob_with_suffixes = "#{glob}#{Gem.suffix_pattern}"
+    $LOAD_PATH.map do |load_path|
+      Gem::Util.glob_files_in_dir(glob_with_suffixes, load_path)
+    end.flatten.select {|file| File.file? file.tap(&Gem::UNTAINT) }
+  end
+
+  ##
+  # Returns a list of paths matching +glob+ from the latest gems that can be
+  # used by a gem to pick up features from other gems.  For example:
+  #
+  #   Gem.find_latest_files('rdoc/discover').each do |path| load path end
+  #
+  # if +check_load_path+ is true (the default), then find_latest_files also
+  # searches $LOAD_PATH for files as well as gems.
+  #
+  # Unlike find_files, find_latest_files will return only files from the
+  # latest version of a gem.
+
+  def self.find_latest_files(glob, check_load_path=true)
+    files = []
+
+    files = find_files_from_load_path glob if check_load_path
+
+    files.concat Gem::Specification.latest_specs(true).map {|spec|
+      spec.matches_for_glob("#{glob}#{Gem.suffix_pattern}")
+    }.flatten
+
+    # $LOAD_PATH might contain duplicate entries or reference
+    # the spec dirs directly, so we prune.
+    files.uniq! if check_load_path
+
+    return files
+  end
+
+  ##
+  # Top level install helpe
