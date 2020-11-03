@@ -815,4 +815,263 @@ An Array (#{env.inspect}) was passed in from #{caller[3]}
   ##
   # Returns a String containing the API compatibility version of Ruby
 
-  def self.rub
+  def self.ruby_api_version
+    @ruby_api_version ||= RbConfig::CONFIG["ruby_version"].dup
+  end
+
+  def self.env_requirement(gem_name)
+    @env_requirements_by_name ||= {}
+    @env_requirements_by_name[gem_name] ||= begin
+      req = ENV["GEM_REQUIREMENT_#{gem_name.upcase}"] || ">= 0".freeze
+      Gem::Requirement.create(req)
+    end
+  end
+  post_reset { @env_requirements_by_name = {} }
+
+  ##
+  # Returns the latest release-version specification for the gem +name+.
+
+  def self.latest_spec_for(name)
+    dependency   = Gem::Dependency.new name
+    fetcher      = Gem::SpecFetcher.fetcher
+    spec_tuples, = fetcher.spec_for_dependency dependency
+
+    spec, = spec_tuples.last
+
+    spec
+  end
+
+  ##
+  # Returns the latest release version of RubyGems.
+
+  def self.latest_rubygems_version
+    latest_version_for("rubygems-update") ||
+      raise("Can't find 'rubygems-update' in any repo. Check `gem source list`.")
+  end
+
+  ##
+  # Returns the version of the latest release-version of gem +name+
+
+  def self.latest_version_for(name)
+    spec = latest_spec_for name
+    spec && spec.version
+  end
+
+  ##
+  # A Gem::Version for the currently running Ruby.
+
+  def self.ruby_version
+    return @ruby_version if defined? @ruby_version
+    version = RUBY_VERSION.dup
+
+    unless defined?(RUBY_PATCHLEVEL) && RUBY_PATCHLEVEL != -1
+      if RUBY_ENGINE == "ruby"
+        desc = RUBY_DESCRIPTION[/\Aruby #{Regexp.quote(RUBY_VERSION)}([^ ]+) /, 1]
+      else
+        desc = RUBY_DESCRIPTION[/\A#{RUBY_ENGINE} #{Regexp.quote(RUBY_ENGINE_VERSION)} \(#{RUBY_VERSION}([^ ]+)\) /, 1]
+      end
+      version << ".#{desc}" if desc
+    end
+
+    @ruby_version = Gem::Version.new version
+  end
+
+  ##
+  # A Gem::Version for the currently running RubyGems
+
+  def self.rubygems_version
+    return @rubygems_version if defined? @rubygems_version
+    @rubygems_version = Gem::Version.new Gem::VERSION
+  end
+
+  ##
+  # Returns an Array of sources to fetch remote gems from. Uses
+  # default_sources if the sources list is empty.
+
+  def self.sources
+    source_list = configuration.sources || default_sources
+    @sources ||= Gem::SourceList.from(source_list)
+  end
+
+  ##
+  # Need to be able to set the sources without calling
+  # Gem.sources.replace since that would cause an infinite loop.
+  #
+  # DOC: This comment is not documentation about the method itself, it's
+  # more of a code comment about the implementation.
+
+  def self.sources=(new_sources)
+    if !new_sources
+      @sources = nil
+    else
+      @sources = Gem::SourceList.from(new_sources)
+    end
+  end
+
+  ##
+  # Glob pattern for require-able path suffixes.
+
+  def self.suffix_pattern
+    @suffix_pattern ||= "{#{suffixes.join(',')}}"
+  end
+
+  ##
+  # Regexp for require-able path suffixes.
+
+  def self.suffix_regexp
+    @suffix_regexp ||= /#{Regexp.union(suffixes)}\z/
+  end
+
+  ##
+  # Glob pattern for require-able plugin suffixes.
+
+  def self.plugin_suffix_pattern
+    @plugin_suffix_pattern ||= "_plugin#{suffix_pattern}"
+  end
+
+  ##
+  # Regexp for require-able plugin suffixes.
+
+  def self.plugin_suffix_regexp
+    @plugin_suffix_regexp ||= /_plugin#{suffix_regexp}\z/
+  end
+
+  ##
+  # Suffixes for require-able paths.
+
+  def self.suffixes
+    @suffixes ||= ["",
+                   ".rb",
+                   *%w[DLEXT DLEXT2].map do |key|
+                     val = RbConfig::CONFIG[key]
+                     next unless val && !val.empty?
+                     ".#{val}"
+                   end,
+                  ].compact.uniq
+  end
+
+  ##
+  # Prints the amount of time the supplied block takes to run using the debug
+  # UI output.
+
+  def self.time(msg, width = 0, display = Gem.configuration.verbose)
+    now = Time.now
+
+    value = yield
+
+    elapsed = Time.now - now
+
+    ui.say "%2$*1$s: %3$3.3fs" % [-width, msg, elapsed] if display
+
+    value
+  end
+
+  ##
+  # Lazily loads DefaultUserInteraction and returns the default UI.
+
+  def self.ui
+    require_relative "rubygems/user_interaction"
+
+    Gem::DefaultUserInteraction.ui
+  end
+
+  ##
+  # Use the +home+ and +paths+ values for Gem.dir and Gem.path.  Used mainly
+  # by the unit tests to provide environment isolation.
+
+  def self.use_paths(home, *paths)
+    paths.flatten!
+    paths.compact!
+    hash = { "GEM_HOME" => home, "GEM_PATH" => paths.empty? ? home : paths.join(File::PATH_SEPARATOR) }
+    hash.delete_if {|_, v| v.nil? }
+    self.paths = hash
+  end
+
+  ##
+  # Is this a windows platform?
+
+  def self.win_platform?
+    if @@win_platform.nil?
+      ruby_platform = RbConfig::CONFIG["host_os"]
+      @@win_platform = !!WIN_PATTERNS.find {|r| ruby_platform =~ r }
+    end
+
+    @@win_platform
+  end
+
+  ##
+  # Is this a java platform?
+
+  def self.java_platform?
+    RUBY_PLATFORM == "java"
+  end
+
+  ##
+  # Is this platform Solaris?
+
+  def self.solaris_platform?
+    RUBY_PLATFORM =~ /solaris/
+  end
+
+  ##
+  # Load +plugins+ as Ruby files
+
+  def self.load_plugin_files(plugins) # :nodoc:
+    plugins.each do |plugin|
+      # Skip older versions of the GemCutter plugin: Its commands are in
+      # RubyGems proper now.
+
+      next if plugin =~ /gemcutter-0\.[0-3]/
+
+      begin
+        load plugin
+      rescue ::Exception => e
+        details = "#{plugin.inspect}: #{e.message} (#{e.class})"
+        warn "Error loading RubyGems plugin #{details}"
+      end
+    end
+  end
+
+  ##
+  # Find rubygems plugin files in the standard location and load them
+
+  def self.load_plugins
+    Gem.path.each do |gem_path|
+      load_plugin_files Gem::Util.glob_files_in_dir("*#{Gem.plugin_suffix_pattern}", plugindir(gem_path))
+    end
+  end
+
+  ##
+  # Find all 'rubygems_plugin' files in $LOAD_PATH and load them
+
+  def self.load_env_plugins
+    load_plugin_files find_files_from_load_path("rubygems_plugin")
+  end
+
+  ##
+  # Looks for a gem dependency file at +path+ and activates the gems in the
+  # file if found.  If the file is not found an ArgumentError is raised.
+  #
+  # If +path+ is not given the RUBYGEMS_GEMDEPS environment variable is used,
+  # but if no file is found no exception is raised.
+  #
+  # If '-' is given for +path+ RubyGems searches up from the current working
+  # directory for gem dependency files (gem.deps.rb, Gemfile, Isolate) and
+  # activates the gems in the first one found.
+  #
+  # You can run this automatically when rubygems starts.  To enable, set
+  # the <code>RUBYGEMS_GEMDEPS</code> environment variable to either the path
+  # of your gem dependencies file or "-" to auto-discover in parent
+  # directories.
+  #
+  # NOTE: Enabling automatic discovery on multiuser systems can lead to
+  # execution of arbitrary code when used from directories outside your
+  # control.
+
+  def self.use_gemdeps(path = nil)
+    raise_exception = path
+
+    path ||= ENV["RUBYGEMS_GEMDEPS"]
+    return unless path
+
+    path = path
