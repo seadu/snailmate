@@ -539,4 +539,280 @@ An Array (#{env.inspect}) was passed in from #{caller[3]}
   end
 
   ##
-  # Top level install helpe
+  # Top level install helper method. Allows you to install gems interactively:
+  #
+  #   % irb
+  #   >> Gem.install "minitest"
+  #   Fetching: minitest-5.14.0.gem (100%)
+  #   => [#<Gem::Specification:0x1013b4528 @name="minitest", ...>]
+
+  def self.install(name, version = Gem::Requirement.default, *options)
+    require_relative "rubygems/dependency_installer"
+    inst = Gem::DependencyInstaller.new(*options)
+    inst.install name, version
+    inst.installed_gems
+  end
+
+  ##
+  # Get the default RubyGems API host. This is normally
+  # <tt>https://rubygems.org</tt>.
+
+  def self.host
+    @host ||= Gem::DEFAULT_HOST
+  end
+
+  ## Set the default RubyGems API host.
+
+  def self.host=(host)
+    @host = host
+  end
+
+  ##
+  # The index to insert activated gem paths into the $LOAD_PATH. The activated
+  # gem's paths are inserted before site lib directory by default.
+
+  def self.load_path_insert_index
+    $LOAD_PATH.each_with_index do |path, i|
+      return i if path.instance_variable_defined?(:@gem_prelude_index)
+    end
+
+    index = $LOAD_PATH.index RbConfig::CONFIG["sitelibdir"]
+
+    index || 0
+  end
+
+  ##
+  # The number of paths in the +$LOAD_PATH+ from activated gems. Used to
+  # prioritize +-I+ and +ENV['RUBYLIB']+ entries during +require+.
+
+  def self.activated_gem_paths
+    @activated_gem_paths ||= 0
+  end
+
+  ##
+  # Add a list of paths to the $LOAD_PATH at the proper place.
+
+  def self.add_to_load_path(*paths)
+    @activated_gem_paths = activated_gem_paths + paths.size
+
+    # gem directories must come after -I and ENV['RUBYLIB']
+    $LOAD_PATH.insert(Gem.load_path_insert_index, *paths)
+  end
+
+  @yaml_loaded = false
+
+  ##
+  # Loads YAML, preferring Psych
+
+  def self.load_yaml
+    return if @yaml_loaded
+
+    require "psych"
+    require_relative "rubygems/psych_tree"
+
+    require_relative "rubygems/safe_yaml"
+
+    @yaml_loaded = true
+  end
+
+  ##
+  # The file name and line number of the caller of the caller of this method.
+  #
+  # +depth+ is how many layers up the call stack it should go.
+  #
+  # e.g.,
+  #
+  # def a; Gem.location_of_caller; end
+  # a #=> ["x.rb", 2]  # (it'll vary depending on file name and line number)
+  #
+  # def b; c; end
+  # def c; Gem.location_of_caller(2); end
+  # b #=> ["x.rb", 6]  # (it'll vary depending on file name and line number)
+
+  def self.location_of_caller(depth = 1)
+    caller[depth] =~ /(.*?):(\d+).*?$/i
+    file = $1
+    lineno = $2.to_i
+
+    [file, lineno]
+  end
+
+  ##
+  # The version of the Marshal format for your Ruby.
+
+  def self.marshal_version
+    "#{Marshal::MAJOR_VERSION}.#{Marshal::MINOR_VERSION}"
+  end
+
+  ##
+  # Set array of platforms this RubyGems supports (primarily for testing).
+
+  def self.platforms=(platforms)
+    @platforms = platforms
+  end
+
+  ##
+  # Array of platforms this RubyGems supports.
+
+  def self.platforms
+    @platforms ||= []
+    if @platforms.empty?
+      @platforms = [Gem::Platform::RUBY, Gem::Platform.local]
+    end
+    @platforms
+  end
+
+  ##
+  # Adds a post-build hook that will be passed an Gem::Installer instance
+  # when Gem::Installer#install is called.  The hook is called after the gem
+  # has been extracted and extensions have been built but before the
+  # executables or gemspec has been written.  If the hook returns +false+ then
+  # the gem's files will be removed and the install will be aborted.
+
+  def self.post_build(&hook)
+    @post_build_hooks << hook
+  end
+
+  ##
+  # Adds a post-install hook that will be passed an Gem::Installer instance
+  # when Gem::Installer#install is called
+
+  def self.post_install(&hook)
+    @post_install_hooks << hook
+  end
+
+  ##
+  # Adds a post-installs hook that will be passed a Gem::DependencyInstaller
+  # and a list of installed specifications when
+  # Gem::DependencyInstaller#install is complete
+
+  def self.done_installing(&hook)
+    @done_installing_hooks << hook
+  end
+
+  ##
+  # Adds a hook that will get run after Gem::Specification.reset is
+  # run.
+
+  def self.post_reset(&hook)
+    @post_reset_hooks << hook
+  end
+
+  ##
+  # Adds a post-uninstall hook that will be passed a Gem::Uninstaller instance
+  # and the spec that was uninstalled when Gem::Uninstaller#uninstall is
+  # called
+
+  def self.post_uninstall(&hook)
+    @post_uninstall_hooks << hook
+  end
+
+  ##
+  # Adds a pre-install hook that will be passed an Gem::Installer instance
+  # when Gem::Installer#install is called.  If the hook returns +false+ then
+  # the install will be aborted.
+
+  def self.pre_install(&hook)
+    @pre_install_hooks << hook
+  end
+
+  ##
+  # Adds a hook that will get run before Gem::Specification.reset is
+  # run.
+
+  def self.pre_reset(&hook)
+    @pre_reset_hooks << hook
+  end
+
+  ##
+  # Adds a pre-uninstall hook that will be passed an Gem::Uninstaller instance
+  # and the spec that will be uninstalled when Gem::Uninstaller#uninstall is
+  # called
+
+  def self.pre_uninstall(&hook)
+    @pre_uninstall_hooks << hook
+  end
+
+  ##
+  # The directory prefix this RubyGems was installed at. If your
+  # prefix is in a standard location (ie, rubygems is installed where
+  # you'd expect it to be), then prefix returns nil.
+
+  def self.prefix
+    prefix = File.dirname RUBYGEMS_DIR
+
+    if prefix != File.expand_path(RbConfig::CONFIG["sitelibdir"]) &&
+       prefix != File.expand_path(RbConfig::CONFIG["libdir"]) &&
+       "lib" == File.basename(RUBYGEMS_DIR)
+      prefix
+    end
+  end
+
+  ##
+  # Refresh available gems from disk.
+
+  def self.refresh
+    Gem::Specification.reset
+  end
+
+  ##
+  # Safely read a file in binary mode on all platforms.
+
+  def self.read_binary(path)
+    open_file(path, "rb+") do |io|
+      io.read
+    end
+  rescue Errno::EACCES, Errno::EROFS
+    open_file(path, "rb") do |io|
+      io.read
+    end
+  end
+
+  ##
+  # Safely write a file in binary mode on all platforms.
+  def self.write_binary(path, data)
+    open_file(path, "wb") do |io|
+      io.write data
+    end
+  end
+
+  ##
+  # Open a file with given flags, and on Windows protect access with flock
+
+  def self.open_file(path, flags, &block)
+    File.open(path, flags) do |io|
+      if !java_platform? && win_platform?
+        begin
+          io.flock(File::LOCK_EX)
+        rescue Errno::ENOSYS, Errno::ENOTSUP
+        end
+      end
+      yield io
+    end
+  rescue Errno::ENOLCK # NFS
+    if Thread.main != Thread.current
+      raise
+    else
+      File.open(path, flags) do |io|
+        yield io
+      end
+    end
+  end
+
+  ##
+  # The path to the running Ruby interpreter.
+
+  def self.ruby
+    if @ruby.nil?
+      @ruby = RbConfig.ruby
+
+      @ruby = "\"#{@ruby}\"" if @ruby =~ /\s/
+    end
+
+    @ruby
+  end
+
+  ##
+  # Returns a String containing the API compatibility version of Ruby
+
+  def self.rub
