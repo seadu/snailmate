@@ -1074,4 +1074,225 @@ An Array (#{env.inspect}) was passed in from #{caller[3]}
     path ||= ENV["RUBYGEMS_GEMDEPS"]
     return unless path
 
-    path = path
+    path = path.dup
+
+    if path == "-"
+      Gem::Util.traverse_parents Dir.pwd do |directory|
+        dep_file = GEM_DEP_FILES.find {|f| File.file?(f) }
+
+        next unless dep_file
+
+        path = File.join directory, dep_file
+        break
+      end
+    end
+
+    path.tap(&Gem::UNTAINT)
+
+    unless File.file? path
+      return unless raise_exception
+
+      raise ArgumentError, "Unable to find gem dependencies file at #{path}"
+    end
+
+    ENV["BUNDLE_GEMFILE"] ||= File.expand_path(path)
+    require_relative "rubygems/user_interaction"
+    require "bundler"
+    begin
+      Gem::DefaultUserInteraction.use_ui(ui) do
+        begin
+          Bundler.ui.silence do
+            @gemdeps = Bundler.setup
+          end
+        ensure
+          Gem::DefaultUserInteraction.ui.close
+        end
+      end
+    rescue Bundler::BundlerError => e
+      warn e.message
+      warn "You may need to `bundle install` to install missing gems"
+      warn ""
+    end
+  end
+
+  ##
+  # If the SOURCE_DATE_EPOCH environment variable is set, returns it's value.
+  # Otherwise, returns the time that +Gem.source_date_epoch_string+ was
+  # first called in the same format as SOURCE_DATE_EPOCH.
+  #
+  # NOTE(@duckinator): The implementation is a tad weird because we want to:
+  #   1. Make builds reproducible by default, by having this function always
+  #      return the same result during a given run.
+  #   2. Allow changing ENV['SOURCE_DATE_EPOCH'] at runtime, since multiple
+  #      tests that set this variable will be run in a single process.
+  #
+  # If you simplify this function and a lot of tests fail, that is likely
+  # due to #2 above.
+  #
+  # Details on SOURCE_DATE_EPOCH:
+  # https://reproducible-builds.org/specs/source-date-epoch/
+
+  def self.source_date_epoch_string
+    # The value used if $SOURCE_DATE_EPOCH is not set.
+    @default_source_date_epoch ||= Time.now.to_i.to_s
+
+    specified_epoch = ENV["SOURCE_DATE_EPOCH"]
+
+    # If it's empty or just whitespace, treat it like it wasn't set at all.
+    specified_epoch = nil if !specified_epoch.nil? && specified_epoch.strip.empty?
+
+    epoch = specified_epoch || @default_source_date_epoch
+
+    epoch.strip
+  end
+
+  ##
+  # Returns the value of Gem.source_date_epoch_string, as a Time object.
+  #
+  # This is used throughout RubyGems for enabling reproducible builds.
+
+  def self.source_date_epoch
+    Time.at(self.source_date_epoch_string.to_i).utc.freeze
+  end
+
+  # FIX: Almost everywhere else we use the `def self.` way of defining class
+  # methods, and then we switch over to `class << self` here. Pick one or the
+  # other.
+  class << self
+    ##
+    # RubyGems distributors (like operating system package managers) can
+    # disable RubyGems update by setting this to error message printed to
+    # end-users on gem update --system instead of actual update.
+    attr_accessor :disable_system_update_message
+
+    ##
+    # Hash of loaded Gem::Specification keyed by name
+
+    attr_reader :loaded_specs
+
+    ##
+    # GemDependencyAPI object, which is set when .use_gemdeps is called.
+    # This contains all the information from the Gemfile.
+
+    attr_reader :gemdeps
+
+    ##
+    # Register a Gem::Specification for default gem.
+    #
+    # Two formats for the specification are supported:
+    #
+    # * MRI 2.0 style, where spec.files contains unprefixed require names.
+    #   The spec's filenames will be registered as-is.
+    # * New style, where spec.files contains files prefixed with paths
+    #   from spec.require_paths. The prefixes are stripped before
+    #   registering the spec's filenames. Unprefixed files are omitted.
+    #
+
+    def register_default_spec(spec)
+      extended_require_paths = spec.require_paths.map {|f| f + "/" }
+      new_format = extended_require_paths.any? {|path| spec.files.any? {|f| f.start_with? path } }
+
+      if new_format
+        prefix_group = extended_require_paths.join("|")
+        prefix_pattern = /^(#{prefix_group})/
+      end
+
+      spec.files.each do |file|
+        if new_format
+          file = file.sub(prefix_pattern, "")
+          next unless $~
+        end
+
+        spec.activate if already_loaded?(file)
+
+        @path_to_default_spec_map[file] = spec
+        @path_to_default_spec_map[file.sub(suffix_regexp, "")] = spec
+      end
+    end
+
+    ##
+    # Find a Gem::Specification of default gem from +path+
+
+    def find_unresolved_default_spec(path)
+      default_spec = @path_to_default_spec_map[path]
+      return default_spec if default_spec && loaded_specs[default_spec.name] != default_spec
+    end
+
+    ##
+    # Clear default gem related variables. It is for test
+
+    def clear_default_specs
+      @path_to_default_spec_map.clear
+    end
+
+    ##
+    # The list of hooks to be run after Gem::Installer#install extracts files
+    # and builds extensions
+
+    attr_reader :post_build_hooks
+
+    ##
+    # The list of hooks to be run after Gem::Installer#install completes
+    # installation
+
+    attr_reader :post_install_hooks
+
+    ##
+    # The list of hooks to be run after Gem::DependencyInstaller installs a
+    # set of gems
+
+    attr_reader :done_installing_hooks
+
+    ##
+    # The list of hooks to be run after Gem::Specification.reset is run.
+
+    attr_reader :post_reset_hooks
+
+    ##
+    # The list of hooks to be run after Gem::Uninstaller#uninstall completes
+    # installation
+
+    attr_reader :post_uninstall_hooks
+
+    ##
+    # The list of hooks to be run before Gem::Installer#install does any work
+
+    attr_reader :pre_install_hooks
+
+    ##
+    # The list of hooks to be run before Gem::Specification.reset is run.
+
+    attr_reader :pre_reset_hooks
+
+    ##
+    # The list of hooks to be run before Gem::Uninstaller#uninstall does any
+    # work
+
+    attr_reader :pre_uninstall_hooks
+
+    private
+
+    def already_loaded?(file)
+      $LOADED_FEATURES.any? do |feature_path|
+        feature_path.end_with?(file) && default_gem_load_paths.any? {|load_path_entry| feature_path == "#{load_path_entry}/#{file}" }
+      end
+    end
+
+    def default_gem_load_paths
+      @default_gem_load_paths ||= $LOAD_PATH[load_path_insert_index..-1].map do |lp|
+        expanded = File.expand_path(lp)
+        next expanded unless File.exist?(expanded)
+
+        File.realpath(expanded)
+      end
+    end
+  end
+
+  ##
+  # Location of Marshal quick gemspecs on remote repositories
+
+  MARSHAL_SPEC_DIR = "quick/Marshal.#{Gem.marshal_version}/".freeze
+
+  autoload :BundlerVersionFinder, File.expand_path("rubygems/bundler_version_finder", __dir__)
+  autoload :ConfigFile,         File.expand_path("rubygems/config_file", __dir__)
+  autoload :Dependency,     
