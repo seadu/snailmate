@@ -1295,4 +1295,56 @@ An Array (#{env.inspect}) was passed in from #{caller[3]}
 
   autoload :BundlerVersionFinder, File.expand_path("rubygems/bundler_version_finder", __dir__)
   autoload :ConfigFile,         File.expand_path("rubygems/config_file", __dir__)
-  autoload :Dependency,     
+  autoload :Dependency,         File.expand_path("rubygems/dependency", __dir__)
+  autoload :DependencyList,     File.expand_path("rubygems/dependency_list", __dir__)
+  autoload :Installer,          File.expand_path("rubygems/installer", __dir__)
+  autoload :Licenses,           File.expand_path("rubygems/util/licenses", __dir__)
+  autoload :NameTuple,          File.expand_path("rubygems/name_tuple", __dir__)
+  autoload :PathSupport,        File.expand_path("rubygems/path_support", __dir__)
+  autoload :RequestSet,         File.expand_path("rubygems/request_set", __dir__)
+  autoload :Requirement,        File.expand_path("rubygems/requirement", __dir__)
+  autoload :Resolver,           File.expand_path("rubygems/resolver", __dir__)
+  autoload :Source,             File.expand_path("rubygems/source", __dir__)
+  autoload :SourceList,         File.expand_path("rubygems/source_list", __dir__)
+  autoload :SpecFetcher,        File.expand_path("rubygems/spec_fetcher", __dir__)
+  autoload :SpecificationPolicy, File.expand_path("rubygems/specification_policy", __dir__)
+  autoload :Util,               File.expand_path("rubygems/util", __dir__)
+  autoload :Version,            File.expand_path("rubygems/version", __dir__)
+end
+
+require_relative "rubygems/exceptions"
+require_relative "rubygems/specification"
+
+# REFACTOR: This should be pulled out into some kind of hacks file.
+begin
+  ##
+  # Defaults the operating system (or packager) wants to provide for RubyGems.
+
+  require "rubygems/defaults/operating_system"
+rescue LoadError
+  # Ignored
+rescue StandardError => e
+  path = e.backtrace_locations.reverse.find {|l| l.path.end_with?("rubygems/defaults/operating_system.rb") }.path
+  msg = "#{e.message}\n" \
+    "Loading the #{path} file caused an error. " \
+    "This file is owned by your OS, not by rubygems upstream. " \
+    "Please find out which OS package this file belongs to and follow the guidelines from your OS to report " \
+    "the problem and ask for help."
+  raise e.class, msg
+end
+
+begin
+  ##
+  # Defaults the Ruby implementation wants to provide for RubyGems
+
+  require "rubygems/defaults/#{RUBY_ENGINE}"
+rescue LoadError
+end
+
+##
+# Loads the default specs.
+Gem::Specification.load_defaults
+
+require_relative "rubygems/core_ext/kernel_gem"
+require_relative "rubygems/core_ext/kernel_require"
+require_relative "rubygems/core_ext/kernel_warn"
