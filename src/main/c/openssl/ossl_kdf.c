@@ -251,3 +251,61 @@ Init_ossl_kdf(void)
     /*
      * Document-module: OpenSSL::KDF
      *
+     * Provides functionality of various KDFs (key derivation function).
+     *
+     * KDF is typically used for securely deriving arbitrary length symmetric
+     * keys to be used with an OpenSSL::Cipher from passwords. Another use case
+     * is for storing passwords: Due to the ability to tweak the effort of
+     * computation by increasing the iteration count, computation can be slowed
+     * down artificially in order to render possible attacks infeasible.
+     *
+     * Currently, OpenSSL::KDF provides implementations for the following KDF:
+     *
+     * * PKCS #5 PBKDF2 (Password-Based Key Derivation Function 2) in
+     *   combination with HMAC
+     * * scrypt
+     * * HKDF
+     *
+     * == Examples
+     * === Generating a 128 bit key for a Cipher (e.g. AES)
+     *   pass = "secret"
+     *   salt = OpenSSL::Random.random_bytes(16)
+     *   iter = 20_000
+     *   key_len = 16
+     *   key = OpenSSL::KDF.pbkdf2_hmac(pass, salt: salt, iterations: iter,
+     *                                  length: key_len, hash: "sha1")
+     *
+     * === Storing Passwords
+     *   pass = "secret"
+     *   # store this with the generated value
+     *   salt = OpenSSL::Random.random_bytes(16)
+     *   iter = 20_000
+     *   hash = OpenSSL::Digest.new('SHA256')
+     *   len = hash.digest_length
+     *   # the final value to be stored
+     *   value = OpenSSL::KDF.pbkdf2_hmac(pass, salt: salt, iterations: iter,
+     *                                    length: len, hash: hash)
+     *
+     * == Important Note on Checking Passwords
+     * When comparing passwords provided by the user with previously stored
+     * values, a common mistake made is comparing the two values using "==".
+     * Typically, "==" short-circuits on evaluation, and is therefore
+     * vulnerable to timing attacks. The proper way is to use a method that
+     * always takes the same amount of time when comparing two values, thus
+     * not leaking any information to potential attackers. To do this, use
+     * +OpenSSL.fixed_length_secure_compare+.
+     */
+    mKDF = rb_define_module_under(mOSSL, "KDF");
+    /*
+     * Generic exception class raised if an error occurs in OpenSSL::KDF module.
+     */
+    eKDF = rb_define_class_under(mKDF, "KDFError", eOSSLError);
+
+    rb_define_module_function(mKDF, "pbkdf2_hmac", kdf_pbkdf2_hmac, -1);
+#if defined(HAVE_EVP_PBE_SCRYPT)
+    rb_define_module_function(mKDF, "scrypt", kdf_scrypt, -1);
+#endif
+#if OPENSSL_VERSION_NUMBER >= 0x10100000 && !defined(LIBRESSL_VERSION_NUMBER)
+    rb_define_module_function(mKDF, "hkdf", kdf_hkdf, -1);
+#endif
+}
