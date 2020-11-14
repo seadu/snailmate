@@ -48,4 +48,38 @@ module Liquid
     def self.to_number(obj)
       case obj
       when Float
-        B
+        BigDecimal(obj.to_s)
+      when Numeric
+        obj
+      when String
+        /\A-?\d+\.\d+\z/.match?(obj.strip) ? BigDecimal(obj) : obj.to_i
+      else
+        if obj.respond_to?(:to_number)
+          obj.to_number
+        else
+          0
+        end
+      end
+    end
+
+    def self.to_date(obj)
+      return obj if obj.respond_to?(:strftime)
+
+      if obj.is_a?(String)
+        return nil if obj.empty?
+        obj = obj.downcase
+      end
+
+      case obj
+      when 'now', 'today'
+        Time.now
+      when /\A\d+\z/, Integer
+        Time.at(obj.to_i)
+      when String
+        Time.parse(obj)
+      end
+    rescue ::ArgumentError
+      nil
+    end
+  end
+end
