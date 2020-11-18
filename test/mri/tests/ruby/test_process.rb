@@ -563,4 +563,194 @@ class TestProcess < Test::Unit::TestCase
       Process.wait Process.spawn(*SORT, STDIN=>["out", File::RDONLY, 0644],
                                          STDOUT=>["out2", File::WRONLY|File::CREAT|File::TRUNC, 0644])
       assert_equal("0\na\n", File.read("out2"))
-      Process.wait P
+      Process.wait Process.spawn(*ECHO["b"], [STDOUT, STDERR]=>["out", File::WRONLY|File::CREAT|File::TRUNC, 0644])
+      assert_equal("b", File.read("out").chomp)
+      # problem occur with valgrind
+      #Process.wait Process.spawn(*ECHO["a"], STDOUT=>:close, STDERR=>["out", File::WRONLY|File::CREAT|File::TRUNC, 0644])
+      #p File.read("out")
+      #assert_not_empty(File.read("out")) # error message such as "-e:1:in `flush': Bad file descriptor (Errno::EBADF)"
+      Process.wait Process.spawn(*ECHO["c"], STDERR=>STDOUT, STDOUT=>["out", File::WRONLY|File::CREAT|File::TRUNC, 0644])
+      assert_equal("c", File.read("out").chomp)
+      File.open("out", "w") {|f|
+        Process.wait Process.spawn(*ECHO["d"], STDOUT=>f)
+        assert_equal("d", File.read("out").chomp)
+      }
+      opts = {STDOUT=>["out", File::WRONLY|File::CREAT|File::TRUNC, 0644]}
+      opts.merge(3=>STDOUT, 4=>STDOUT, 5=>STDOUT, 6=>STDOUT, 7=>STDOUT) unless windows?
+      Process.wait Process.spawn(*ECHO["e"], opts)
+      assert_equal("e", File.read("out").chomp)
+      opts = {STDOUT=>["out", File::WRONLY|File::CREAT|File::TRUNC, 0644]}
+      opts.merge(3=>0, 4=>:in, 5=>STDIN, 6=>1, 7=>:out, 8=>STDOUT, 9=>2, 10=>:err, 11=>STDERR) unless windows?
+      Process.wait Process.spawn(*ECHO["ee"], opts)
+      assert_equal("ee", File.read("out").chomp)
+      unless windows?
+        # passing non-stdio fds is not supported on Windows
+        File.open("out", "w") {|f|
+          h = {STDOUT=>f, f=>STDOUT}
+          3.upto(30) {|i| h[i] = STDOUT if f.fileno != i }
+          Process.wait Process.spawn(*ECHO["f"], h)
+          assert_equal("f", File.read("out").chomp)
+        }
+      end
+      assert_raise(ArgumentError) {
+        Process.wait Process.spawn(*ECHO["f"], 1=>Process)
+      }
+      assert_raise(ArgumentError) {
+        Process.wait Process.spawn(*ECHO["f"], [Process]=>1)
+      }
+      assert_raise(ArgumentError) {
+        Process.wait Process.spawn(*ECHO["f"], [1, STDOUT]=>2)
+      }
+      assert_raise(ArgumentError) {
+        Process.wait Process.spawn(*ECHO["f"], -1=>2)
+      }
+      Process.wait Process.spawn(*ECHO["hhh\nggg\n"], STDOUT=>"out")
+      assert_equal("hhh\nggg\n", File.read("out"))
+      Process.wait Process.spawn(*SORT, STDIN=>"out", STDOUT=>"out2")
+      assert_equal("ggg\nhhh\n", File.read("out2"))
+
+      unless windows?
+        # passing non-stdio fds is not supported on Windows
+        assert_raise(Errno::ENOENT) {
+          Process.wait Process.spawn("non-existing-command", (3..60).to_a=>["err", File::WRONLY|File::CREAT])
+        }
+        assert_equal("", File.read("err"))
+      end
+
+      system(*ECHO["bb\naa\n"], STDOUT=>["out", "w"])
+      assert_equal("bb\naa\n", File.read("out"))
+      system(*SORT, STDIN=>["out"], STDOUT=>"out2")
+      assert_equal("aa\nbb\n", File.read("out2"))
+    }
+  end
+
+  def test_execopts_redirect_open_order_normal
+    minfd = 3
+    maxfd = 20
+    with_tmpchdir {|d|
+      opts = {}
+      minfd.upto(maxfd) {|fd| opts[fd] = ["out#{fd}", "w"] }
+      system RUBY, "-e", "#{minfd}.upto(#{maxfd}) {|fd| IO.new(fd).print fd.to_s }", opts
+      minfd.upto(maxfd) {|fd| assert_equal(fd.to_s, File.read("out#{fd}")) }
+    }
+  end unless windows? # passing non-stdio fds is not supported on Windows
+
+  def test_execopts_redirect_open_order_reverse
+    minfd = 3
+    maxfd = 20
+    with_tmpchdir {|d|
+      opts = {}
+      maxfd.downto(minfd) {|fd| opts[fd] = ["out#{fd}", "w"] }
+      system RUBY, "-e", "#{minfd}.upto(#{maxfd}) {|fd| IO.new(fd).print fd.to_s }", opts
+      minfd.upto(maxfd) {|fd| assert_equal(fd.to_s, File.read("out#{fd}")) }
+    }
+  end unless windows? # passing non-stdio fds is not supported on Windows
+
+  def test_execopts_redirect_open_fifo
+    with_tmpchdir {|d|
+      begin
+        File.mkfifo("fifo")
+      rescue NotImplementedError
+        return
+      end
+      assert_file.pipe?("fifo")
+      t1 = Thread.new {
+        system(*ECHO["output to fifo"], :out=>"fifo")
+      }
+      t2 = Thread.new {
+        IO.popen([*CAT, :in=>"fifo"]) {|f| f.read }
+      }
+      _, v2 = assert_join_threads([t1, t2])
+      assert_equal("output to fifo\n", v2)
+    }
+  end unless windows? # does not support fifo
+
+  def test_execopts_redirect_open_fifo_interrupt_raise
+    with_tmpchdir {|d|
+      begin
+        File.mkfifo("fifo")
+      rescue NotImplementedError
+        return
+      end
+      IO.popen([RUBY, '-e', <<-'EOS']) {|io|
+        class E < StandardError; end
+        trap(:USR1) { raise E }
+        begin
+          puts "start"
+          STDOUT.flush
+          system("cat", :in => "fifo")
+        rescue E
+          puts "ok"
+        end
+      EOS
+        assert_equal("start\n", io.gets)
+        sleep 0.5
+        Process.kill(:USR1, io.pid)
+        assert_equal("ok\n", io.read)
+      }
+    }
+  end unless windows? # does not support fifo
+
+  def test_execopts_redirect_open_fifo_interrupt_print
+    with_tmpchdir {|d|
+      begin
+        File.mkfifo("fifo")
+      rescue NotImplementedError
+        return
+      end
+      IO.popen([RUBY, '-e', <<-'EOS']) {|io|
+        STDOUT.sync = true
+        trap(:USR1) { print "trap\n" }
+        puts "start"
+        system("cat", :in => "fifo")
+      EOS
+        assert_equal("start\n", io.gets)
+        sleep 0.2 # wait for the child to stop at opening "fifo"
+        Process.kill(:USR1, io.pid)
+        assert_equal("trap\n", io.readpartial(8))
+        File.write("fifo", "ok\n")
+        assert_equal("ok\n", io.read)
+      }
+    }
+  end unless windows? # does not support fifo
+
+  def test_execopts_redirect_pipe
+    with_pipe {|r1, w1|
+      with_pipe {|r2, w2|
+        opts = {STDIN=>r1, STDOUT=>w2}
+        opts.merge(w1=>:close, r2=>:close) unless windows?
+        pid = spawn(*SORT, opts)
+        r1.close
+        w2.close
+        w1.puts "c"
+        w1.puts "a"
+        w1.puts "b"
+        w1.close
+        assert_equal("a\nb\nc\n", r2.read)
+        r2.close
+        Process.wait(pid)
+      }
+    }
+
+    unless windows?
+      # passing non-stdio fds is not supported on Windows
+      with_pipes(5) {|pipes|
+        ios = pipes.flatten
+        h = {}
+        ios.length.times {|i| h[ios[i]] = ios[(i-1)%ios.length] }
+        h2 = h.invert
+        _rios = pipes.map {|r, w| r }
+        wios  = pipes.map {|r, w| w }
+        child_wfds = wios.map {|w| h2[w].fileno }
+        pid = spawn(RUBY, "-e",
+                    "[#{child_wfds.join(',')}].each {|fd| IO.new(fd, 'w').puts fd }", h)
+        pipes.each {|r, w|
+          assert_equal("#{h2[w].fileno}\n", r.gets)
+        }
+        Process.wait pid;
+      }
+
+      with_pipes(5) {|pipes|
+        ios = pipes.flatten
+        h = {}
+        ios.length.times {|i| h[ios[i]] = ios[(i+1)%ios.le
