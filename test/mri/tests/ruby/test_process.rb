@@ -351,4 +351,216 @@ class TestProcess < Test::Unit::TestCase
       ENV["hmm"] = old
     end
 
-    assert_raise_
+    assert_raise_with_message(ArgumentError, /fo=fo/) {
+      system({"fo=fo"=>"ha"}, *ENVCOMMAND)
+    }
+    assert_raise_with_message(ArgumentError, /\u{30c0}=\u{30e1}/) {
+      system({"\u{30c0}=\u{30e1}"=>"ha"}, *ENVCOMMAND)
+    }
+  end
+
+  def test_execopt_env_path
+    bug8004 = '[ruby-core:53103] [Bug #8004]'
+    Dir.mktmpdir do |d|
+      open("#{d}/tmp_script.cmd", "w") {|f| f.puts ": ;"; f.chmod(0755)}
+      assert_not_nil(pid = Process.spawn({"PATH" => d}, "tmp_script.cmd"), bug8004)
+      wpid, st = Process.waitpid2(pid)
+      assert_equal([pid, true], [wpid, st.success?], bug8004)
+    end
+  end
+
+  def _test_execopts_env_popen(cmd)
+    message = cmd.inspect
+    IO.popen({"FOO"=>"BAR"}, cmd) {|io|
+      assert_equal('FOO=BAR', io.read[/^FOO=.*/], message)
+    }
+
+    old = ENV["hmm"]
+    begin
+      ENV["hmm"] = "fufu"
+      IO.popen(cmd) {|io| assert_match(/^hmm=fufu$/, io.read, message)}
+      IO.popen({"hmm"=>""}, cmd) {|io| assert_match(/^hmm=$/, io.read, message)}
+      IO.popen({"hmm"=>nil}, cmd) {|io| assert_not_match(/^hmm=/, io.read, message)}
+      ENV["hmm"] = ""
+      IO.popen(cmd) {|io| assert_match(/^hmm=$/, io.read, message)}
+      IO.popen({"hmm"=>""}, cmd) {|io| assert_match(/^hmm=$/, io.read, message)}
+      IO.popen({"hmm"=>nil}, cmd) {|io| assert_not_match(/^hmm=/, io.read, message)}
+      ENV["hmm"] = nil
+      IO.popen(cmd) {|io| assert_not_match(/^hmm=/, io.read, message)}
+      IO.popen({"hmm"=>""}, cmd) {|io| assert_match(/^hmm=$/, io.read, message)}
+      IO.popen({"hmm"=>nil}, cmd) {|io| assert_not_match(/^hmm=/, io.read, message)}
+    ensure
+      ENV["hmm"] = old
+    end
+  end
+
+  def test_execopts_env_popen_vector
+    _test_execopts_env_popen(ENVCOMMAND)
+  end
+
+  def test_execopts_env_popen_string
+    with_tmpchdir do |d|
+      open('test-script', 'w') do |f|
+        ENVCOMMAND.each_with_index do |cmd, i|
+          next if i.zero? or cmd == "-e"
+          f.puts cmd
+        end
+      end
+      _test_execopts_env_popen("#{RUBY} test-script")
+    end
+  end
+
+  def test_execopts_preserve_env_on_exec_failure
+    with_tmpchdir {|d|
+      write_file 's', <<-"End"
+        ENV["mgg"] = nil
+        prog = "./nonexistent"
+        begin
+          Process.exec({"mgg" => "mggoo"}, [prog, prog])
+        rescue Errno::ENOENT
+        end
+        open('out', 'w') {|f|
+          f.print ENV["mgg"].inspect
+        }
+      End
+      system(RUBY, 's')
+      assert_equal(nil.inspect, File.read('out'),
+        "[ruby-core:44093] [ruby-trunk - Bug #6249]")
+    }
+  end
+
+  def test_execopts_env_single_word
+    with_tmpchdir {|d|
+      open("test_execopts_env_single_word.rb", "w") {|f|
+        f.puts "print ENV['hgga']"
+      }
+      system({"hgga"=>"ugu"}, RUBY,
+             :in => 'test_execopts_env_single_word.rb',
+             :out => 'test_execopts_env_single_word.out')
+      assert_equal('ugu', File.read('test_execopts_env_single_word.out'))
+    }
+  end
+
+  def test_execopts_unsetenv_others
+    h = {}
+    MANDATORY_ENVS.each {|k| e = ENV[k] and h[k] = e}
+    IO.popen([h, *ENVCOMMAND, :unsetenv_others=>true]) {|io|
+      assert_equal("", io.read)
+    }
+    IO.popen([h.merge("A"=>"B"), *ENVCOMMAND, :unsetenv_others=>true]) {|io|
+      assert_equal("A=B\n", io.read)
+    }
+  end
+
+  PWD = [RUBY, '-e', 'puts Dir.pwd']
+
+  def test_execopts_chdir
+    with_tmpchdir {|d|
+      IO.popen([*PWD, :chdir => d]) {|io|
+        assert_equal(d, io.read.chomp)
+      }
+      assert_raise_with_message(Errno::ENOENT, %r"d/notexist") {
+        Process.wait Process.spawn(*PWD, :chdir => "d/notexist")
+      }
+      n = "d/\u{1F37A}"
+      assert_raise_with_message(Errno::ENOENT, /#{n}/) {
+        Process.wait Process.spawn(*PWD, :chdir => n)
+      }
+    }
+  end
+
+  def test_execopts_open_chdir
+    with_tmpchdir {|d|
+      Dir.mkdir "foo"
+      system(*PWD, :chdir => "foo", :out => "open_chdir_test")
+      assert_file.exist?("open_chdir_test")
+      assert_file.not_exist?("foo/open_chdir_test")
+      assert_equal("#{d}/foo", File.read("open_chdir_test").chomp)
+    }
+  end
+
+  def test_execopts_open_chdir_m17n_path
+    with_tmpchdir {|d|
+      Dir.mkdir "テスト"
+      (pwd = PWD.dup).insert(1, '-EUTF-8:UTF-8')
+      system(*pwd, :chdir => "テスト", :out => "open_chdir_テスト")
+      assert_file.exist?("open_chdir_テスト")
+      assert_file.not_exist?("テスト/open_chdir_テスト")
+      assert_equal("#{d}/テスト", File.read("open_chdir_テスト", encoding: "UTF-8").chomp)
+    }
+  end if windows? || Encoding.find('locale') == Encoding::UTF_8
+
+  def test_execopts_open_failure
+    with_tmpchdir {|d|
+      assert_raise_with_message(Errno::ENOENT, %r"d/notexist") {
+        Process.wait Process.spawn(*PWD, :in => "d/notexist")
+      }
+      assert_raise_with_message(Errno::ENOENT, %r"d/notexist") {
+        Process.wait Process.spawn(*PWD, :out => "d/notexist")
+      }
+      n = "d/\u{1F37A}"
+      assert_raise_with_message(Errno::ENOENT, /#{n}/) {
+        Process.wait Process.spawn(*PWD, :in => n)
+      }
+      assert_raise_with_message(Errno::ENOENT, /#{n}/) {
+        Process.wait Process.spawn(*PWD, :out => n)
+      }
+    }
+  end
+
+  UMASK = [RUBY, '-e', 'printf "%04o\n", File.umask']
+
+  def test_execopts_umask
+    skip "umask is not supported" if windows?
+    IO.popen([*UMASK, :umask => 0]) {|io|
+      assert_equal("0000", io.read.chomp)
+    }
+    IO.popen([*UMASK, :umask => 0777]) {|io|
+      assert_equal("0777", io.read.chomp)
+    }
+  end
+
+  def with_pipe
+    begin
+      r, w = IO.pipe
+      yield r, w
+    ensure
+      r.close unless r.closed?
+      w.close unless w.closed?
+    end
+  end
+
+  def with_pipes(n)
+    ary = []
+    begin
+      n.times {
+        ary << IO.pipe
+      }
+      yield ary
+    ensure
+      ary.each {|r, w|
+        r.close unless r.closed?
+        w.close unless w.closed?
+      }
+    end
+  end
+
+  ECHO = lambda {|arg| [RUBY, '-e', "puts #{arg.dump}; STDOUT.flush"] }
+  SORT = [RUBY, '-e', "puts ARGF.readlines.sort"]
+  CAT = [RUBY, '-e', "IO.copy_stream STDIN, STDOUT"]
+
+  def test_execopts_redirect_fd
+    with_tmpchdir {|d|
+      Process.wait Process.spawn(*ECHO["a"], STDOUT=>["out", File::WRONLY|File::CREAT|File::TRUNC, 0644])
+      assert_equal("a", File.read("out").chomp)
+      if windows?
+        # currently telling to child the file modes is not supported.
+        open("out", "a") {|f| f.write "0\n"}
+      else
+        Process.wait Process.spawn(*ECHO["0"], STDOUT=>["out", File::WRONLY|File::CREAT|File::APPEND, 0644])
+        assert_equal("a\n0\n", File.read("out"))
+      end
+      Process.wait Process.spawn(*SORT, STDIN=>["out", File::RDONLY, 0644],
+                                         STDOUT=>["out2", File::WRONLY|File::CREAT|File::TRUNC, 0644])
+      assert_equal("0\na\n", File.read("out2"))
+      Process.wait P
