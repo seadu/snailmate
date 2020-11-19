@@ -955,3 +955,229 @@ class TestProcess < Test::Unit::TestCase
         io.close
       end
     }
+    with_pipe {|r, w|
+      errmsg = `#{RUBY} -e "STDERR.reopen(STDOUT); IO.new(#{w.fileno}, 'w').puts(123)"`
+      w.close
+      assert_equal("", r.read)
+      assert_not_equal("", errmsg)
+    }
+  end
+
+  def test_execopts_close_others
+    skip "inheritance of fd other than stdin,stdout and stderr is not supported" if windows?
+    with_tmpchdir {|d|
+      with_pipe {|r, w|
+        system(RUBY, '-e', 'STDERR.reopen("err", "w"); IO.new(ARGV[0].to_i, "w").puts("ma")', w.fileno.to_s, :close_others=>true)
+        w.close
+        assert_equal("", r.read)
+        assert_not_equal("", File.read("err"))
+        File.unlink("err")
+      }
+      with_pipe {|r, w|
+        Process.wait spawn(RUBY, '-e', 'STDERR.reopen("err", "w"); IO.new(ARGV[0].to_i, "w").puts("mi")', w.fileno.to_s, :close_others=>true)
+        w.close
+        assert_equal("", r.read)
+        assert_not_equal("", File.read("err"))
+        File.unlink("err")
+      }
+      with_pipe {|r, w|
+        w.close_on_exec = false
+        Process.wait spawn(RUBY, '-e', 'IO.new(ARGV[0].to_i, "w").puts("bi")', w.fileno.to_s, :close_others=>false)
+        w.close
+        assert_equal("bi\n", r.read)
+      }
+      with_pipe {|r, w|
+	write_file("s", <<-"End")
+	  exec(#{RUBY.dump}, '-e',
+	       'STDERR.reopen("err", "w"); IO.new(ARGV[0].to_i, "w").puts("mu")',
+	       #{w.fileno.to_s.dump},
+	       :close_others=>true)
+	End
+        Process.wait spawn(RUBY, "s", :close_others=>false)
+        w.close
+        assert_equal("", r.read)
+        assert_not_equal("", File.read("err"))
+        File.unlink("err")
+      }
+      with_pipe {|r, w|
+        io = IO.popen([RUBY, "-e", "STDERR.reopen(STDOUT); IO.new(#{w.fileno}, 'w').puts('me')", :close_others=>true])
+        begin
+          w.close
+          errmsg = io.read
+          assert_equal("", r.read)
+          assert_not_equal("", errmsg)
+        ensure
+          io.close
+        end
+      }
+      with_pipe {|r, w|
+        w.close_on_exec = false
+        io = IO.popen([RUBY, "-e", "STDERR.reopen(STDOUT); IO.new(#{w.fileno}, 'w').puts('mo')", :close_others=>false])
+        begin
+          w.close
+          errmsg = io.read
+          assert_equal("mo\n", r.read)
+          assert_equal("", errmsg)
+        ensure
+          io.close
+        end
+      }
+      with_pipe {|r, w|
+        w.close_on_exec = false
+        io = IO.popen([RUBY, "-e", "STDERR.reopen(STDOUT); IO.new(#{w.fileno}, 'w').puts('mo')", :close_others=>nil])
+        begin
+          w.close
+          errmsg = io.read
+          assert_equal("mo\n", r.read)
+          assert_equal("", errmsg)
+        ensure
+          io.close
+        end
+      }
+
+    }
+  end
+
+  def test_close_others_default_false
+    IO.pipe do |r,w|
+      w.close_on_exec = false
+      src = "IO.new(#{w.fileno}).puts(:hi)"
+      assert_equal true, system(*%W(#{RUBY} --disable=gems -e #{src}))
+      assert_equal "hi\n", r.gets
+    end
+  end unless windows? # passing non-stdio fds is not supported on Windows
+
+  def test_execopts_redirect_self
+    begin
+      with_pipe {|r, w|
+        w << "haha\n"
+        w.close
+        r.close_on_exec = true
+        IO.popen([RUBY, "-e", "print IO.new(#{r.fileno}, 'r').read", r.fileno=>r.fileno, :close_others=>false]) {|io|
+          assert_equal("haha\n", io.read)
+        }
+      }
+    rescue NotImplementedError
+      skip "IO#close_on_exec= is not supported"
+    end
+  end unless windows? # passing non-stdio fds is not supported on Windows
+
+  def test_execopts_redirect_tempfile
+    bug6269 = '[ruby-core:44181]'
+    Tempfile.create("execopts") do |tmp|
+      pid = assert_nothing_raised(ArgumentError, bug6269) do
+        break spawn(RUBY, "-e", "print $$", out: tmp)
+      end
+      Process.wait(pid)
+      tmp.rewind
+      assert_equal(pid.to_s, tmp.read)
+    end
+  end
+
+  def test_execopts_duplex_io
+    IO.popen("#{RUBY} -e ''", "r+") {|duplex|
+      assert_raise(ArgumentError) { system("#{RUBY} -e ''", duplex=>STDOUT) }
+      assert_raise(ArgumentError) { system("#{RUBY} -e ''", STDOUT=>duplex) }
+    }
+  end
+
+  def test_execopts_modification
+    h = {}
+    Process.wait spawn(*TRUECOMMAND, h)
+    assert_equal({}, h)
+
+    h = {}
+    system(*TRUECOMMAND, h)
+    assert_equal({}, h)
+
+    h = {}
+    io = IO.popen([*TRUECOMMAND, h])
+    io.close
+    assert_equal({}, h)
+  end
+
+  def test_system_noshell
+    str = "echo non existing command name which contains spaces"
+    assert_nil(system([str, str]))
+  end
+
+  def test_spawn_noshell
+    str = "echo non existing command name which contains spaces"
+    assert_raise(Errno::ENOENT) { spawn([str, str]) }
+  end
+
+  def test_popen_noshell
+    str = "echo non existing command name which contains spaces"
+    assert_raise(Errno::ENOENT) { IO.popen([str, str]) }
+  end
+
+  def test_exec_noshell
+    with_tmpchdir {|d|
+      write_file("s", <<-"End")
+	  str = "echo non existing command name which contains spaces"
+	  STDERR.reopen(STDOUT)
+	  begin
+	    exec [str, str]
+	  rescue Errno::ENOENT
+	    print "Errno::ENOENT success"
+	  end
+	End
+      r = IO.popen([RUBY, "s", :close_others=>false], "r") {|f| f.read}
+      assert_equal("Errno::ENOENT success", r)
+    }
+  end
+
+  def test_system_wordsplit
+    with_tmpchdir {|d|
+      write_file("script", <<-'End')
+        File.open("result", "w") {|t| t << "haha pid=#{$$} ppid=#{Process.ppid}" }
+        exit 5
+      End
+      str = "#{RUBY} script"
+      ret = system(str)
+      status = $?
+      assert_equal(false, ret)
+      assert_predicate(status, :exited?)
+      assert_equal(5, status.exitstatus)
+      assert_equal("haha pid=#{status.pid} ppid=#{$$}", File.read("result"))
+    }
+  end
+
+  def test_spawn_wordsplit
+    with_tmpchdir {|d|
+      write_file("script", <<-'End')
+        File.open("result", "w") {|t| t << "hihi pid=#{$$} ppid=#{Process.ppid}" }
+        exit 6
+      End
+      str = "#{RUBY} script"
+      pid = spawn(str)
+      Process.wait pid
+      status = $?
+      assert_equal(pid, status.pid)
+      assert_predicate(status, :exited?)
+      assert_equal(6, status.exitstatus)
+      assert_equal("hihi pid=#{status.pid} ppid=#{$$}", File.read("result"))
+    }
+  end
+
+  def test_popen_wordsplit
+    with_tmpchdir {|d|
+      write_file("script", <<-'End')
+        print "fufu pid=#{$$} ppid=#{Process.ppid}"
+        exit 7
+      End
+      str = "#{RUBY} script"
+      io = IO.popen(str)
+      pid = io.pid
+      result = io.read
+      io.close
+      status = $?
+      assert_equal(pid, status.pid)
+      assert_predicate(status, :exited?)
+      assert_equal(7, status.exitstatus)
+      assert_equal("fufu pid=#{status.pid} ppid=#{$$}", result)
+    }
+  end
+
+  def test_popen_wordsplit_beginning_and_trailing_spaces
+    wi
