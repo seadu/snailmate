@@ -753,4 +753,205 @@ class TestProcess < Test::Unit::TestCase
       with_pipes(5) {|pipes|
         ios = pipes.flatten
         h = {}
-        ios.length.times {|i| h[ios[i]] = ios[(i+1)%ios.le
+        ios.length.times {|i| h[ios[i]] = ios[(i+1)%ios.length] }
+        h2 = h.invert
+        _rios = pipes.map {|r, w| r }
+        wios  = pipes.map {|r, w| w }
+        child_wfds = wios.map {|w| h2[w].fileno }
+        pid = spawn(RUBY, "-e",
+                    "[#{child_wfds.join(',')}].each {|fd| IO.new(fd, 'w').puts fd }", h)
+        pipes.each {|r, w|
+          assert_equal("#{h2[w].fileno}\n", r.gets)
+        }
+        Process.wait pid
+      }
+
+      closed_fd = nil
+      with_pipes(5) {|pipes|
+        io = pipes.last.last
+        closed_fd = io.fileno
+      }
+      assert_raise(Errno::EBADF) { Process.wait spawn(*TRUECOMMAND, closed_fd=>closed_fd) }
+
+      with_pipe {|r, w|
+        if w.respond_to?(:"close_on_exec=")
+          w.close_on_exec = true
+          pid = spawn(RUBY, "-e", "IO.new(#{w.fileno}, 'w').print 'a'", w=>w)
+          w.close
+          assert_equal("a", r.read)
+          Process.wait pid
+        end
+      }
+
+      # ensure standard FDs we redirect to are blocking for compatibility
+      with_pipes(3) do |pipes|
+        src = 'p [STDIN,STDOUT,STDERR].map(&:nonblock?)'
+        rdr = { 0 => pipes[0][0], 1 => pipes[1][1], 2 => pipes[2][1] }
+        pid = spawn(RUBY, '-rio/nonblock', '-e', src, rdr)
+        assert_equal("[false, false, false]\n", pipes[1][0].gets)
+        Process.wait pid
+      end
+    end
+  end
+
+  def test_execopts_redirect_symbol
+    with_tmpchdir {|d|
+      system(*ECHO["funya"], :out=>"out")
+      assert_equal("funya\n", File.read("out"))
+      system(RUBY, '-e', 'STDOUT.reopen(STDERR); puts "henya"', :err=>"out")
+      assert_equal("henya\n", File.read("out"))
+      IO.popen([*CAT, :in=>"out"]) {|io|
+        assert_equal("henya\n", io.read)
+      }
+    }
+  end
+
+  def test_execopts_redirect_nonascii_path
+    bug9946 = '[ruby-core:63185] [Bug #9946]'
+    with_tmpchdir {|d|
+      path = "t-\u{30c6 30b9 30c8 f6}.txt"
+      system(*ECHO["a"], out: path)
+      assert_file.for(bug9946).exist?(path)
+      assert_equal("a\n", File.read(path), bug9946)
+    }
+  end
+
+  def test_execopts_redirect_to_out_and_err
+    with_tmpchdir {|d|
+      ret = system(RUBY, "-e", 'STDERR.print "e"; STDOUT.print "o"', [:out, :err] => "foo")
+      assert_equal(true, ret)
+      assert_equal("eo", File.read("foo"))
+      ret = system(RUBY, "-e", 'STDERR.print "E"; STDOUT.print "O"', [:err, :out] => "bar")
+      assert_equal(true, ret)
+      assert_equal("EO", File.read("bar"))
+    }
+  end
+
+  def test_execopts_redirect_dup2_child
+    with_tmpchdir {|d|
+      Process.wait spawn(RUBY, "-e", "STDERR.print 'err'; STDOUT.print 'out'",
+                         STDOUT=>"out", STDERR=>[:child, STDOUT])
+      assert_equal("errout", File.read("out"))
+
+      Process.wait spawn(RUBY, "-e", "STDERR.print 'err'; STDOUT.print 'out'",
+                         STDERR=>"out", STDOUT=>[:child, STDERR])
+      assert_equal("errout", File.read("out"))
+
+      skip "inheritance of fd other than stdin,stdout and stderr is not supported" if windows?
+      Process.wait spawn(RUBY, "-e", "STDERR.print 'err'; STDOUT.print 'out'",
+                         STDOUT=>"out",
+                         STDERR=>[:child, 3],
+                         3=>[:child, 4],
+                         4=>[:child, STDOUT]
+                        )
+      assert_equal("errout", File.read("out"))
+
+      IO.popen([RUBY, "-e", "STDERR.print 'err'; STDOUT.print 'out'", STDERR=>[:child, STDOUT]]) {|io|
+        assert_equal("errout", io.read)
+      }
+
+      assert_raise(ArgumentError) { Process.wait spawn(*TRUECOMMAND, STDOUT=>[:child, STDOUT]) }
+      assert_raise(ArgumentError) { Process.wait spawn(*TRUECOMMAND, 3=>[:child, 4], 4=>[:child, 3]) }
+      assert_raise(ArgumentError) { Process.wait spawn(*TRUECOMMAND, 3=>[:child, 4], 4=>[:child, 5], 5=>[:child, 3]) }
+      assert_raise(ArgumentError) { Process.wait spawn(*TRUECOMMAND, STDOUT=>[:child, 3]) }
+    }
+  end
+
+  def test_execopts_exec
+    with_tmpchdir {|d|
+      write_file("s", 'exec "echo aaa", STDOUT=>"foo"')
+      pid = spawn RUBY, 's'
+      Process.wait pid
+      assert_equal("aaa\n", File.read("foo"))
+    }
+  end
+
+  def test_execopts_popen
+    with_tmpchdir {|d|
+      IO.popen("#{RUBY} -e 'puts :foo'") {|io| assert_equal("foo\n", io.read) }
+      assert_raise(Errno::ENOENT) { IO.popen(["echo bar"]) {} } # assuming "echo bar" command not exist.
+      IO.popen(ECHO["baz"]) {|io| assert_equal("baz\n", io.read) }
+    }
+  end
+
+  def test_execopts_popen_stdio
+    with_tmpchdir {|d|
+      assert_raise(ArgumentError) {
+        IO.popen([*ECHO["qux"], STDOUT=>STDOUT]) {|io| }
+      }
+      IO.popen([*ECHO["hoge"], STDERR=>STDOUT]) {|io|
+        assert_equal("hoge\n", io.read)
+      }
+      assert_raise(ArgumentError) {
+        IO.popen([*ECHO["fuga"], STDOUT=>"out"]) {|io| }
+      }
+    }
+  end
+
+  def test_execopts_popen_extra_fd
+    skip "inheritance of fd other than stdin,stdout and stderr is not supported" if windows?
+    with_tmpchdir {|d|
+      with_pipe {|r, w|
+        IO.popen([RUBY, '-e', 'IO.new(3, "w").puts("a"); puts "b"', 3=>w]) {|io|
+          assert_equal("b\n", io.read)
+        }
+        w.close
+        assert_equal("a\n", r.read)
+      }
+      IO.popen([RUBY, '-e', "IO.new(9, 'w').puts(:b)",
+               9=>["out2", File::WRONLY|File::CREAT|File::TRUNC]]) {|io|
+        assert_equal("", io.read)
+      }
+      assert_equal("b\n", File.read("out2"))
+    }
+  end
+
+  def test_popen_fork
+    IO.popen("-") {|io|
+      if !io
+        puts "fooo"
+      else
+        assert_equal("fooo\n", io.read)
+      end
+    }
+  rescue NotImplementedError
+  end
+
+  def test_fd_inheritance
+    skip "inheritance of fd other than stdin,stdout and stderr is not supported" if windows?
+    with_pipe {|r, w|
+      system(RUBY, '-e', 'IO.new(ARGV[0].to_i, "w").puts(:ba)', w.fileno.to_s, w=>w)
+      w.close
+      assert_equal("ba\n", r.read)
+    }
+    with_pipe {|r, w|
+      Process.wait spawn(RUBY, '-e',
+                         'IO.new(ARGV[0].to_i, "w").puts("bi") rescue nil',
+                         w.fileno.to_s)
+      w.close
+      assert_equal("", r.read)
+    }
+    with_pipe {|r, w|
+      with_tmpchdir {|d|
+	write_file("s", <<-"End")
+	  exec(#{RUBY.dump}, '-e',
+	       'IO.new(ARGV[0].to_i, "w").puts("bu") rescue nil',
+	       #{w.fileno.to_s.dump}, :close_others=>false)
+	End
+        w.close_on_exec = false
+	Process.wait spawn(RUBY, "s", :close_others=>false)
+	w.close
+	assert_equal("bu\n", r.read)
+      }
+    }
+    with_pipe {|r, w|
+      io = IO.popen([RUBY, "-e", "STDERR.reopen(STDOUT); IO.new(#{w.fileno}, 'w').puts('me')"])
+      begin
+        w.close
+        errmsg = io.read
+        assert_equal("", r.read)
+        assert_not_equal("", errmsg)
+      ensure
+        io.close
+      end
+    }
