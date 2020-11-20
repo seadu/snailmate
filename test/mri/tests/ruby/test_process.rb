@@ -1397,4 +1397,235 @@ class TestProcess < Test::Unit::TestCase
       open("t", "w") {|f| f.print "exit true" }
       open("f", "w") {|f| f.print "exit false" }
 
-      with_stdin("
+      with_stdin("t") { assert_equal(true, system([RUBY, "qaz"])) }
+      with_stdin("f") { assert_equal(false, system([RUBY, "wsx"])) }
+
+      with_stdin("t") { Process.wait spawn([RUBY, "edc"]) }
+      assert_predicate($?, :success?)
+      with_stdin("f") { Process.wait spawn([RUBY, "rfv"]) }
+      assert_not_predicate($?, :success?)
+
+      with_stdin("t") { IO.popen([[RUBY, "tgb"]]) {|io| assert_equal("", io.read) } }
+      assert_predicate($?, :success?)
+      with_stdin("f") { IO.popen([[RUBY, "yhn"]]) {|io| assert_equal("", io.read) } }
+      assert_not_predicate($?, :success?)
+
+      status = run_in_child "STDIN.reopen('t'); exec([#{RUBY.dump}, 'ujm'])"
+      assert_predicate(status, :success?)
+      status = run_in_child "STDIN.reopen('f'); exec([#{RUBY.dump}, 'ik,'])"
+      assert_not_predicate(status, :success?)
+    }
+  end
+
+  def test_argv0_keep_alive
+    assert_in_out_err([], <<~REPRO, ['-'], [], "[Bug #15887]")
+      $0 = "diverge"
+      4.times { GC.start }
+      puts Process.argv0
+    REPRO
+  end
+
+  def test_status
+    with_tmpchdir do
+      s = run_in_child("exit 1")
+      assert_equal("#<Process::Status: pid #{ s.pid } exit #{ s.exitstatus }>", s.inspect)
+
+      assert_equal(s, s)
+      assert_equal(s, s.to_i)
+
+      assert_equal(s.to_i & 0x55555555, s & 0x55555555)
+      assert_equal(s.to_i >> 1, s >> 1)
+      assert_equal(false, s.stopped?)
+      assert_equal(nil, s.stopsig)
+
+      assert_equal(s, Marshal.load(Marshal.dump(s)))
+    end
+  end
+
+  def test_status_kill
+    return unless Process.respond_to?(:kill)
+    return unless Signal.list.include?("KILL")
+
+    # assume the system supports signal if SIGQUIT is available
+    expected = Signal.list.include?("QUIT") ? [false, true, false, nil] : [true, false, false, true]
+
+    with_tmpchdir do
+      write_file("foo", "Process.kill(:KILL, $$); exit(42)")
+      system(RUBY, "foo")
+      s = $?
+      assert_equal(expected,
+                   [s.exited?, s.signaled?, s.stopped?, s.success?],
+                   "[s.exited?, s.signaled?, s.stopped?, s.success?]")
+
+      assert_equal(s, Marshal.load(Marshal.dump(s)))
+    end
+  end
+
+  def test_status_quit
+    return unless Process.respond_to?(:kill)
+    return unless Signal.list.include?("QUIT")
+
+    with_tmpchdir do
+      s = assert_in_out_err([], "Signal.trap(:QUIT,'DEFAULT'); Process.kill(:SIGQUIT, $$);sleep 30", //, //, rlimit_core: 0)
+      assert_equal([false, true, false, nil],
+                   [s.exited?, s.signaled?, s.stopped?, s.success?],
+                   "[s.exited?, s.signaled?, s.stopped?, s.success?]")
+      assert_equal("#<Process::Status: pid #{ s.pid } SIGQUIT (signal #{ s.termsig })>",
+                   s.inspect.sub(/ \(core dumped\)(?=>\z)/, ''))
+
+      assert_equal(s, Marshal.load(Marshal.dump(s)))
+    end
+  end
+
+  def test_status_fail
+    ret = Process::Status.wait($$)
+    assert_instance_of(Process::Status, ret)
+    assert_equal(-1, ret.pid)
+  end
+
+
+  def test_status_wait
+    IO.popen([RUBY, "-e", "gets"], "w") do |io|
+      pid = io.pid
+      assert_nil(Process::Status.wait(pid, Process::WNOHANG))
+      io.puts
+      ret = Process::Status.wait(pid)
+      assert_instance_of(Process::Status, ret)
+      assert_equal(pid, ret.pid)
+      assert_predicate(ret, :exited?)
+    end
+  end
+
+  def test_wait_without_arg
+    with_tmpchdir do
+      write_file("foo", "sleep 0.1")
+      pid = spawn(RUBY, "foo")
+      assert_equal(pid, Process.wait)
+    end
+  end
+
+  def test_wait2
+    with_tmpchdir do
+      write_file("foo", "sleep 0.1")
+      pid = spawn(RUBY, "foo")
+      assert_equal([pid, 0], Process.wait2)
+    end
+  end
+
+  def test_waitall
+    with_tmpchdir do
+      write_file("foo", "sleep 0.1")
+      ps = (0...3).map { spawn(RUBY, "foo") }.sort
+      ss = Process.waitall.sort
+      ps.zip(ss) do |p1, (p2, s)|
+        assert_equal(p1, p2)
+        assert_equal(p1, s.pid)
+      end
+    end
+  end
+
+  def test_wait_exception
+    bug11340 = '[ruby-dev:49176] [Bug #11340]'
+    t0 = t1 = nil
+    sec = 3
+    code = "puts;STDOUT.flush;Thread.start{gets;exit};sleep(#{sec})"
+    IO.popen([RUBY, '-e', code], 'r+') do |f|
+      pid = f.pid
+      f.gets
+      t0 = Time.now
+      th = Thread.start(Thread.current) do |main|
+        Thread.pass until main.stop?
+        main.raise Interrupt
+      end
+      begin
+        assert_raise(Interrupt) {Process.wait(pid)}
+      ensure
+        th.kill.join
+      end
+      t1 = Time.now
+      diff = t1 - t0
+      assert_operator(diff, :<, sec,
+                  ->{"#{bug11340}: #{diff} seconds to interrupt Process.wait"})
+      f.puts
+    end
+  end
+
+  def test_abort
+    with_tmpchdir do
+      s = run_in_child("abort")
+      assert_not_predicate(s, :success?)
+      write_file("test-script", "#{<<~"begin;"}\n#{<<~'end;'}")
+      begin;
+        STDERR.reopen(STDOUT)
+        begin
+          raise "[Bug #16424]"
+        rescue
+          abort
+        end
+      end;
+      assert_include(IO.popen([RUBY, "test-script"], &:read), "[Bug #16424]")
+    end
+  end
+
+  def test_sleep
+    assert_raise(ArgumentError) { sleep(1, 1) }
+    [-1, -1.0, -1r].each do |sec|
+      assert_raise_with_message(ArgumentError, /not.*negative/) { sleep(sec) }
+    end
+  end
+
+  def test_getpgid
+    assert_kind_of(Integer, Process.getpgid(Process.ppid))
+  rescue NotImplementedError
+  end
+
+  def test_getpriority
+    assert_kind_of(Integer, Process.getpriority(Process::PRIO_PROCESS, $$))
+  rescue NameError, NotImplementedError
+  end
+
+  def test_setpriority
+    if defined? Process::PRIO_USER
+      assert_nothing_raised do
+        pr = Process.getpriority(Process::PRIO_PROCESS, $$)
+        Process.setpriority(Process::PRIO_PROCESS, $$, pr)
+      end
+    end
+  end
+
+  def test_getuid
+    assert_kind_of(Integer, Process.uid)
+  end
+
+  def test_groups
+    gs = Process.groups
+    assert_instance_of(Array, gs)
+    gs.each {|g| assert_kind_of(Integer, g) }
+  rescue NotImplementedError
+  end
+
+  def test_maxgroups
+    max = Process.maxgroups
+  rescue NotImplementedError
+  else
+    assert_kind_of(Integer, max)
+    assert_predicate(max, :positive?)
+    skip "not limited to NGROUPS_MAX" if /darwin/ =~ RUBY_PLATFORM
+    gs = Process.groups
+    assert_operator(gs.size, :<=, max)
+    gs[0] ||= 0
+    assert_raise(ArgumentError) {Process.groups = gs * (max / gs.size + 1)}
+  end
+
+  def test_geteuid
+    assert_kind_of(Integer, Process.euid)
+  end
+
+  def test_seteuid
+    assert_nothing_raised(TypeError) {Process.euid += 0}
+  rescue NotImplementedError
+  end
+
+  def test_seteuid_name
+    user = (Etc.getpwuid(Process.euid).name rescue ENV["USER"]) or return
+    assert_nothing_raised(TypeError) {Process.
