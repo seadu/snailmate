@@ -1180,4 +1180,221 @@ class TestProcess < Test::Unit::TestCase
   end
 
   def test_popen_wordsplit_beginning_and_trailing_spaces
-    wi
+    with_tmpchdir {|d|
+      write_file("script", <<-'End')
+        print "fufumm pid=#{$$} ppid=#{Process.ppid}"
+        exit 7
+      End
+      str = " #{RUBY} script "
+      io = IO.popen(str)
+      pid = io.pid
+      result = io.read
+      io.close
+      status = $?
+      assert_equal(pid, status.pid)
+      assert_predicate(status, :exited?)
+      assert_equal(7, status.exitstatus)
+      assert_equal("fufumm pid=#{status.pid} ppid=#{$$}", result)
+    }
+  end
+
+  def test_exec_wordsplit
+    with_tmpchdir {|d|
+      write_file("script", <<-'End')
+        File.open("result", "w") {|t|
+          if /mswin|bccwin|mingw/ =~ RUBY_PLATFORM
+            t << "hehe ppid=#{Process.ppid}"
+          else
+            t << "hehe pid=#{$$} ppid=#{Process.ppid}"
+          end
+        }
+        exit 6
+      End
+      write_file("s", <<-"End")
+	ruby = #{RUBY.dump}
+	exec "\#{ruby} script"
+      End
+      pid = spawn(RUBY, "s")
+      Process.wait pid
+      status = $?
+      assert_equal(pid, status.pid)
+      assert_predicate(status, :exited?)
+      assert_equal(6, status.exitstatus)
+      if windows?
+        expected = "hehe ppid=#{status.pid}"
+      else
+        expected = "hehe pid=#{status.pid} ppid=#{$$}"
+      end
+      assert_equal(expected, File.read("result"))
+    }
+  end
+
+  def test_system_shell
+    with_tmpchdir {|d|
+      write_file("script1", <<-'End')
+        File.open("result1", "w") {|t| t << "taka pid=#{$$} ppid=#{Process.ppid}" }
+        exit 7
+      End
+      write_file("script2", <<-'End')
+        File.open("result2", "w") {|t| t << "taki pid=#{$$} ppid=#{Process.ppid}" }
+        exit 8
+      End
+      ret = system("#{RUBY} script1 || #{RUBY} script2")
+      status = $?
+      assert_equal(false, ret)
+      assert_predicate(status, :exited?)
+      result1 = File.read("result1")
+      result2 = File.read("result2")
+      assert_match(/\Ataka pid=\d+ ppid=\d+\z/, result1)
+      assert_match(/\Ataki pid=\d+ ppid=\d+\z/, result2)
+      assert_not_equal(result1[/\d+/].to_i, status.pid)
+
+      if windows?
+        Dir.mkdir(path = "path with space")
+        write_file(bat = path + "/bat test.bat", "@echo %1>out")
+        system(bat, "foo 'bar'")
+        assert_equal(%["foo 'bar'"\n], File.read("out"), '[ruby-core:22960]')
+        system(%[#{bat.dump} "foo 'bar'"])
+        assert_equal(%["foo 'bar'"\n], File.read("out"), '[ruby-core:22960]')
+      end
+    }
+  end
+
+  def test_spawn_shell
+    with_tmpchdir {|d|
+      write_file("script1", <<-'End')
+        File.open("result1", "w") {|t| t << "taku pid=#{$$} ppid=#{Process.ppid}" }
+        exit 7
+      End
+      write_file("script2", <<-'End')
+        File.open("result2", "w") {|t| t << "take pid=#{$$} ppid=#{Process.ppid}" }
+        exit 8
+      End
+      pid = spawn("#{RUBY} script1 || #{RUBY} script2")
+      Process.wait pid
+      status = $?
+      assert_predicate(status, :exited?)
+      assert_not_predicate(status, :success?)
+      result1 = File.read("result1")
+      result2 = File.read("result2")
+      assert_match(/\Ataku pid=\d+ ppid=\d+\z/, result1)
+      assert_match(/\Atake pid=\d+ ppid=\d+\z/, result2)
+      assert_not_equal(result1[/\d+/].to_i, status.pid)
+
+      if windows?
+        Dir.mkdir(path = "path with space")
+        write_file(bat = path + "/bat test.bat", "@echo %1>out")
+        pid = spawn(bat, "foo 'bar'")
+        Process.wait pid
+        status = $?
+        assert_predicate(status, :exited?)
+        assert_predicate(status, :success?)
+        assert_equal(%["foo 'bar'"\n], File.read("out"), '[ruby-core:22960]')
+        pid = spawn(%[#{bat.dump} "foo 'bar'"])
+        Process.wait pid
+        status = $?
+        assert_predicate(status, :exited?)
+        assert_predicate(status, :success?)
+        assert_equal(%["foo 'bar'"\n], File.read("out"), '[ruby-core:22960]')
+      end
+    }
+  end
+
+  def test_popen_shell
+    with_tmpchdir {|d|
+      write_file("script1", <<-'End')
+        puts "tako pid=#{$$} ppid=#{Process.ppid}"
+        exit 7
+      End
+      write_file("script2", <<-'End')
+        puts "tika pid=#{$$} ppid=#{Process.ppid}"
+        exit 8
+      End
+      io = IO.popen("#{RUBY} script1 || #{RUBY} script2")
+      result = io.read
+      io.close
+      status = $?
+      assert_predicate(status, :exited?)
+      assert_not_predicate(status, :success?)
+      assert_match(/\Atako pid=\d+ ppid=\d+\ntika pid=\d+ ppid=\d+\n\z/, result)
+      assert_not_equal(result[/\d+/].to_i, status.pid)
+
+      if windows?
+        Dir.mkdir(path = "path with space")
+        write_file(bat = path + "/bat test.bat", "@echo %1")
+        r = IO.popen([bat, "foo 'bar'"]) {|f| f.read}
+        assert_equal(%["foo 'bar'"\n], r, '[ruby-core:22960]')
+        r = IO.popen(%[#{bat.dump} "foo 'bar'"]) {|f| f.read}
+        assert_equal(%["foo 'bar'"\n], r, '[ruby-core:22960]')
+      end
+    }
+  end
+
+  def test_exec_shell
+    with_tmpchdir {|d|
+      write_file("script1", <<-'End')
+        File.open("result1", "w") {|t| t << "tiki pid=#{$$} ppid=#{Process.ppid}" }
+        exit 7
+      End
+      write_file("script2", <<-'End')
+        File.open("result2", "w") {|t| t << "tiku pid=#{$$} ppid=#{Process.ppid}" }
+        exit 8
+      End
+      write_file("s", <<-"End")
+	ruby = #{RUBY.dump}
+	exec("\#{ruby} script1 || \#{ruby} script2")
+      End
+      pid = spawn RUBY, "s"
+      Process.wait pid
+      status = $?
+      assert_predicate(status, :exited?)
+      assert_not_predicate(status, :success?)
+      result1 = File.read("result1")
+      result2 = File.read("result2")
+      assert_match(/\Atiki pid=\d+ ppid=\d+\z/, result1)
+      assert_match(/\Atiku pid=\d+ ppid=\d+\z/, result2)
+      assert_not_equal(result1[/\d+/].to_i, status.pid)
+    }
+  end
+
+  def test_argv0
+    with_tmpchdir {|d|
+      assert_equal(false, system([RUBY, "asdfg"], "-e", "exit false"))
+      assert_equal(true, system([RUBY, "zxcvb"], "-e", "exit true"))
+
+      Process.wait spawn([RUBY, "poiu"], "-e", "exit 4")
+      assert_equal(4, $?.exitstatus)
+
+      assert_equal("1", IO.popen([[RUBY, "qwerty"], "-e", "print 1"]) {|f| f.read })
+
+      write_file("s", <<-"End")
+        exec([#{RUBY.dump}, "lkjh"], "-e", "exit 5")
+      End
+      pid = spawn RUBY, "s"
+      Process.wait pid
+      assert_equal(5, $?.exitstatus)
+    }
+  end
+
+  def with_stdin(filename)
+    open(filename) {|f|
+      begin
+        old = STDIN.dup
+        begin
+          STDIN.reopen(filename)
+          yield
+        ensure
+          STDIN.reopen(old)
+        end
+      ensure
+        old.close
+      end
+    }
+  end
+
+  def test_argv0_noarg
+    with_tmpchdir {|d|
+      open("t", "w") {|f| f.print "exit true" }
+      open("f", "w") {|f| f.print "exit false" }
+
+      with_stdin("
