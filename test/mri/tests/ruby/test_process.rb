@@ -1628,4 +1628,225 @@ class TestProcess < Test::Unit::TestCase
 
   def test_seteuid_name
     user = (Etc.getpwuid(Process.euid).name rescue ENV["USER"]) or return
-    assert_nothing_raised(TypeError) {Process.
+    assert_nothing_raised(TypeError) {Process.euid = user}
+  rescue NotImplementedError
+  end
+
+  def test_getegid
+    assert_kind_of(Integer, Process.egid)
+  end
+
+  def test_setegid
+    skip "root can use Process.egid on Android platform" if RUBY_PLATFORM =~ /android/
+    assert_nothing_raised(TypeError) {Process.egid += 0}
+  rescue NotImplementedError
+  end
+
+  if Process::UID.respond_to?(:from_name)
+    def test_uid_from_name
+      if u = Etc.getpwuid(Process.uid)
+        assert_equal(Process.uid, Process::UID.from_name(u.name), u.name)
+      end
+      assert_raise_with_message(ArgumentError, /\u{4e0d 5b58 5728}/) {
+        Process::UID.from_name("\u{4e0d 5b58 5728}")
+      }
+    end
+  end
+
+  if Process::GID.respond_to?(:from_name) && !RUBY_PLATFORM.include?("android")
+    def test_gid_from_name
+      if g = Etc.getgrgid(Process.gid)
+        assert_equal(Process.gid, Process::GID.from_name(g.name), g.name)
+      end
+      expected_excs = [ArgumentError]
+      expected_excs << Errno::ENOENT if defined?(Errno::ENOENT)
+      expected_excs << Errno::ESRCH if defined?(Errno::ESRCH) # WSL 2 actually raises Errno::ESRCH
+      expected_excs << Errno::EBADF if defined?(Errno::EBADF)
+      expected_excs << Errno::EPERM if defined?(Errno::EPERM)
+      exc = assert_raise(*expected_excs) do
+        Process::GID.from_name("\u{4e0d 5b58 5728}") # fu son zai ("absent" in Kanji)
+      end
+      assert_match(/\u{4e0d 5b58 5728}/, exc.message) if exc.is_a?(ArgumentError)
+    end
+  end
+
+  def test_uid_re_exchangeable_p
+    r = Process::UID.re_exchangeable?
+    assert_include([true, false], r)
+  end
+
+  def test_gid_re_exchangeable_p
+    r = Process::GID.re_exchangeable?
+    assert_include([true, false], r)
+  end
+
+  def test_uid_sid_available?
+    r = Process::UID.sid_available?
+    assert_include([true, false], r)
+  end
+
+  def test_gid_sid_available?
+    r = Process::GID.sid_available?
+    assert_include([true, false], r)
+  end
+
+  def test_pst_inspect
+    assert_nothing_raised { Process::Status.allocate.inspect }
+  end
+
+  def test_wait_and_sigchild
+    if /freebsd|openbsd/ =~ RUBY_PLATFORM
+      # this relates #4173
+      # When ruby can use 2 cores, signal and wait4 may miss the signal.
+      skip "this fails on FreeBSD and OpenBSD on multithreaded environment"
+    end
+    signal_received = []
+    IO.pipe do |sig_r, sig_w|
+      Signal.trap(:CHLD) do
+        signal_received << true
+        sig_w.write('?')
+      end
+      pid = nil
+      IO.pipe do |r, w|
+        pid = fork { r.read(1); exit }
+        Thread.start {
+          Thread.current.report_on_exception = false
+          raise
+        }
+        w.puts
+      end
+      Process.wait pid
+      assert_send [sig_r, :wait_readable, 5], 'self-pipe not readable'
+    end
+    if defined?(RubyVM::MJIT) && RubyVM::MJIT.enabled? # checking -DMJIT_FORCE_ENABLE. It may trigger extra SIGCHLD.
+      assert_equal [true], signal_received.uniq, "[ruby-core:19744]"
+    else
+      assert_equal [true], signal_received, "[ruby-core:19744]"
+    end
+  rescue NotImplementedError, ArgumentError
+  ensure
+    begin
+      Signal.trap(:CHLD, 'DEFAULT')
+    rescue ArgumentError
+    end
+  end
+
+  def test_no_curdir
+    if /solaris/i =~ RUBY_PLATFORM
+      skip "Temporary skip to avoid CI failures after commit to use realpath on required files"
+    end
+    with_tmpchdir {|d|
+      Dir.mkdir("vd")
+      status = nil
+      Dir.chdir("vd") {
+        dir = "#{d}/vd"
+        # OpenSolaris cannot remove the current directory.
+        system(RUBY, "--disable-gems", "-e", "Dir.chdir '..'; Dir.rmdir #{dir.dump}", err: File::NULL)
+        system({"RUBYLIB"=>nil}, RUBY, "--disable-gems", "-e", "exit true")
+        status = $?
+      }
+      assert_predicate(status, :success?, "[ruby-dev:38105]")
+    }
+  end
+
+  def test_fallback_to_sh
+    feature = '[ruby-core:32745]'
+    with_tmpchdir do |d|
+      open("tmp_script.#{$$}", "w") {|f| f.puts ": ;"; f.chmod(0755)}
+      assert_not_nil(pid = Process.spawn("./tmp_script.#{$$}"), feature)
+      wpid, st = Process.waitpid2(pid)
+      assert_equal([pid, true], [wpid, st.success?], feature)
+
+      open("tmp_script.#{$$}", "w") {|f| f.puts "echo $#: $@"; f.chmod(0755)}
+      result = IO.popen(["./tmp_script.#{$$}", "a b", "c"]) {|f| f.read}
+      assert_equal("2: a b c\n", result, feature)
+
+      open("tmp_script.#{$$}", "w") {|f| f.puts "echo $hghg"; f.chmod(0755)}
+      result = IO.popen([{"hghg" => "mogomogo"}, "./tmp_script.#{$$}", "a b", "c"]) {|f| f.read}
+      assert_equal("mogomogo\n", result, feature)
+
+    end
+  end if File.executable?("/bin/sh")
+
+  def test_spawn_too_long_path
+    bug4314 = '[ruby-core:34842]'
+    assert_fail_too_long_path(%w"echo", bug4314)
+  end
+
+  def test_aspawn_too_long_path
+    if /solaris/i =~ RUBY_PLATFORM && !defined?(Process::RLIMIT_NPROC)
+      skip "Too exhaustive test on platforms without Process::RLIMIT_NPROC such as Solaris 10"
+    end
+    bug4315 = '[ruby-core:34833] #7904 [ruby-core:52628] #11613'
+    assert_fail_too_long_path(%w"echo |", bug4315)
+  end
+
+  def assert_fail_too_long_path((cmd, sep), mesg)
+    sep ||= ""
+    min = 1_000 / (cmd.size + sep.size)
+    cmds = Array.new(min, cmd)
+    exs = [Errno::ENOENT]
+    exs << Errno::EINVAL if windows?
+    exs << Errno::E2BIG if defined?(Errno::E2BIG)
+    opts = {[STDOUT, STDERR]=>File::NULL}
+    opts[:rlimit_nproc] = 128 if defined?(Process::RLIMIT_NPROC)
+    EnvUtil.suppress_warning do
+      assert_raise(*exs, mesg) do
+        begin
+          loop do
+            Process.spawn(cmds.join(sep), opts)
+            min = [cmds.size, min].max
+            cmds *= 100
+          end
+        rescue NoMemoryError
+          size = cmds.size
+          raise if min >= size - 1
+          min = [min, size /= 2].max
+          cmds[size..-1] = []
+          raise if size < 250
+          retry
+        end
+      end
+    end
+  end
+
+  def test_system_sigpipe
+    return if windows?
+
+    pid = 0
+
+    with_tmpchdir do
+      assert_nothing_raised('[ruby-dev:12261]') do
+        EnvUtil.timeout(3) do
+          pid = spawn('yes | ls')
+          Process.waitpid pid
+        end
+      end
+    end
+  ensure
+    Process.kill(:KILL, pid) if (pid != 0) rescue false
+  end
+
+  if Process.respond_to?(:daemon)
+    def test_daemon_default
+      data = IO.popen("-", "r+") do |f|
+        break f.read if f
+        Process.daemon
+        puts "ng"
+      end
+      assert_equal("", data)
+    end
+
+    def test_daemon_noclose
+      data = IO.popen("-", "r+") do |f|
+        break f.read if f
+        Process.daemon(false, true)
+        puts "ok", Dir.pwd
+      end
+      assert_equal("ok\n/\n", data)
+    end
+
+    def test_daemon_nochdir_noclose
+      data = IO.popen("-", "r+") do |f|
+        break f.read if f
+        Process.dae
