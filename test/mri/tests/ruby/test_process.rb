@@ -1849,4 +1849,225 @@ class TestProcess < Test::Unit::TestCase
     def test_daemon_nochdir_noclose
       data = IO.popen("-", "r+") do |f|
         break f.read if f
-        Process.dae
+        Process.daemon(true, true)
+        puts "ok", Dir.pwd
+      end
+      assert_equal("ok\n#{Dir.pwd}\n", data)
+    end
+
+    def test_daemon_readwrite
+      data = IO.popen("-", "r+") do |f|
+        if f
+          f.puts "ok?"
+          break f.read
+        end
+        Process.daemon(true, true)
+        puts STDIN.gets
+      end
+      assert_equal("ok?\n", data)
+    end
+
+    def test_daemon_pid
+      cpid, dpid = IO.popen("-", "r+") do |f|
+        break f.pid, Integer(f.read) if f
+        Process.daemon(false, true)
+        puts $$
+      end
+      assert_not_equal(cpid, dpid)
+    end
+
+    if File.directory?("/proc/self/task") && /netbsd[a-z]*[1-6]/ !~ RUBY_PLATFORM
+      def test_daemon_no_threads
+        pid, data = IO.popen("-", "r+") do |f|
+          break f.pid, f.readlines if f
+          Process.daemon(true, true)
+          puts Dir.entries("/proc/self/task") - %W[. ..]
+        end
+        bug4920 = '[ruby-dev:43873]'
+        assert_include(1..2, data.size, bug4920)
+        assert_not_include(data.map(&:to_i), pid)
+      end
+    else # darwin
+      def test_daemon_no_threads
+        data = EnvUtil.timeout(3) do
+          IO.popen("-") do |f|
+            break f.readlines.map(&:chomp) if f
+            th = Thread.start {sleep 3}
+            Process.daemon(true, true)
+            puts Thread.list.size, th.status.inspect
+          end
+        end
+        assert_equal(["1", "false"], data)
+      end
+    end
+  end
+
+  def test_popen_cloexec
+    return unless defined? Fcntl::FD_CLOEXEC
+    IO.popen([RUBY, "-e", ""]) {|io|
+      assert_predicate(io, :close_on_exec?)
+    }
+  end
+
+  def test_popen_exit
+    bug11510 = '[ruby-core:70671] [Bug #11510]'
+    pid = nil
+    opt = {timeout: 10, stdout_filter: ->(s) {pid = s}}
+    if windows?
+      opt[:new_pgroup] = true
+    else
+      opt[:pgroup] = true
+    end
+    assert_ruby_status(["-", RUBY], <<-'end;', bug11510, **opt)
+      RUBY = ARGV[0]
+      th = Thread.start {
+        Thread.current.abort_on_exception = true
+        IO.popen([RUBY, "-esleep 15", err: [:child, :out]]) {|f|
+          STDOUT.puts f.pid
+          STDOUT.flush
+          sleep(2)
+        }
+      }
+      sleep(0.001) until th.stop?
+    end;
+    assert_match(/\A\d+\Z/, pid)
+  ensure
+    if pid
+      pid = pid.to_i
+      [:TERM, :KILL].each {|sig| Process.kill(sig, pid) rescue break}
+    end
+  end
+
+  def test_popen_reopen
+    assert_separately([], "#{<<~"begin;"}\n#{<<~'end;'}")
+    begin;
+      io = File.open(IO::NULL)
+      io2 = io.dup
+      IO.popen("echo") {|f| io.reopen(f)}
+      io.reopen(io2)
+    end;
+  end
+
+  def test_execopts_new_pgroup
+    return unless windows?
+
+    assert_nothing_raised { system(*TRUECOMMAND, :new_pgroup=>true) }
+    assert_nothing_raised { system(*TRUECOMMAND, :new_pgroup=>false) }
+    assert_nothing_raised { spawn(*TRUECOMMAND, :new_pgroup=>true) }
+    assert_nothing_raised { IO.popen([*TRUECOMMAND, :new_pgroup=>true]) {} }
+  end
+
+  def test_execopts_uid
+    skip "root can use uid option of Kernel#system on Android platform" if RUBY_PLATFORM =~ /android/
+    feature6975 = '[ruby-core:47414]'
+
+    [30000, [Process.uid, ENV["USER"]]].each do |uid, user|
+      if user
+        assert_nothing_raised(feature6975) do
+          begin
+            system(*TRUECOMMAND, uid: user, exception: true)
+          rescue Errno::EPERM, Errno::EACCES, NotImplementedError
+          end
+        end
+      end
+
+      assert_nothing_raised(feature6975) do
+        begin
+          system(*TRUECOMMAND, uid: uid, exception: true)
+        rescue Errno::EPERM, Errno::EACCES, NotImplementedError
+        end
+      end
+
+      assert_nothing_raised(feature6975) do
+        begin
+          u = IO.popen([RUBY, "-e", "print Process.uid", uid: user||uid], &:read)
+          assert_equal(uid.to_s, u, feature6975)
+        rescue Errno::EPERM, Errno::EACCES, NotImplementedError
+        end
+      end
+    end
+  end
+
+  def test_execopts_gid
+    skip "Process.groups not implemented on Windows platform" if windows?
+    skip "root can use Process.groups on Android platform" if RUBY_PLATFORM =~ /android/
+    feature6975 = '[ruby-core:47414]'
+
+    groups = Process.groups.map do |g|
+      g = Etc.getgrgid(g) rescue next
+      [g.name, g.gid]
+    end
+    groups.compact!
+    [30000, *groups].each do |group, gid|
+      assert_nothing_raised(feature6975) do
+        begin
+          system(*TRUECOMMAND, gid: group)
+        rescue Errno::EPERM, NotImplementedError
+        end
+      end
+
+      gid = "#{gid || group}"
+      assert_nothing_raised(feature6975) do
+        begin
+          g = IO.popen([RUBY, "-e", "print Process.gid", gid: group], &:read)
+          # AIX allows a non-root process to setgid to its supplementary group,
+          # while other UNIXes do not. (This might be AIX's violation of the POSIX standard.)
+          # However, Ruby does not allow a setgid'ed Ruby process to use the -e option.
+          # As a result, the Ruby process invoked by "IO.popen([RUBY, "-e", ..." above fails
+          # with a message like "no -e allowed while running setgid (SecurityError)" to stderr,
+          # the exis status is set to 1, and the variable "g" is set to an empty string.
+          # To conclude, on AIX, if the "gid" variable is a supplementary group,
+          # the assert_equal next can fail, so skip it.
+          assert_equal(gid, g, feature6975) unless $?.exitstatus == 1 && /aix/ =~ RUBY_PLATFORM && gid != Process.gid
+        rescue Errno::EPERM, NotImplementedError
+        end
+      end
+    end
+  end
+
+  def test_sigpipe
+    system(RUBY, "-e", "")
+    with_pipe {|r, w|
+      r.close
+      assert_raise(Errno::EPIPE) { w.print "a" }
+    }
+  end
+
+  def test_sh_comment
+    IO.popen("echo a # fofoof") {|f|
+      assert_equal("a\n", f.read)
+    }
+  end if File.executable?("/bin/sh")
+
+  def test_sh_env
+    IO.popen("foofoo=barbar env") {|f|
+      lines = f.readlines
+      assert_operator(lines, :include?, "foofoo=barbar\n")
+    }
+  end if File.executable?("/bin/sh")
+
+  def test_sh_exec
+    IO.popen("exec echo exexexec") {|f|
+      assert_equal("exexexec\n", f.read)
+    }
+  end if File.executable?("/bin/sh")
+
+  def test_setsid
+    return unless Process.respond_to?(:setsid)
+    return unless Process.respond_to?(:getsid)
+    # OpenBSD and AIX don't allow Process::getsid(pid) when pid is in
+    # different session.
+    return if /openbsd|aix/ =~ RUBY_PLATFORM
+
+    IO.popen([RUBY, "-e", <<EOS]) do|io|
+	Marshal.dump(Process.getsid, STDOUT)
+	newsid = Process.setsid
+	Marshal.dump(newsid, STDOUT)
+	STDOUT.flush
+	# getsid() on MacOS X return ESRCH when target process is zombie
+	# even if it is valid process id.
+	sleep
+EOS
+      begin
+        # test Process.getsid() w/o arg
+        assert_
