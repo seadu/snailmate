@@ -2070,4 +2070,221 @@ class TestProcess < Test::Unit::TestCase
 EOS
       begin
         # test Process.getsid() w/o arg
-        assert_
+        assert_equal(Marshal.load(io), Process.getsid)
+
+        # test Process.setsid return value and Process::getsid(pid)
+        assert_equal(Marshal.load(io), Process.getsid(io.pid))
+      ensure
+        Process.kill(:KILL, io.pid) rescue nil
+        Process.wait(io.pid)
+      end
+    end
+  end
+
+  def test_spawn_nonascii
+    bug1771 = '[ruby-core:24309] [Bug #1771]'
+
+    with_tmpchdir do
+      [
+       "\u{7d05 7389}",
+       "zuf\u{00E4}llige_\u{017E}lu\u{0165}ou\u{010D}k\u{00FD}_\u{10D2 10D0 10DB 10D4 10DD 10E0 10D4 10D1}_\u{0440 0430 0437 043B 043E 0433 0430}_\u{548C 65B0 52A0 5761 4EE5 53CA 4E1C}",
+       "c\u{1EE7}a",
+      ].each do |name|
+        msg = "#{bug1771} #{name}"
+        exename = "./#{name}.exe"
+        FileUtils.cp(ENV["COMSPEC"], exename)
+        assert_equal(true, system("#{exename} /c exit"), msg)
+        system("#{exename} /c exit 12")
+        assert_equal(12, $?.exitstatus, msg)
+        _, status = Process.wait2(Process.spawn("#{exename} /c exit 42"))
+        assert_equal(42, status.exitstatus, msg)
+        assert_equal("ok\n", `#{exename} /c echo ok`, msg)
+        assert_equal("ok\n", IO.popen("#{exename} /c echo ok", &:read), msg)
+        assert_equal("ok\n", IO.popen(%W"#{exename} /c echo ok", &:read), msg)
+        File.binwrite("#{name}.txt", "ok")
+        assert_equal("ok", `type #{name}.txt`)
+      end
+    end
+  end if windows?
+
+  def test_exec_nonascii
+    bug12841 = '[ruby-dev:49838] [Bug #12841]'
+
+    [
+      "\u{7d05 7389}",
+      "zuf\u{00E4}llige_\u{017E}lu\u{0165}ou\u{010D}k\u{00FD}_\u{10D2 10D0 10DB 10D4 10DD 10E0 10D4 10D1}_\u{0440 0430 0437 043B 043E 0433 0430}_\u{548C 65B0 52A0 5761 4EE5 53CA 4E1C}",
+      "c\u{1EE7}a",
+    ].each do |arg|
+      begin
+        arg = arg.encode(Encoding.find("locale"))
+      rescue
+      else
+        assert_in_out_err([], "#{<<-"begin;"}\n#{<<-"end;"}", [arg], [], bug12841)
+        begin;
+          arg = "#{arg.b}".force_encoding("#{arg.encoding.name}")
+          exec(ENV["COMSPEC"]||"cmd.exe", "/c", "echo", arg)
+        end;
+      end
+    end
+  end if windows?
+
+  def test_clock_gettime
+    t1 = Process.clock_gettime(Process::CLOCK_REALTIME, :nanosecond)
+    t2 = Time.now; t2 = t2.tv_sec * 1000000000 + t2.tv_nsec
+    t3 = Process.clock_gettime(Process::CLOCK_REALTIME, :nanosecond)
+    assert_operator(t1, :<=, t2)
+    assert_operator(t2, :<=, t3)
+    assert_raise(Errno::EINVAL) { Process.clock_gettime(:foo) }
+  end
+
+  def test_clock_gettime_unit
+    t0 = Time.now.to_f
+    [
+      [:nanosecond,  1_000_000_000],
+      [:microsecond, 1_000_000],
+      [:millisecond, 1_000],
+      [:second, 1],
+      [:float_microsecond, 1_000_000.0],
+      [:float_millisecond, 1_000.0],
+      [:float_second, 1.0],
+      [nil, 1.0],
+      [:foo],
+    ].each do |unit, num|
+      unless num
+        assert_raise(ArgumentError){ Process.clock_gettime(Process::CLOCK_REALTIME, unit) }
+        next
+      end
+      t1 = Process.clock_gettime(Process::CLOCK_REALTIME, unit)
+      assert_kind_of num.integer? ? Integer : num.class, t1, [unit, num].inspect
+      assert_in_delta t0, t1/num, 1, [unit, num].inspect
+    end
+  end
+
+  def test_clock_gettime_constants
+    Process.constants.grep(/\ACLOCK_/).each {|n|
+      c = Process.const_get(n)
+      begin
+        t = Process.clock_gettime(c)
+      rescue Errno::EINVAL
+        next
+      end
+      assert_kind_of(Float, t, "Process.clock_gettime(Process::#{n})")
+    }
+  end
+
+  def test_clock_gettime_GETTIMEOFDAY_BASED_CLOCK_REALTIME
+    n = :GETTIMEOFDAY_BASED_CLOCK_REALTIME
+    begin
+      t = Process.clock_gettime(n)
+    rescue Errno::EINVAL
+      return
+    end
+    assert_kind_of(Float, t, "Process.clock_gettime(:#{n})")
+  end
+
+  def test_clock_gettime_TIME_BASED_CLOCK_REALTIME
+    n = :TIME_BASED_CLOCK_REALTIME
+    t = Process.clock_gettime(n)
+    assert_kind_of(Float, t, "Process.clock_gettime(:#{n})")
+  end
+
+  def test_clock_gettime_TIMES_BASED_CLOCK_MONOTONIC
+    n = :TIMES_BASED_CLOCK_MONOTONIC
+    begin
+      t = Process.clock_gettime(n)
+    rescue Errno::EINVAL
+      return
+    end
+    assert_kind_of(Float, t, "Process.clock_gettime(:#{n})")
+  end
+
+  def test_clock_gettime_GETRUSAGE_BASED_CLOCK_PROCESS_CPUTIME_ID
+    n = :GETRUSAGE_BASED_CLOCK_PROCESS_CPUTIME_ID
+    begin
+      t = Process.clock_gettime(n)
+    rescue Errno::EINVAL
+      return
+    end
+    assert_kind_of(Float, t, "Process.clock_gettime(:#{n})")
+  end
+
+  def test_clock_gettime_TIMES_BASED_CLOCK_PROCESS_CPUTIME_ID
+    n = :TIMES_BASED_CLOCK_PROCESS_CPUTIME_ID
+    begin
+      t = Process.clock_gettime(n)
+    rescue Errno::EINVAL
+      return
+    end
+    assert_kind_of(Float, t, "Process.clock_gettime(:#{n})")
+  end
+
+  def test_clock_gettime_CLOCK_BASED_CLOCK_PROCESS_CPUTIME_ID
+    n = :CLOCK_BASED_CLOCK_PROCESS_CPUTIME_ID
+    t = Process.clock_gettime(n)
+    assert_kind_of(Float, t, "Process.clock_gettime(:#{n})")
+  end
+
+  def test_clock_gettime_MACH_ABSOLUTE_TIME_BASED_CLOCK_MONOTONIC
+    n = :MACH_ABSOLUTE_TIME_BASED_CLOCK_MONOTONIC
+    begin
+      t = Process.clock_gettime(n)
+    rescue Errno::EINVAL
+      return
+    end
+    assert_kind_of(Float, t, "Process.clock_gettime(:#{n})")
+  end
+
+  def test_clock_getres
+    r = Process.clock_getres(Process::CLOCK_REALTIME, :nanosecond)
+  rescue Errno::EINVAL
+  else
+    assert_kind_of(Integer, r)
+    assert_raise(Errno::EINVAL) { Process.clock_getres(:foo) }
+  end
+
+  def test_clock_getres_constants
+    Process.constants.grep(/\ACLOCK_/).each {|n|
+      c = Process.const_get(n)
+      begin
+        t = Process.clock_getres(c)
+      rescue Errno::EINVAL
+        next
+      end
+      assert_kind_of(Float, t, "Process.clock_getres(Process::#{n})")
+    }
+  end
+
+  def test_clock_getres_GETTIMEOFDAY_BASED_CLOCK_REALTIME
+    n = :GETTIMEOFDAY_BASED_CLOCK_REALTIME
+    begin
+      t = Process.clock_getres(n)
+    rescue Errno::EINVAL
+      return
+    end
+    assert_kind_of(Float, t, "Process.clock_getres(:#{n})")
+    assert_equal(1000, Process.clock_getres(n, :nanosecond))
+  end
+
+  def test_clock_getres_TIME_BASED_CLOCK_REALTIME
+    n = :TIME_BASED_CLOCK_REALTIME
+    t = Process.clock_getres(n)
+    assert_kind_of(Float, t, "Process.clock_getres(:#{n})")
+    assert_equal(1000000000, Process.clock_getres(n, :nanosecond))
+  end
+
+  def test_clock_getres_TIMES_BASED_CLOCK_MONOTONIC
+    n = :TIMES_BASED_CLOCK_MONOTONIC
+    begin
+      t = Process.clock_getres(n)
+    rescue Errno::EINVAL
+      return
+    end
+    assert_kind_of(Float, t, "Process.clock_getres(:#{n})")
+    f = Process.clock_getres(n, :hertz)
+    assert_equal(0, f - f.floor)
+  end
+
+  def test_clock_getres_GETRUSAGE_BASED_CLOCK_PROCESS_CPUTIME_ID
+    n = :GETRUSAGE_BASED_CLOCK_PROCESS_CPUTIME_ID
+    begin
+      t = Process.clock_getres(n)
