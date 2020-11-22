@@ -2288,3 +2288,257 @@ EOS
     n = :GETRUSAGE_BASED_CLOCK_PROCESS_CPUTIME_ID
     begin
       t = Process.clock_getres(n)
+    rescue Errno::EINVAL
+      return
+    end
+    assert_kind_of(Float, t, "Process.clock_getres(:#{n})")
+    assert_equal(1000, Process.clock_getres(n, :nanosecond))
+  end
+
+  def test_clock_getres_TIMES_BASED_CLOCK_PROCESS_CPUTIME_ID
+    n = :TIMES_BASED_CLOCK_PROCESS_CPUTIME_ID
+    begin
+      t = Process.clock_getres(n)
+    rescue Errno::EINVAL
+      return
+    end
+    assert_kind_of(Float, t, "Process.clock_getres(:#{n})")
+    f = Process.clock_getres(n, :hertz)
+    assert_equal(0, f - f.floor)
+  end
+
+  def test_clock_getres_CLOCK_BASED_CLOCK_PROCESS_CPUTIME_ID
+    n = :CLOCK_BASED_CLOCK_PROCESS_CPUTIME_ID
+    t = Process.clock_getres(n)
+    assert_kind_of(Float, t, "Process.clock_getres(:#{n})")
+    f = Process.clock_getres(n, :hertz)
+    assert_equal(0, f - f.floor)
+  end
+
+  def test_clock_getres_MACH_ABSOLUTE_TIME_BASED_CLOCK_MONOTONIC
+    n = :MACH_ABSOLUTE_TIME_BASED_CLOCK_MONOTONIC
+    begin
+      t = Process.clock_getres(n)
+    rescue Errno::EINVAL
+      return
+    end
+    assert_kind_of(Float, t, "Process.clock_getres(:#{n})")
+  end
+
+  def test_deadlock_by_signal_at_forking
+    assert_separately(%W(--disable=gems - #{RUBY}), <<-INPUT, timeout: 100)
+      ruby = ARGV.shift
+      GC.start # reduce garbage
+      GC.disable # avoid triggering CoW after forks
+      trap(:QUIT) {}
+      parent = $$
+      100.times do |i|
+        pid = fork {Process.kill(:QUIT, parent)}
+        IO.popen([ruby, -'--disable=gems'], -'r+'){}
+        Process.wait(pid)
+      end
+    INPUT
+  end if defined?(fork)
+
+  def test_process_detach
+    pid = fork {}
+    th = Process.detach(pid)
+    assert_equal pid, th.pid
+    status = th.value
+    assert_predicate status, :success?
+  end if defined?(fork)
+
+  def test_kill_at_spawn_failure
+    bug11166 = '[ruby-core:69304] [Bug #11166]'
+    th = nil
+    x = with_tmpchdir {|d|
+      prog = "#{d}/notexist"
+      q = Thread::Queue.new
+      th = Thread.start {system(prog);q.push(nil);sleep}
+      q.pop
+      th.kill
+      th.join(0.1)
+    }
+    assert_equal(th, x, bug11166)
+  end if defined?(fork)
+
+  def test_exec_fd_3_redirect
+    # ensure we can redirect anything to fd=3 in a child process.
+    # fd=3 is a commonly reserved FD for the timer thread pipe in the
+    # parent, but fd=3 is the first FD used by the sd_listen_fds function
+    # for systemd
+    assert_separately(['-', RUBY], <<-INPUT, timeout: 60)
+      ruby = ARGV.shift
+      begin
+        a = IO.pipe
+        b = IO.pipe
+        pid = fork do
+          exec ruby, '-e', 'print IO.for_fd(3).read(1)', 3 => a[0], 1 => b[1]
+        end
+        b[1].close
+        a[0].close
+        a[1].write('.')
+        assert_equal ".", b[0].read(1)
+      ensure
+        Process.wait(pid) if pid
+        a.each(&:close) if a
+        b.each(&:close) if b
+      end
+    INPUT
+  end if defined?(fork)
+
+  def test_exec_close_reserved_fd
+    cmd = ".#{File::ALT_SEPARATOR || File::SEPARATOR}bug11353"
+    with_tmpchdir {
+      (3..6).each do |i|
+        ret = run_in_child(<<-INPUT)
+          begin
+            $VERBOSE = nil
+            Process.exec('#{cmd}', 'dummy', #{i} => :close)
+          rescue SystemCallError
+          end
+        INPUT
+        assert_equal(0, ret)
+      end
+    }
+  end
+
+  def test_signals_work_after_exec_fail
+    r, w = IO.pipe
+    pid = status = nil
+    EnvUtil.timeout(30) do
+      pid = fork do
+        r.close
+        begin
+          trap(:USR1) { w.syswrite("USR1\n"); exit 0 }
+          exec "/path/to/non/existent/#$$/#{rand}.ex"
+        rescue SystemCallError
+          w.syswrite("exec failed\n")
+        end
+        sleep
+        exit 1
+      end
+      w.close
+      assert_equal "exec failed\n", r.gets
+      Process.kill(:USR1, pid)
+      assert_equal "USR1\n", r.gets
+      assert_nil r.gets
+      _, status = Process.waitpid2(pid)
+    end
+    assert_predicate status, :success?
+  rescue Timeout::Error
+    begin
+      Process.kill(:KILL, pid)
+    rescue Errno::ESRCH
+    end
+    raise
+  ensure
+    w.close if w
+    r.close if r
+  end if defined?(fork)
+
+  def test_threading_works_after_exec_fail
+    r, w = IO.pipe
+    pid = status = nil
+    EnvUtil.timeout(90) do
+      pid = fork do
+        r.close
+        begin
+          exec "/path/to/non/existent/#$$/#{rand}.ex"
+        rescue SystemCallError
+          w.syswrite("exec failed\n")
+        end
+        q = Thread::Queue.new
+        th1 = Thread.new { i = 0; i += 1 while q.empty?; i }
+        th2 = Thread.new { j = 0; j += 1 while q.empty? && Thread.pass.nil?; j }
+        sleep 0.5
+        q << true
+        w.syswrite "#{th1.value} #{th2.value}\n"
+      end
+      w.close
+      assert_equal "exec failed\n", r.gets
+      vals = r.gets.split.map!(&:to_i)
+      assert_operator vals[0], :>, vals[1], vals.inspect
+      _, status = Process.waitpid2(pid)
+    end
+    assert_predicate status, :success?
+  rescue Timeout::Error
+    begin
+      Process.kill(:KILL, pid)
+    rescue Errno::ESRCH
+    end
+    raise
+  ensure
+    w.close if w
+    r.close if r
+  end if defined?(fork)
+
+  def test_rescue_exec_fail
+    assert_separately([], "#{<<~"begin;"}\n#{<<~'end;'}")
+    begin;
+      assert_raise(Errno::ENOENT) do
+        exec("", in: "")
+      end
+    end;
+  end
+
+  def test_many_args
+    bug11418 = '[ruby-core:70251] [Bug #11418]'
+    assert_in_out_err([], <<-"end;", ["x"]*256, [], bug11418, timeout: 60)
+      bin = "#{EnvUtil.rubybin}"
+      args = Array.new(256) {"x"}
+      GC.stress = true
+      system(bin, "--disable=gems", "-w", "-e", "puts ARGV", *args)
+    end;
+  end
+
+  def test_to_hash_on_arguments
+    all_assertions do |a|
+      %w[Array String].each do |type|
+        a.for(type) do
+          assert_separately(['-', EnvUtil.rubybin], <<~"END;")
+          class #{type}
+            def to_hash
+              raise "[Bug-12355]: #{type}#to_hash is called"
+            end
+          end
+          ex = ARGV[0]
+          assert_equal(true, system([ex, ex], "-e", ""))
+          END;
+        end
+      end
+    end
+  end
+
+  def test_forked_child_handles_signal
+    skip "fork not supported" unless Process.respond_to?(:fork)
+    assert_normal_exit(<<-"end;", '[ruby-core:82883] [Bug #13916]')
+      require 'timeout'
+      pid = fork { sleep }
+      Process.kill(:TERM, pid)
+      assert_equal pid, Timeout.timeout(30) { Process.wait(pid) }
+    end;
+  end
+
+  if Process.respond_to?(:initgroups)
+    def test_initgroups
+      assert_raise(ArgumentError) do
+        Process.initgroups("\0", 0)
+      end
+    end
+  end
+
+  def test_last_status
+    Process.wait spawn(RUBY, "-e", "exit 13")
+    assert_same(Process.last_status, $?)
+  end
+
+  def test_last_status_failure
+    assert_nil system("sad")
+    assert_not_predicate $?, :success?
+    assert_equal $?.exitstatus, 127
+  end
+
+  def test_exec_failure_leaves_no_child
+    assert_raise(Errno::ENOENT) do
+      spawn('inexisten
