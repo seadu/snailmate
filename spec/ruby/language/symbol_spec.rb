@@ -59,4 +59,48 @@ describe "A Symbol literal" do
     a, b = :'foo bar', %s{foo bar}
     b.should be_kind_of(Symbol)
     b.inspect.should == ':"foo bar"'
- 
+    b.should == a
+  end
+
+  it "is the same object when created from identical strings" do
+    var = "@@var"
+    [ [:symbol, :symbol],
+      [:'a string', :'a string'],
+      [:"#{var}", :"#{var}"]
+    ].each { |a, b|
+      a.should equal(b)
+    }
+  end
+
+  it "can contain null in the string" do
+    eval(':"\0" ').inspect.should == ':"\\x00"'
+  end
+
+  it "can be an empty string" do
+    c = :''
+    c.should be_kind_of(Symbol)
+    c.inspect.should == ':""'
+  end
+
+  it "can be :!, :!=, or :!~" do
+    %w{'!', '!=', '!~'}.each do |sym|
+      sym.to_sym.to_s.should == sym
+    end
+  end
+
+  it "can be created from list syntax %i{a b c} without interpolation" do
+    %i{a b #{c}}.should == [:a, :b, :"\#{c}"]
+  end
+
+  it "can be created from list syntax %I{a b c} with interpolation" do
+    %I{a b #{"c"}}.should == [:a, :b, :c]
+  end
+
+  it "raises an EncodingError at parse time when Symbol with invalid bytes" do
+    ScratchPad.record []
+    -> {
+      eval 'ScratchPad << 1; :"\xC3"'
+    }.should raise_error(EncodingError, 'invalid symbol in encoding UTF-8 :"\xC3"')
+    ScratchPad.recorded.should == []
+  end
+end
