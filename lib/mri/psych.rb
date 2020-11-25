@@ -238,4 +238,163 @@ module Psych
   ###
   # Load +yaml+ in to a Ruby data structure.  If multiple documents are
   # provided, the object contained in the first document will be returned.
-  # +filename+ will 
+  # +filename+ will be used in the exception message if any exception
+  # is raised while parsing.  If +yaml+ is empty, it returns
+  # the specified +fallback+ return value, which defaults to +false+.
+  #
+  # Raises a Psych::SyntaxError when a YAML syntax error is detected.
+  #
+  # Example:
+  #
+  #   Psych.unsafe_load("--- a")             # => 'a'
+  #   Psych.unsafe_load("---\n - a\n - b")   # => ['a', 'b']
+  #
+  #   begin
+  #     Psych.unsafe_load("--- `", filename: "file.txt")
+  #   rescue Psych::SyntaxError => ex
+  #     ex.file    # => 'file.txt'
+  #     ex.message # => "(file.txt): found character that cannot start any token"
+  #   end
+  #
+  # When the optional +symbolize_names+ keyword argument is set to a
+  # true value, returns symbols for keys in Hash objects (default: strings).
+  #
+  #   Psych.unsafe_load("---\n foo: bar")                         # => {"foo"=>"bar"}
+  #   Psych.unsafe_load("---\n foo: bar", symbolize_names: true)  # => {:foo=>"bar"}
+  #
+  # Raises a TypeError when `yaml` parameter is NilClass
+  #
+  # NOTE: This method *should not* be used to parse untrusted documents, such as
+  # YAML documents that are supplied via user input.  Instead, please use the
+  # load method or the safe_load method.
+  #
+  def self.unsafe_load yaml, filename: nil, fallback: false, symbolize_names: false, freeze: false, strict_integer: false
+    result = parse(yaml, filename: filename)
+    return fallback unless result
+    result.to_ruby(symbolize_names: symbolize_names, freeze: freeze, strict_integer: strict_integer)
+  end
+
+  ###
+  # Safely load the yaml string in +yaml+.  By default, only the following
+  # classes are allowed to be deserialized:
+  #
+  # * TrueClass
+  # * FalseClass
+  # * NilClass
+  # * Integer
+  # * Float
+  # * String
+  # * Array
+  # * Hash
+  #
+  # Recursive data structures are not allowed by default.  Arbitrary classes
+  # can be allowed by adding those classes to the +permitted_classes+ keyword argument.  They are
+  # additive.  For example, to allow Date deserialization:
+  #
+  #   Psych.safe_load(yaml, permitted_classes: [Date])
+  #
+  # Now the Date class can be loaded in addition to the classes listed above.
+  #
+  # Aliases can be explicitly allowed by changing the +aliases+ keyword argument.
+  # For example:
+  #
+  #   x = []
+  #   x << x
+  #   yaml = Psych.dump x
+  #   Psych.safe_load yaml               # => raises an exception
+  #   Psych.safe_load yaml, aliases: true # => loads the aliases
+  #
+  # A Psych::DisallowedClass exception will be raised if the yaml contains a
+  # class that isn't in the +permitted_classes+ list.
+  #
+  # A Psych::BadAlias exception will be raised if the yaml contains aliases
+  # but the +aliases+ keyword argument is set to false.
+  #
+  # +filename+ will be used in the exception message if any exception is raised
+  # while parsing.
+  #
+  # When the optional +symbolize_names+ keyword argument is set to a
+  # true value, returns symbols for keys in Hash objects (default: strings).
+  #
+  #   Psych.safe_load("---\n foo: bar")                         # => {"foo"=>"bar"}
+  #   Psych.safe_load("---\n foo: bar", symbolize_names: true)  # => {:foo=>"bar"}
+  #
+  def self.safe_load yaml, permitted_classes: [], permitted_symbols: [], aliases: false, filename: nil, fallback: nil, symbolize_names: false, freeze: false, strict_integer: false
+    result = parse(yaml, filename: filename)
+    return fallback unless result
+
+    class_loader = ClassLoader::Restricted.new(permitted_classes.map(&:to_s),
+                                               permitted_symbols.map(&:to_s))
+    scanner      = ScalarScanner.new class_loader, strict_integer: strict_integer
+    visitor = if aliases
+                Visitors::ToRuby.new scanner, class_loader, symbolize_names: symbolize_names, freeze: freeze
+              else
+                Visitors::NoAliasRuby.new scanner, class_loader, symbolize_names: symbolize_names, freeze: freeze
+              end
+    result = visitor.accept result
+    result
+  end
+
+  ###
+  # Load +yaml+ in to a Ruby data structure.  If multiple documents are
+  # provided, the object contained in the first document will be returned.
+  # +filename+ will be used in the exception message if any exception
+  # is raised while parsing.  If +yaml+ is empty, it returns
+  # the specified +fallback+ return value, which defaults to +false+.
+  #
+  # Raises a Psych::SyntaxError when a YAML syntax error is detected.
+  #
+  # Example:
+  #
+  #   Psych.load("--- a")             # => 'a'
+  #   Psych.load("---\n - a\n - b")   # => ['a', 'b']
+  #
+  #   begin
+  #     Psych.load("--- `", filename: "file.txt")
+  #   rescue Psych::SyntaxError => ex
+  #     ex.file    # => 'file.txt'
+  #     ex.message # => "(file.txt): found character that cannot start any token"
+  #   end
+  #
+  # When the optional +symbolize_names+ keyword argument is set to a
+  # true value, returns symbols for keys in Hash objects (default: strings).
+  #
+  #   Psych.load("---\n foo: bar")                         # => {"foo"=>"bar"}
+  #   Psych.load("---\n foo: bar", symbolize_names: true)  # => {:foo=>"bar"}
+  #
+  # Raises a TypeError when `yaml` parameter is NilClass.  This method is
+  # similar to `safe_load` except that `Symbol` objects are allowed by default.
+  #
+  def self.load yaml, permitted_classes: [Symbol], permitted_symbols: [], aliases: false, filename: nil, fallback: nil, symbolize_names: false, freeze: false, strict_integer: false
+    safe_load yaml, permitted_classes: permitted_classes,
+                    permitted_symbols: permitted_symbols,
+                    aliases: aliases,
+                    filename: filename,
+                    fallback: fallback,
+                    symbolize_names: symbolize_names,
+                    freeze: freeze,
+                    strict_integer: strict_integer
+  end
+
+  ###
+  # Parse a YAML string in +yaml+.  Returns the Psych::Nodes::Document.
+  # +filename+ is used in the exception message if a Psych::SyntaxError is
+  # raised.
+  #
+  # Raises a Psych::SyntaxError when a YAML syntax error is detected.
+  #
+  # Example:
+  #
+  #   Psych.parse("---\n - a\n - b") # => #<Psych::Nodes::Document:0x00>
+  #
+  #   begin
+  #     Psych.parse("--- `", filename: "file.txt")
+  #   rescue Psych::SyntaxError => ex
+  #     ex.file    # => 'file.txt'
+  #     ex.message # => "(file.txt): found character that cannot start any token"
+  #   end
+  #
+  # See Psych::Nodes for more information about YAML AST.
+  def self.parse yaml, filename: nil
+    parse_stream(yaml, filename: filename) do |node|
+      return n
