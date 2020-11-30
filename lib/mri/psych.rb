@@ -604,4 +604,138 @@ module Psych
   # Dump Ruby +object+ to a JSON string.
   def self.to_json object
     visitor = Psych::Visitors::JSONTree.create
-    visitor << objec
+    visitor << object
+    visitor.tree.yaml
+  end
+
+  ###
+  # Load multiple documents given in +yaml+.  Returns the parsed documents
+  # as a list.  If a block is given, each document will be converted to Ruby
+  # and passed to the block during parsing
+  #
+  # Example:
+  #
+  #   Psych.load_stream("--- foo\n...\n--- bar\n...") # => ['foo', 'bar']
+  #
+  #   list = []
+  #   Psych.load_stream("--- foo\n...\n--- bar\n...") do |ruby|
+  #     list << ruby
+  #   end
+  #   list # => ['foo', 'bar']
+  #
+  def self.load_stream yaml, filename: nil, fallback: [], **kwargs
+    result = if block_given?
+               parse_stream(yaml, filename: filename) do |node|
+                 yield node.to_ruby(**kwargs)
+               end
+             else
+               parse_stream(yaml, filename: filename).children.map { |node| node.to_ruby(**kwargs) }
+             end
+
+    return fallback if result.is_a?(Array) && result.empty?
+    result
+  end
+
+  ###
+  # Load the document contained in +filename+.  Returns the yaml contained in
+  # +filename+ as a Ruby object, or if the file is empty, it returns
+  # the specified +fallback+ return value, which defaults to +false+.
+  #
+  # NOTE: This method *should not* be used to parse untrusted documents, such as
+  # YAML documents that are supplied via user input.  Instead, please use the
+  # safe_load_file method.
+  def self.unsafe_load_file filename, **kwargs
+    File.open(filename, 'r:bom|utf-8') { |f|
+      self.unsafe_load f, filename: filename, **kwargs
+    }
+  end
+
+  ###
+  # Safely loads the document contained in +filename+.  Returns the yaml contained in
+  # +filename+ as a Ruby object, or if the file is empty, it returns
+  # the specified +fallback+ return value, which defaults to +false+.
+  # See safe_load for options.
+  def self.safe_load_file filename, **kwargs
+    File.open(filename, 'r:bom|utf-8') { |f|
+      self.safe_load f, filename: filename, **kwargs
+    }
+  end
+
+  ###
+  # Loads the document contained in +filename+.  Returns the yaml contained in
+  # +filename+ as a Ruby object, or if the file is empty, it returns
+  # the specified +fallback+ return value, which defaults to +false+.
+  # See load for options.
+  def self.load_file filename, **kwargs
+    File.open(filename, 'r:bom|utf-8') { |f|
+      self.load f, filename: filename, **kwargs
+    }
+  end
+
+  # :stopdoc:
+  def self.add_domain_type domain, type_tag, &block
+    key = ['tag', domain, type_tag].join ':'
+    domain_types[key] = [key, block]
+    domain_types["tag:#{type_tag}"] = [key, block]
+  end
+
+  def self.add_builtin_type type_tag, &block
+    domain = 'yaml.org,2002'
+    key = ['tag', domain, type_tag].join ':'
+    domain_types[key] = [key, block]
+  end
+
+  def self.remove_type type_tag
+    domain_types.delete type_tag
+  end
+
+  def self.add_tag tag, klass
+    load_tags[tag] = klass.name
+    dump_tags[klass] = tag
+  end
+
+  # Workaround for emulating `warn '...', uplevel: 1` in Ruby 2.4 or lower.
+  def self.warn_with_uplevel(message, uplevel: 1)
+    at = parse_caller(caller[uplevel]).join(':')
+    warn "#{at}: #{message}"
+  end
+
+  def self.parse_caller(at)
+    if /^(.+?):(\d+)(?::in `.*')?/ =~ at
+      file = $1
+      line = $2.to_i
+      [file, line]
+    end
+  end
+  private_class_method :warn_with_uplevel, :parse_caller
+
+  class << self
+    if defined?(Ractor)
+      require 'forwardable'
+      extend Forwardable
+
+      class Config
+        attr_accessor :load_tags, :dump_tags, :domain_types
+        def initialize
+          @load_tags = {}
+          @dump_tags = {}
+          @domain_types = {}
+        end
+      end
+
+      def config
+        Ractor.current[:PsychConfig] ||= Config.new
+      end
+
+      def_delegators :config, :load_tags, :dump_tags, :domain_types, :load_tags=, :dump_tags=, :domain_types=
+    else
+      attr_accessor :load_tags
+      attr_accessor :dump_tags
+      attr_accessor :domain_types
+    end
+  end
+  self.load_tags = {}
+  self.dump_tags = {}
+  self.domain_types = {}
+  # :startdoc:
+end
