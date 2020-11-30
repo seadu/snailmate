@@ -51,4 +51,11 @@ public abstract class SystemExitNodes {
     public abstract static class StatusSetNode extends PrimitiveArrayArgumentsNode {
 
         @Specialization
-        protected Object setSt
+        protected Object setStatus(RubySystemExit error, int exitStatus) {
+            error.exitStatus = exitStatus;
+            return exitStatus;
+        }
+
+    }
+
+}
