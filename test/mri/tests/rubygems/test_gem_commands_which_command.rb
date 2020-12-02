@@ -65,3 +65,21 @@ class TestGemCommandsWhichCommand < Gem::TestCase
     end
 
     assert_equal "", @ui.output
+    assert_match %r{Can.t find Ruby library file or shared library missinglib\n},
+                 @ui.error
+  end
+
+  def util_foo_bar
+    files = %w[lib/foo_bar.rb lib/directory/baz.rb Rakefile]
+    @foo_bar = util_spec "foo_bar" do |gem|
+      gem.files = files
+    end
+    install_specs @foo_bar
+
+    files.each do |file|
+      filename = File.join(@foo_bar.full_gem_path, file)
+      FileUtils.mkdir_p File.dirname filename
+      FileUtils.touch filename
+    end
+  end
+end
