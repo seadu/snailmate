@@ -11,4 +11,43 @@ package org.truffleruby.core.format.control;
 
 import org.truffleruby.core.format.FormatNode;
 
-import com.oracle.truffl
+import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.LoopNode;
+import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.nodes.RepeatingNode;
+
+public class StarNode extends FormatNode {
+
+    @Child private LoopNode loopNode;
+
+    public StarNode(FormatNode child) {
+        loopNode = Truffle.getRuntime().createLoopNode(new StarRepeatingNode(child));
+    }
+
+    @Override
+    public Object execute(VirtualFrame frame) {
+        loopNode.execute(frame);
+        return null;
+    }
+
+    private class StarRepeatingNode extends Node implements RepeatingNode {
+
+        @Child private FormatNode child;
+
+        public StarRepeatingNode(FormatNode child) {
+            this.child = child;
+        }
+
+        @Override
+        public boolean executeRepeating(VirtualFrame frame) {
+            if (getSourcePosition(frame) >= getSourceEnd(frame)) {
+                return false;
+            }
+
+            child.execute(frame);
+            return true;
+        }
+    }
+
+}
