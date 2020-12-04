@@ -1,0 +1,11 @@
+exclude :test_OR, "needs investigation"
+exclude :test_ary_new, "needs investigation"
+exclude :test_aset_error, "needs investigation"
+exclude :test_big_array_literal_with_kwsplat, "needs investigation"
+exclude :test_bsearch_typechecks_return_values, "needs investigation"
+exclude :test_combination_clear, "hangs"
+exclude :test_count, "needs investigation"
+exclude :test_initialize, "needs investigation"
+exclude :test_insert, "needs investigation"
+exclude :test_join2, "needs investigation"
+exclude :test_permutation_stack_error, "ne
