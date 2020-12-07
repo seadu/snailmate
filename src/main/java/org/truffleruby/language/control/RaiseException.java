@@ -29,4 +29,31 @@ public final class RaiseException extends AbstractTruffleException {
     }
 
     public RaiseException(RubyContext context, RubyException exception, Throwable cause) {
-        super(null, cause, UNLIMITED_ST
+        super(null, cause, UNLIMITED_STACK_TRACE, exception.getLocation());
+        this.exception = exception;
+
+        final Backtrace backtrace = exception.backtrace;
+        if (backtrace != null) { // The backtrace could be null if for example a user backtrace was passed to Kernel#raise
+            backtrace.setRaiseException(this);
+        }
+
+        if (context.getOptions().BACKTRACE_ON_RAISE) {
+            context.getDefaultBacktraceFormatter().printRubyExceptionOnEnvStderr("raise: ", this);
+        }
+    }
+
+    public RaiseException(RaiseException copy, RubyException exception) {
+        super(copy);
+        this.exception = exception;
+    }
+
+    public RubyException getException() {
+        return exception;
+    }
+
+    @Override
+    public String getMessage() {
+        return ExceptionOperations.messageFieldToString(exception);
+    }
+
+}
