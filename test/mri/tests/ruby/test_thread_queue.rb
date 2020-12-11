@@ -448,4 +448,206 @@ class TestThreadQueue < Test::Unit::TestCase
   def test_deny_pushers
     [->{Thread::Queue.new}, ->{Thread::SizedQueue.new 3}].each do |qcreate|
       q = qcreate[]
- 
+      synq = Thread::Queue.new
+      prod_threads = 20.times.map do |i|
+        Thread.new {
+          synq.pop
+          assert_raise(ClosedQueueError) {
+            q << i
+          }
+        }
+      end
+      q.close
+      synq.close # start producer threads
+
+      prod_threads.each(&:join)
+    end
+  end
+
+  # size should account for waiting pushers during shutdown
+  def sized_queue_size_close
+    q = Thread::SizedQueue.new 4
+    4.times{|i| q << i}
+    Thread.new{ q << 5 }
+    Thread.new{ q << 6 }
+    assert_equal 4, q.size
+    assert_equal 4, q.items
+    q.close
+    assert_equal 6, q.size
+    assert_equal 4, q.items
+  end
+
+  def test_blocked_pushers_empty
+    q = Thread::SizedQueue.new 3
+    prod_threads = 6.times.map do |i|
+      Thread.new{
+        Thread.current.report_on_exception = false
+        q << i
+      }
+    end
+
+    # this ensures that all producer threads call push before close
+    sleep 0.01 while prod_threads.select{|t| t.status == 'sleep'}.count < 3
+    q.close
+
+    ary = []
+    until q.empty?
+      ary << q.pop
+    end
+    assert_equal 0, q.size
+
+    assert_equal 3, ary.size
+    ary.each{|e| assert [0,1,2,3,4,5].include?(e)}
+    assert_nil q.pop
+
+    prod_threads.each{|t|
+      begin
+        t.join
+      rescue
+      end
+    }
+  end
+
+  # test thread wakeup on one-element SizedQueue with close
+  def test_one_element_sized_queue
+    q = Thread::SizedQueue.new 1
+    t = Thread.new{ q.pop }
+    q.close
+    assert_nil t.value
+  end
+
+  def test_close_twice
+    [->{Thread::Queue.new}, ->{Thread::SizedQueue.new 3}].each do |qcreate|
+      q = qcreate[]
+      q.close
+      assert_nothing_raised(ClosedQueueError){q.close}
+    end
+  end
+
+  def test_queue_close_multi_multi
+    q = Thread::SizedQueue.new rand(800..1200)
+
+    count_items = rand(3000..5000)
+    count_producers = rand(10..20)
+
+    producers = count_producers.times.map do
+      Thread.new do
+        sleep(rand / 100)
+        count_items.times{|i| q << [i,"#{i} for #{Thread.current.inspect}"]}
+      end
+    end
+
+    consumers = rand(7..12).times.map do
+      Thread.new do
+        count = 0
+        while e = q.pop
+          i, st = e
+          count += 1 if i.is_a?(Integer) && st.is_a?(String)
+        end
+        count
+      end
+    end
+
+    # No dead or finished threads, give up to 10 seconds to start running
+    t = Time.now
+    Thread.pass until Time.now - t > 10 || (consumers + producers).all?{|thr| thr.status =~ /\A(?:run|sleep)\z/}
+
+    assert (consumers + producers).all?{|thr| thr.status =~ /\A(?:run|sleep)\z/}, 'no threads running'
+
+    # just exercising the concurrency of the support methods.
+    counter = Thread.new do
+      until q.closed? && q.empty?
+        raise if q.size > q.max
+        # otherwise this exercise causes too much contention on the lock
+        sleep 0.01
+      end
+    end
+
+    producers.each &:join
+    q.close
+
+    # results not randomly distributed. Not sure why.
+    # consumers.map{|thr| thr.value}.each do |x|
+    #   assert_not_equal 0, x
+    # end
+
+    all_items_count = consumers.map{|thr| thr.value}.inject(:+)
+    assert_equal count_items * count_producers, all_items_count
+
+    # don't leak this thread
+    assert_nothing_raised{counter.join}
+  end
+
+  def test_queue_with_trap
+    if ENV['APPVEYOR'] == 'True' && RUBY_PLATFORM.match?(/mswin/)
+      skip 'This test fails too often on AppVeyor vs140'
+    end
+    if RUBY_PLATFORM.match?(/mingw/)
+      skip 'This test fails too often on MinGW'
+    end
+
+    assert_in_out_err([], <<-INPUT, %w(INT INT exit), [])
+      q = Thread::Queue.new
+      trap(:INT){
+        q.push 'INT'
+      }
+      Thread.new{
+        loop{
+          Process.kill :INT, $$
+          sleep 0.1
+        }
+      }
+      puts q.pop
+      puts q.pop
+      puts 'exit'
+    INPUT
+  end
+
+  def test_fork_while_queue_waiting
+    q = Thread::Queue.new
+    sq = Thread::SizedQueue.new(1)
+    thq = Thread.new { q.pop }
+    thsq = Thread.new { sq.pop }
+    Thread.pass until thq.stop? && thsq.stop?
+
+    pid = fork do
+      exit!(1) if q.num_waiting != 0
+      exit!(2) if sq.num_waiting != 0
+      exit!(6) unless q.empty?
+      exit!(7) unless sq.empty?
+      q.push :child_q
+      sq.push :child_sq
+      exit!(3) if q.pop != :child_q
+      exit!(4) if sq.pop != :child_sq
+      exit!(0)
+    end
+    _, s = Process.waitpid2(pid)
+    assert_predicate s, :success?, 'no segfault [ruby-core:86316] [Bug #14634]'
+
+    q.push :thq
+    sq.push :thsq
+    assert_equal :thq, thq.value
+    assert_equal :thsq, thsq.value
+
+    sq.push(1)
+    th = Thread.new { q.pop; sq.pop }
+    thsq = Thread.new { sq.push(2) }
+    Thread.pass until th.stop? && thsq.stop?
+    pid = fork do
+      exit!(1) if q.num_waiting != 0
+      exit!(2) if sq.num_waiting != 0
+      exit!(3) unless q.empty?
+      exit!(4) if sq.empty?
+      exit!(5) if sq.pop != 1
+      exit!(0)
+    end
+    _, s = Process.waitpid2(pid)
+    assert_predicate s, :success?, 'no segfault [ruby-core:86316] [Bug #14634]'
+
+    assert_predicate thsq, :stop?
+    assert_equal 1, sq.pop
+    assert_same sq, thsq.value
+    q.push('restart th')
+    assert_equal 2, th.value
+  end if Process.respond_to?(:fork)
+end
