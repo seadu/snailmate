@@ -3139,3 +3139,1211 @@ RUBY
   end
 
   def test_parse_statements_while_begin
+    util_parser <<-RUBY
+class A
+  def a
+    while begin a; b end
+    end
+  end
+
+  def b
+  end
+end
+    RUBY
+
+    @parser.parse_statements @top_level
+
+    c_a = @top_level.classes.first
+    assert_equal 'A', c_a.full_name
+
+    assert_equal 1, @top_level.classes.length
+
+    m_a = c_a.method_list.first
+    m_b = c_a.method_list.last
+
+    assert_equal 'A#a', m_a.full_name
+    assert_equal 'A#b', m_b.full_name
+  end
+
+
+  def test_parse_symbol_in_paren_arg
+    util_parser <<RUBY
+class Foo
+  def blah
+  end
+  private(:blah)
+end
+RUBY
+
+    @parser.scan
+
+    foo = @top_level.classes.first
+    assert_equal 'Foo', foo.full_name
+
+    blah = foo.method_list.first
+    assert_equal :private, blah.visibility
+  end
+
+  def test_parse_symbol_in_arg
+    util_parser '[:blah, "blah", "#{blah}", blah]'
+    @parser.get_tk # skip '['
+
+    assert_equal 'blah', @parser.parse_symbol_in_arg
+    @parser.get_tk # skip ','
+
+    @parser.skip_tkspace
+
+    assert_equal 'blah', @parser.parse_symbol_in_arg
+    @parser.get_tk # skip ','
+
+    @parser.skip_tkspace
+
+    assert_nil @parser.parse_symbol_in_arg
+    @parser.get_tk # skip ','
+
+    @parser.skip_tkspace
+
+    assert_nil @parser.parse_symbol_in_arg
+  end
+
+  def test_parse_statements_alias_method
+    content = <<-CONTENT
+class A
+  alias_method :a, :[] unless c
+end
+
+B = A
+
+class C
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.parse_statements @top_level
+
+    # HACK where are the assertions?
+  end
+
+  def test_parse_top_level_statements_enddoc
+    util_parser <<-CONTENT
+# :enddoc:
+    CONTENT
+
+    assert_throws :eof do
+      @parser.parse_top_level_statements @top_level
+    end
+  end
+
+  def test_parse_top_level_statements_stopdoc
+    @top_level.stop_doc
+    content = "# this is the top-level comment"
+
+    util_parser content
+
+    @parser.parse_top_level_statements @top_level
+
+    assert_empty @top_level.comment
+  end
+
+  def test_parse_top_level_statements_stopdoc_integration
+    content = <<-CONTENT
+# :stopdoc:
+
+class Example
+  def method_name
+  end
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.parse_top_level_statements @top_level
+
+    assert_equal 1, @top_level.classes.length
+    assert_empty @top_level.modules
+
+    assert @top_level.find_module_named('Example').ignored?
+  end
+
+  # This tests parse_comment
+  def test_parse_top_level_statements_constant_nodoc_integration
+    content = <<-CONTENT
+class A
+  C = A # :nodoc:
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.parse_top_level_statements @top_level
+
+    klass = @top_level.find_module_named('A')
+
+    c = klass.constants.first
+
+    assert_nil c.document_self, 'C should not be documented'
+  end
+
+  def test_parse_yield_in_braces_with_parens
+    klass = RDoc::NormalClass.new 'Foo'
+    klass.parent = @top_level
+
+    util_parser "def foo\nn.times { |i| yield nth(i) }\nend"
+
+    tk = @parser.get_tk
+
+    @parser.parse_method klass, RDoc::Parser::Ruby::NORMAL, tk, @comment
+
+    foo = klass.method_list.first
+    assert_equal 'nth(i)', foo.block_params
+  end
+
+  def test_read_directive
+    parser = util_parser '# :category: test'
+
+    directive, value = parser.read_directive %w[category]
+
+    assert_equal 'category', directive
+    assert_equal 'test', value
+
+    assert_nil parser.get_tk
+  end
+
+  def test_read_directive_allow
+    parser = util_parser '# :category: test'
+
+    directive = parser.read_directive []
+
+    assert_nil directive
+
+    assert_nil parser.get_tk
+  end
+
+  def test_read_directive_empty
+    parser = util_parser '# test'
+
+    directive = parser.read_directive %w[category]
+
+    assert_nil directive
+
+    assert_nil parser.get_tk
+  end
+
+  def test_read_directive_no_comment
+    parser = util_parser ''
+
+    directive = parser.read_directive %w[category]
+
+    assert_nil directive
+
+    assert_nil parser.get_tk
+  end
+
+  def test_read_directive_one_liner
+    parser = util_parser 'AAA = 1 # :category: test'
+
+    directive, value = parser.read_directive %w[category]
+
+    assert_equal 'category', directive
+    assert_equal 'test', value
+
+    assert_equal :on_const, parser.get_tk[:kind]
+  end
+
+  def test_read_documentation_modifiers
+    c = RDoc::Context.new
+
+    parser = util_parser '# :category: test'
+
+    parser.read_documentation_modifiers c, %w[category]
+
+    assert_equal 'test', c.current_section.title
+  end
+
+  def test_read_documentation_modifiers_notnew
+    m = RDoc::AnyMethod.new nil, 'initialize'
+
+    parser = util_parser '# :notnew: test'
+
+    parser.read_documentation_modifiers m, %w[notnew]
+
+    assert m.dont_rename_initialize
+  end
+
+  def test_read_documentation_modifiers_not_dash_new
+    m = RDoc::AnyMethod.new nil, 'initialize'
+
+    parser = util_parser '# :not-new: test'
+
+    parser.read_documentation_modifiers m, %w[not-new]
+
+    assert m.dont_rename_initialize
+  end
+
+  def test_read_documentation_modifiers_not_new
+    m = RDoc::AnyMethod.new nil, 'initialize'
+
+    parser = util_parser '# :not_new: test'
+
+    parser.read_documentation_modifiers m, %w[not_new]
+
+    assert m.dont_rename_initialize
+  end
+
+  def test_sanity_integer
+    util_parser '1'
+    assert_equal '1', @parser.get_tk[:text]
+
+    util_parser '1.0'
+    assert_equal '1.0', @parser.get_tk[:text]
+  end
+
+  def test_sanity_interpolation
+    last_tk = nil
+    util_parser 'class A; B = "#{c}"; end'
+
+    while tk = @parser.get_tk do last_tk = tk end
+
+    assert_equal 'end', last_tk[:text]
+  end
+
+  # If you're writing code like this you're doing it wrong
+
+  def test_sanity_interpolation_crazy
+    util_parser '"#{"#{"a")}" if b}"'
+
+    assert_equal '"#{"#{"a")}" if b}"', @parser.get_tk[:text]
+    assert_nil @parser.get_tk
+  end
+
+  def test_sanity_interpolation_curly
+    util_parser '%{ #{} }'
+
+    assert_equal '%{ #{} }', @parser.get_tk[:text]
+    assert_nil @parser.get_tk
+  end
+
+  def test_sanity_interpolation_format
+    util_parser '"#{stftime("%m-%d")}"'
+
+    while @parser.get_tk do end
+  end
+
+  def test_sanity_symbol_interpolation
+    util_parser ':"#{bar}="'
+
+    while @parser.get_tk do end
+  end
+
+  def test_scan_cr
+    content = <<-CONTENT
+class C\r
+  def m\r
+    a=\\\r
+      123\r
+  end\r
+end\r
+    CONTENT
+
+    util_parser content
+
+    @parser.scan
+
+    c = @top_level.classes.first
+
+    assert_equal 1, c.method_list.length
+  end
+
+  def test_scan_block_comment
+    content = <<-CONTENT
+=begin rdoc
+Foo comment
+=end
+
+class Foo
+
+=begin
+m comment
+=end
+
+  def m() end
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.scan
+
+    foo = @top_level.classes.first
+
+    assert_equal 'Foo comment', foo.comment.text
+
+    m = foo.method_list.first
+
+    assert_equal 'm comment', m.comment.text
+  end
+
+  def test_scan_block_comment_nested # Issue #41
+    content = <<-CONTENT
+require 'something'
+=begin rdoc
+findmeindoc
+=end
+module Foo
+    class Bar
+    end
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.scan
+
+    foo = @top_level.modules.first
+
+    assert_equal 'Foo', foo.full_name
+    assert_equal 'findmeindoc', foo.comment.text
+
+    bar = foo.classes.first
+
+    assert_equal 'Foo::Bar', bar.full_name
+    assert_equal '', bar.comment.text
+  end
+
+  def test_scan_block_comment_notflush
+  ##
+  #
+  # The previous test assumes that between the =begin/=end blocks that there
+  # is only one line, or minima formatting directives. This test tests for
+  # those who use the =begin block with longer / more advanced formatting
+  # within.
+  #
+  ##
+    content = <<-CONTENT
+=begin rdoc
+
+= DESCRIPTION
+
+This is a simple test class
+
+= RUMPUS
+
+Is a silly word
+
+=end
+class StevenSimpleClass
+  # A band on my iPhone as I wrote this test
+  FRUIT_BATS="Make nice music"
+
+=begin rdoc
+A nice girl
+=end
+
+  def lauren
+    puts "Summoning Lauren!"
+  end
+end
+    CONTENT
+    util_parser content
+
+    @parser.scan
+
+    foo = @top_level.classes.first
+
+    assert_equal "= DESCRIPTION\n\nThis is a simple test class\n\n= RUMPUS\n\nIs a silly word",
+      foo.comment.text
+
+    m = foo.method_list.first
+
+    assert_equal 'A nice girl', m.comment.text
+  end
+
+  def test_scan_class_nested_nodoc
+    content = <<-CONTENT
+class A::B # :nodoc:
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.scan
+
+    visible = @store.all_classes_and_modules.select { |mod| mod.display? }
+
+    assert_empty visible.map { |mod| mod.full_name }
+  end
+
+  def test_scan_constant_in_method
+    content = <<-CONTENT # newline is after M is important
+module M
+  def m
+    A
+    B::C
+  end
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.scan
+
+    m = @top_level.modules.first
+
+    assert_empty m.constants
+
+    assert_empty @store.classes_hash.keys
+    assert_equal %w[M], @store.modules_hash.keys
+  end
+
+  def test_scan_constant_in_rescue
+    content = <<-CONTENT # newline is after M is important
+module M
+  def m
+  rescue A::B
+  rescue A::C => e
+  rescue A::D, A::E
+  rescue A::F,
+         A::G
+  rescue H
+  rescue I => e
+  rescue J, K
+  rescue L =>
+    e
+  rescue M;
+  rescue N,
+         O => e
+  end
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.scan
+
+    m = @top_level.modules.first
+
+    assert_empty m.constants
+
+    assert_empty @store.classes_hash.keys
+    assert_equal %w[M], @store.modules_hash.keys
+  end
+
+  def test_scan_constant_nodoc
+    content = <<-CONTENT # newline is after M is important
+module M
+
+  C = v # :nodoc:
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.scan
+
+    c = @top_level.modules.first.constants.first
+
+    assert c.documented?
+  end
+
+  def test_scan_constant_nodoc_block
+    content = <<-CONTENT # newline is after M is important
+module M
+
+  C = v do # :nodoc:
+  end
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.scan
+
+    c = @top_level.modules.first.constants.first
+
+    assert c.documented?
+  end
+
+  def test_scan_duplicate_module
+    content = <<-CONTENT
+# comment a
+module Foo
+end
+
+# comment b
+module Foo
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.scan
+
+    foo = @top_level.modules.first
+
+    expected = [
+      RDoc::Comment.new('comment a', @top_level),
+      RDoc::Comment.new('comment b', @top_level)
+    ]
+
+    assert_equal expected, foo.comment_location.map { |c, l| c }
+  end
+
+  def test_scan_meta_method_block
+    content = <<-CONTENT
+class C
+
+  ##
+  #  my method
+
+  inline(:my_method) do |*args|
+    "this method used to cause z to disappear"
+  end
+
+  def z
+  end
+    CONTENT
+
+    util_parser content
+
+    @parser.scan
+
+    assert_equal 2, @top_level.classes.first.method_list.length
+  end
+
+  def test_scan_method_semi_method
+    content = <<-CONTENT
+class A
+  def self.m() end; def self.m=() end
+end
+
+class B
+  def self.m() end
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.scan
+
+    a = @store.find_class_named 'A'
+    assert a, 'missing A'
+
+    assert_equal 2, a.method_list.length
+
+    b = @store.find_class_named 'B'
+    assert b, 'missing B'
+
+    assert_equal 1, b.method_list.length
+  end
+
+  def test_scan_markup_override
+    content = <<-CONTENT
+# *awesome*
+class C
+  # :markup: rd
+  # ((*radical*))
+  def m
+  end
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.scan
+
+    c = @top_level.classes.first
+
+    assert_equal 'rdoc', c.comment.format
+
+    assert_equal 'rd', c.method_list.first.comment.format
+  end
+
+  def test_scan_markup_first_comment
+    content = <<-CONTENT
+# :markup: rd
+
+# ((*awesome*))
+class C
+  # ((*radical*))
+  def m
+  end
+end
+    CONTENT
+
+    util_parser content
+
+    @parser.scan
+
+    c = @top_level.classes.first
+
+    assert_equal 'rd', c.comment.format
+
+    assert_equal 'rd', c.method_list.first.comment.format
+  end
+
+  def test_scan_rails_routes
+    util_parser <<-ROUTES_RB
+namespace :api do
+  scope module: :v1 do
+  end
+end
+    ROUTES_RB
+
+    @parser.scan
+
+    assert_empty @top_level.classes
+    assert_empty @top_level.modules
+  end
+
+  def test_scan_tomdoc_meta
+    util_parser <<-RUBY
+# :markup: tomdoc
+
+class C
+
+  # Signature
+  #
+  #   find_by_<field>[_and_<field>...](args)
+  #
+  # field - A field name.
+
+end
+
+    RUBY
+
+    @parser.scan
+
+    c = @top_level.classes.first
+
+    m = c.method_list.first
+
+    assert_equal "find_by_<field>[_and_<field>...]", m.name
+    assert_equal "find_by_<field>[_and_<field>...](args)\n", m.call_seq
+
+    expected =
+      doc(
+        head(3, 'Signature'),
+        list(:NOTE,
+          item(%w[field],
+            para('A field name.'))))
+    expected.file = @top_level
+
+    assert_equal expected, m.comment.parse
+  end
+
+  def test_scan_stopdoc
+    util_parser <<-RUBY
+class C
+  # :stopdoc:
+  class Hidden
+  end
+end
+    RUBY
+
+    @parser.scan
+
+    c = @top_level.classes.first
+
+    hidden = c.classes.first
+
+    refute hidden.document_self
+    assert hidden.ignored?
+  end
+
+  def test_scan_stopdoc_class_alias
+    util_parser <<-RUBY
+# :stopdoc:
+module A
+  B = C
+end
+    RUBY
+
+    @parser.scan
+
+    assert_empty @store.all_classes
+
+    assert_equal 1, @store.all_modules.length
+    m = @store.all_modules.first
+
+    assert m.ignored?
+  end
+
+  def test_scan_stopdoc_nested
+    util_parser <<-RUBY
+# :stopdoc:
+class A::B
+end
+    RUBY
+
+    @parser.scan
+
+    a   = @store.modules_hash['A']
+    a_b = @store.classes_hash['A::B']
+
+    refute a.document_self, 'A is inside stopdoc'
+    assert a.ignored?,      'A is inside stopdoc'
+
+    refute a_b.document_self, 'A::B is inside stopdoc'
+    assert a_b.ignored?,      'A::B is inside stopdoc'
+  end
+
+  def test_scan_struct_self_brackets
+    util_parser <<-RUBY
+class C < M.m
+  def self.[]
+  end
+end
+    RUBY
+
+    @parser.scan
+
+    c = @store.find_class_named 'C'
+    assert_equal %w[C::[]], c.method_list.map { |m| m.full_name }
+  end
+
+  def test_scan_visibility
+    util_parser <<-RUBY
+class C
+   def a() end
+
+   private :a
+
+   class << self
+     def b() end
+     private :b
+   end
+end
+    RUBY
+
+    @parser.scan
+
+    c = @store.find_class_named 'C'
+
+    c_a = c.find_method_named 'a'
+
+    assert_equal :private, c_a.visibility
+    refute c_a.singleton
+
+    c_b = c.find_method_named 'b'
+
+    assert_equal :private, c_b.visibility
+    assert c_b.singleton
+  end
+
+  def test_scan_visibility_count
+    util_parser <<-RUBY
+class C < Original::Base
+  class C2 < Original::Base
+    def m0() end
+    def m1() end
+
+    private
+
+    def m2() end
+    def m3() end
+    def m4() end
+  end
+end
+    RUBY
+
+    @parser.scan
+
+    c = @store.find_class_named 'C::C2'
+
+    private_method_count = c.method_list.count { |m| :private == m.visibility }
+    assert_equal 3, private_method_count
+
+    public_method_count = c.method_list.count { |m| :public == m.visibility }
+    assert_equal 2, public_method_count
+  end
+
+  def test_scan_constant_visibility
+    util_parser <<-RUBY
+class C
+   CONST_A = 123
+
+   CONST_B = 234
+   private_constant :CONST_B
+
+   CONST_C = 345
+   public_constant :CONST_C
+end
+    RUBY
+
+    @parser.scan
+
+    c = @store.find_class_named 'C'
+    const_a, const_b, const_c = c.constants.sort_by(&:name)
+
+    assert_equal 'CONST_A', const_a.name
+    assert_equal :public, const_a.visibility
+
+    assert_equal 'CONST_B', const_b.name
+    assert_equal :private, const_b.visibility
+
+    assert_equal 'CONST_C', const_c.name
+    assert_equal :public, const_c.visibility
+  end
+
+  def test_document_after_rescue_inside_paren
+    util_parser <<-RUBY
+class C
+  attr_accessor :sample if (1.inexistent_method rescue false)
+  # first
+  # second
+  def a
+  end
+end
+    RUBY
+
+    @parser.scan
+
+    c = @store.find_class_named 'C'
+
+    c_a = c.find_method_named 'a'
+    assert_equal "first\nsecond", c_a.comment.text
+  end
+
+  def test_singleton_method_via_eigenclass
+    util_parser <<-RUBY
+class C
+   class << self
+     def a() end
+   end
+end
+    RUBY
+
+    @parser.scan
+
+    c   = @store.find_class_named 'C'
+    c_a = c.find_method_named 'a'
+
+    assert_equal :public, c_a.visibility
+    assert c_a.singleton
+  end
+
+  def test_stopdoc_after_comment
+    util_parser <<-EOS
+      module Bar
+        # hello
+        module Foo
+          # :stopdoc:
+        end
+        # there
+        class Baz
+          # :stopdoc:
+        end
+      end
+    EOS
+
+    @parser.parse_statements @top_level
+
+    foo = @top_level.modules.first.modules.first
+    assert_equal 'Foo', foo.name
+    assert_equal 'hello', foo.comment.text
+
+    baz = @top_level.modules.first.classes.first
+    assert_equal 'Baz', baz.name
+    assert_equal 'there', baz.comment.text
+  end
+
+  def util_parser(content)
+    @parser = RDoc::Parser::Ruby.new @top_level, @filename, content, @options,
+                                     @stats
+  end
+
+  def util_two_parsers(first_file_content, second_file_content)
+    util_parser first_file_content
+
+    @parser2 = RDoc::Parser::Ruby.new @top_level2, @filename,
+                                      second_file_content, @options, @stats
+  end
+
+  def test_parse_const_third_party
+    util_parser <<-CLASS
+class A
+  true if B
+  true if B::C
+  true if B::C::D
+
+  module B
+  end
+end
+    CLASS
+
+    tk = @parser.get_tk
+
+    @parser.parse_class @top_level, RDoc::Parser::Ruby::NORMAL, tk, @comment
+
+    a = @top_level.classes.first
+    assert_equal 'A', a.full_name
+
+    visible = @store.all_modules.reject { |mod| mod.suppressed? }
+    visible = visible.map { |mod| mod.full_name }
+
+    assert_equal ['A::B'], visible
+  end
+
+  def test_parse_const_alias_defined_elsewhere
+    util_parser <<-CLASS
+module A
+  Aliased = Defined
+end
+
+module A
+  class Defined
+  end
+end
+    CLASS
+
+    @parser.scan
+
+    a = @top_level.modules.first
+    assert_equal 'A', a.full_name
+    aliased = a.constants.first
+    assert_equal 'A::Aliased', aliased.full_name
+    assert_equal [], a.modules.map(&:full_name)
+    assert_equal ['A::Defined', 'A::Aliased'], a.classes.map(&:full_name)
+    assert_equal ['A::Aliased'], a.constants.map(&:full_name)
+
+    visible = @store.all_modules.reject { |mod| mod.suppressed? }
+    visible = visible.map { |mod| mod.full_name }
+
+    assert_equal ['A'], visible
+  end
+
+  def test_parse_const_alias_defined_far_away
+    util_parser <<-CLASS
+module A
+  Aliased = ::B::C::Defined
+end
+
+module B
+  module C
+    class Defined
+    end
+  end
+end
+    CLASS
+
+    @parser.scan
+
+    a = @top_level.modules.first
+    assert_equal 'A', a.full_name
+    assert_empty a.classes
+    assert_empty a.modules
+    assert_equal ['A::Aliased'], a.constants.map(&:full_name)
+
+    defined = @store.find_class_named 'B::C::Defined'
+    assert_equal 'B::C::Defined', defined.full_name
+
+    aliased = @store.find_class_named 'B::C::Aliased'
+    assert_equal 'B::C::Aliased', aliased.full_name
+
+    visible = @store.all_modules.reject { |mod| mod.suppressed? }
+    visible = visible.map { |mod| mod.full_name }
+
+    assert_equal ['A', 'B', 'B::C'], visible
+  end
+
+  def test_parse_include_by_dynamic_definition
+    util_parser <<-CLASS
+module A
+  class B
+    include(Module.new do
+      def e(m)
+      end
+    end)
+  end
+
+  class C
+  end
+
+  class D
+  end
+end
+    CLASS
+
+    @parser.scan
+
+    a = @store.find_module_named 'A'
+    assert_equal 'A', a.full_name
+    a_b = a.find_class_named 'B'
+    assert_equal 'A::B', a_b.full_name
+    a_c = a.find_class_named 'C'
+    assert_equal 'A::C', a_c.full_name
+    a_d = a.find_class_named 'D'
+    assert_equal 'A::D', a_d.full_name
+  end
+
+  def test_parse_include_by_dynamic_definition_without_paren
+    util_parser <<-CLASS
+module A
+  class B
+    include(Module.new do
+      def e m
+      end
+    end)
+  end
+
+  class C
+  end
+
+  class D
+  end
+end
+    CLASS
+
+    @parser.scan
+
+    a = @store.find_module_named 'A'
+    assert_equal 'A', a.full_name
+    a_b = a.find_class_named 'B'
+    assert_equal 'A::B', a_b.full_name
+    a_c = a.find_class_named 'C'
+    assert_equal 'A::C', a_c.full_name
+    a_d = a.find_class_named 'D'
+    assert_equal 'A::D', a_d.full_name
+  end
+
+  def test_parse_include_by_dynamic_definition_via_variable
+    util_parser <<-CLASS
+module A
+  class B
+    m = Module.new do
+      def e(m)
+      end
+    end
+    include m
+  end
+
+  class C
+  end
+
+  class D
+  end
+end
+    CLASS
+
+    @parser.scan
+
+    a = @store.find_module_named 'A'
+    assert_equal 'A', a.full_name
+    a_b = a.find_class_named 'B'
+    assert_equal 'A::B', a_b.full_name
+    a_c = a.find_class_named 'C'
+    assert_equal 'A::C', a_c.full_name
+    a_d = a.find_class_named 'D'
+    assert_equal 'A::D', a_d.full_name
+  end
+
+  def test_parse_include_by_dynamic_definition_with_brace
+    util_parser <<-CLASS
+module A
+  class B
+    extend(e {
+      def f(g)
+      end
+    })
+  end
+
+  class C
+  end
+
+  class D
+  end
+end
+    CLASS
+
+    @parser.scan
+
+    a = @store.find_module_named 'A'
+    assert_equal 'A', a.full_name
+    a_b = a.find_class_named 'B'
+    assert_equal 'A::B', a_b.full_name
+    a_c = a.find_class_named 'C'
+    assert_equal 'A::C', a_c.full_name
+    a_d = a.find_class_named 'D'
+    assert_equal 'A::D', a_d.full_name
+  end
+
+  def test_parse_include_by_dynamic_definition_directly
+    util_parser <<-CLASS
+module A
+  class B
+    include Module.new do
+      def e m
+      end
+    end
+  end
+
+  class C
+  end
+
+  class D
+  end
+end
+    CLASS
+
+    @parser.scan
+
+    a = @store.find_module_named 'A'
+    assert_equal 'A', a.full_name
+    a_b = a.find_class_named 'B'
+    assert_equal 'A::B', a_b.full_name
+    a_c = a.find_class_named 'C'
+    assert_equal 'A::C', a_c.full_name
+    a_d = a.find_class_named 'D'
+    assert_equal 'A::D', a_d.full_name
+  end
+
+  def test_parse_included
+    util_parser <<-CLASS
+module A
+  module B
+    extend ActiveSupport::Concern
+    included do
+      ##
+      # :singleton-method:
+      # Hello
+      mattr_accessor :foo
+    end
+  end
+end
+    CLASS
+
+    @parser.scan
+
+    a = @store.find_module_named 'A'
+    assert_equal 'A', a.full_name
+    a_b = a.find_module_named 'B'
+    assert_equal 'A::B', a_b.full_name
+    meth = a_b.method_list.first
+    assert_equal 'foo', meth.name
+    assert_equal 'Hello', meth.comment.text
+  end
+
+  def test_end_that_doesnt_belong_to_class_doesnt_change_visibility
+    util_parser <<-CLASS
+class A
+  private
+
+  begin
+  end
+
+  # Hello
+  def foo() end
+end
+    CLASS
+
+    @parser.scan
+
+    a = @store.find_class_named 'A'
+    assert_equal 'A', a.full_name
+    assert_equal 'foo', a.find_method_named('foo').name
+    meth = a.method_list.first
+    assert_equal 'Hello', meth.comment.text
+  end
+
+end
