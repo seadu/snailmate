@@ -346,4 +346,152 @@ class TestSprintf < Test::Unit::TestCase
     # numbers used cannot be precisely represented in double precision
     # floating point, and so the behaviour depends heavily on how you
     # treat these cases. We format 5.015 to 5.01 because it is
-    # fractionally below 5.015, and we for
+    # fractionally below 5.015, and we format 5.025 as 5.03 because it
+    # is fractionally above 5.025.
+
+    # MRI treats these cases differently, but it is unclear if this is
+    # by accident or design as they also format anything between
+    # 5.014999999999997 and 5.014999999999999 inclusive as 5.02,
+    assert_equal("5.00", sprintf("%.2f",5.005))
+#    assert_equal("5.02", sprintf("%.2f",5.015))
+#    assert_equal("5.02", sprintf("%.2f",5.025))
+    assert_equal("5.04", sprintf("%.2f",5.035))
+    bug12889 = '[ruby-core:77864] [Bug #12889]'
+    assert_equal("1234567892", sprintf("%.0f", 1234567891.99999))
+    assert_equal("1234567892", sprintf("%.0f", 1234567892.49999))
+    assert_equal("1234567892", sprintf("%.0f", 1234567892.50000))
+    assert_equal("1234567894", sprintf("%.0f", 1234567893.50000))
+    assert_equal("1234567892", sprintf("%.0f", 1234567892.00000), bug12889)
+  end
+
+  BSIZ = 120
+
+  def test_skip
+    assert_equal(" " * BSIZ + "1", sprintf(" " * BSIZ + "%d", 1))
+  end
+
+  def test_char
+    assert_equal("a", sprintf("%c", 97))
+    assert_equal("a", sprintf("%c", ?a))
+    assert_raise(ArgumentError) { sprintf("%c", sprintf("%c%c", ?a, ?a)) }
+    assert_equal(" " * (BSIZ - 1) + "a", sprintf(" " * (BSIZ - 1) + "%c", ?a))
+    assert_equal(" " * (BSIZ - 1) + "a", sprintf(" " * (BSIZ - 1) + "%-1c", ?a))
+    assert_equal(" " * BSIZ + "a", sprintf("%#{ BSIZ + 1 }c", ?a))
+    assert_equal("a" + " " * BSIZ, sprintf("%-#{ BSIZ + 1 }c", ?a))
+  end
+
+  def test_string
+    assert_equal("foo", sprintf("%s", "foo"))
+    assert_equal("fo", sprintf("%.2s", "foo"))
+    assert_equal(" " * BSIZ, sprintf("%s", " " * BSIZ))
+    assert_equal(" " * (BSIZ - 1) + "foo", sprintf("%#{ BSIZ - 1 + 3 }s", "foo"))
+    assert_equal(" " * BSIZ + "foo", sprintf("%#{ BSIZ + 3 }s", "foo"))
+    assert_equal("foo" + " " * BSIZ, sprintf("%-#{ BSIZ + 3 }s", "foo"))
+  end
+
+  def test_integer
+    assert_equal("01", sprintf("%#o", 1))
+    assert_equal("0x1", sprintf("%#x", 1))
+    assert_equal("0X1", sprintf("%#X", 1))
+    assert_equal("0b1", sprintf("%#b", 1))
+    assert_equal("0B1", sprintf("%#B", 1))
+    assert_equal("1", sprintf("%d", 1.0))
+    assert_equal("4294967296", sprintf("%d", (2**32).to_f))
+    assert_equal("-2147483648", sprintf("%d", -(2**31).to_f))
+    assert_equal("18446744073709551616", sprintf("%d", (2**64).to_f))
+    assert_equal("-9223372036854775808", sprintf("%d", -(2**63).to_f))
+    assert_equal("1", sprintf("%d", "1"))
+    o = Object.new; def o.to_int; 1; end
+    assert_equal("1", sprintf("%d", o))
+    assert_equal("+1", sprintf("%+d", 1))
+    assert_equal(" 1", sprintf("% d", 1))
+    assert_equal("..f", sprintf("%x", -1))
+    assert_equal("..7", sprintf("%o", -1))
+    one = (2**32).coerce(1).first
+    mone = (2**32).coerce(-1).first
+    assert_equal("+1", sprintf("%+d", one))
+    assert_equal(" 1", sprintf("% d", one))
+    assert_equal("..f", sprintf("%x", mone))
+    assert_equal("..7", sprintf("%o", mone))
+    assert_equal(" " * BSIZ + "1", sprintf("%#{ BSIZ + 1 }d", one))
+    assert_equal(" " * (BSIZ - 1) + "1", sprintf(" " * (BSIZ - 1) + "%d", 1))
+  end
+
+  def test_float2
+    inf = 1.0 / 0.0
+    assert_equal(" " * BSIZ + "Inf", sprintf("%#{ BSIZ + 3 }.1f", inf))
+    assert_equal("+Inf", sprintf("%+-f", inf))
+    assert_equal(" " * BSIZ + "1.0", sprintf("%#{ BSIZ + 3 }.1f", 1.0))
+  end
+
+  class T012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
+  end
+
+  def test_star
+    assert_equal("-1 ", sprintf("%*d", -3, -1))
+    assert_raise_with_message(ArgumentError, /width too big/) {
+      sprintf("%*999999999999999999999999999999999999999999999999999999999999$d", 1)
+    }
+    assert_raise_with_message(ArgumentError, /prec too big/) {
+      sprintf("%.*999999999999999999999999999999999999999999999999999999999999$d", 1)
+    }
+  end
+
+  def test_escape
+    assert_equal("%" * BSIZ, sprintf("%%" * BSIZ))
+  end
+
+  def test_percent_sign_at_end
+    assert_raise_with_message(ArgumentError, "incomplete format specifier; use %% (double %) instead") do
+      sprintf("%")
+    end
+
+    assert_raise_with_message(ArgumentError, "incomplete format specifier; use %% (double %) instead") do
+      sprintf("abc%")
+    end
+  end
+
+  def test_rb_sprintf
+    assert_match(/^#<TestSprintf::T012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789:0x[0-9a-f]+>$/,
+                 T012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789.new.inspect)
+  end
+
+  def test_negative_hex
+    s1 = sprintf("%0x", -0x40000000)
+    s2 = sprintf("%0x", -0x40000001)
+    b1 = (/\.\./ =~ s1) != nil
+    b2 = (/\.\./ =~ s2) != nil
+    assert_equal(b1, b2, "[ruby-dev:33224]")
+  end
+
+  def test_named_untyped
+    assert_equal("value", sprintf("%<key>s", :key => "value"))
+    assert_raise_with_message(ArgumentError, "named<key2> after numbered") {sprintf("%1$<key2>s", :key => "value")}
+    assert_raise_with_message(ArgumentError, "named<key2> after unnumbered(2)") {sprintf("%s%s%<key2>s", "foo", "bar", :key => "value")}
+    assert_raise_with_message(ArgumentError, "named<key2> after <key>") {sprintf("%<key><key2>s", :key => "value")}
+    h = {}
+    e = assert_raise_with_message(KeyError, "key<key> not found") {sprintf("%<key>s", h)}
+    assert_same(h, e.receiver)
+    assert_equal(:key, e.key)
+  end
+
+  def test_named_untyped_enc
+    key = "\u{3012}"
+    [Encoding::UTF_8, Encoding::EUC_JP].each do |enc|
+      k = key.encode(enc)
+      e = assert_raise_with_message(ArgumentError, "named<#{k}> after numbered") {sprintf("%1$<#{k}>s", key: "value")}
+      assert_equal(enc, e.message.encoding)
+      e = assert_raise_with_message(ArgumentError, "named<#{k}> after unnumbered(2)") {sprintf("%s%s%<#{k}>s", "foo", "bar", key: "value")}
+      assert_equal(enc, e.message.encoding)
+      e = assert_raise_with_message(ArgumentError, "named<#{k}> after <key>") {sprintf("%<key><#{k}>s", key: "value")}
+      assert_equal(enc, e.message.encoding)
+      e = assert_raise_with_message(ArgumentError, "named<key> after <#{k}>") {sprintf("%<#{k}><key>s", k.to_sym => "value")}
+      assert_equal(enc, e.message.encoding)
+      e = assert_raise_with_message(KeyError, "key<#{k}> not found") {sprintf("%<#{k}>s", {})}
+      assert_equal(enc, e.message.encoding)
+    end
+  end
+
+  def test_named_typed
+    assert_equal("value", sprintf("%{key}", :key => "value"))
+    assert_raise_with_message(ArgumentError, "named{key2} after numbered") {sprintf("%1${key2}
