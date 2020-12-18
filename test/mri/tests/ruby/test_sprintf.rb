@@ -494,4 +494,49 @@ class TestSprintf < Test::Unit::TestCase
 
   def test_named_typed
     assert_equal("value", sprintf("%{key}", :key => "value"))
-    assert_raise_with_message(ArgumentError, "named{key2} after numbered") {sprintf("%1${key2}
+    assert_raise_with_message(ArgumentError, "named{key2} after numbered") {sprintf("%1${key2}", :key => "value")}
+    assert_raise_with_message(ArgumentError, "named{key2} after unnumbered(2)") {sprintf("%s%s%{key2}", "foo", "bar", :key => "value")}
+    assert_raise_with_message(ArgumentError, "named{key2} after <key>") {sprintf("%<key>{key2}", :key => "value")}
+    assert_equal("value{key2}", sprintf("%{key}{key2}", :key => "value"))
+    assert_raise_with_message(KeyError, "key{key} not found") {sprintf("%{key}", {})}
+  end
+
+  def test_named_typed_enc
+    key = "\u{3012}"
+    [Encoding::UTF_8, Encoding::EUC_JP].each do |enc|
+      k = key.encode(enc)
+      e = assert_raise_with_message(ArgumentError, "named{#{k}} after numbered") {sprintf("%1${#{k}}s", key: "value")}
+      assert_equal(enc, e.message.encoding)
+      e = assert_raise_with_message(ArgumentError, "named{#{k}} after unnumbered(2)") {sprintf("%s%s%{#{k}}s", "foo", "bar", key: "value")}
+      assert_equal(enc, e.message.encoding)
+      e = assert_raise_with_message(ArgumentError, "named{#{k}} after <key>") {sprintf("%<key>{#{k}}s", key: "value")}
+      assert_equal(enc, e.message.encoding)
+      e = assert_raise_with_message(ArgumentError, "named{key} after <#{k}>") {sprintf("%<#{k}>{key}s", k.to_sym => "value")}
+      assert_equal(enc, e.message.encoding)
+      e = assert_raise_with_message(KeyError, "key{#{k}} not found") {sprintf("%{#{k}}", {})}
+      assert_equal(enc, e.message.encoding)
+    end
+  end
+
+  def test_named_default
+    h = Hash.new('world')
+    assert_equal("hello world", "hello %{location}" % h)
+    assert_equal("hello world", "hello %<location>s" % h)
+  end
+
+  def test_named_with_nil
+    h = { key: nil, key2: "key2_val" }
+    assert_equal("key is , key2 is key2_val", "key is %{key}, key2 is %{key2}" % h)
+  end
+
+  def test_width_underflow
+    bug = 'https://github.com/mruby/mruby/issues/3347'
+    assert_equal("!", sprintf("%*c", 0, ?!.ord), bug)
+  end
+
+  def test_negative_width_overflow
+    assert_raise_with_message(ArgumentError, /too big/) do
+      sprintf("%*s", RbConfig::LIMITS["INT_MIN"], "")
+    end
+  end
+end
