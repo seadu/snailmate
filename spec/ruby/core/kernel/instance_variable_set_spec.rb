@@ -57,4 +57,49 @@ describe "Kernel#instance_variable_set" do
     class KernelSpecs::C
       def initialize
         @a = 1
-     
+      end
+      def to_str
+        "@a"
+      end
+    end
+    KernelSpecs::C.new.instance_variable_set(KernelSpecs::C.new, 2).should == 2
+  end
+
+  describe "on frozen objects" do
+    before :each do
+      klass = Class.new do
+        attr_reader :ivar
+        def initialize
+          @ivar = :origin
+        end
+      end
+
+      @frozen = klass.new.freeze
+    end
+
+    it "keeps stored object after any exceptions" do
+      -> { @frozen.instance_variable_set(:@ivar, :replacement) }.should raise_error(Exception)
+      @frozen.ivar.should equal(:origin)
+    end
+
+    it "raises a FrozenError when passed replacement is identical to stored object" do
+      -> { @frozen.instance_variable_set(:@ivar, :origin) }.should raise_error(FrozenError)
+    end
+
+    it "raises a FrozenError when passed replacement is different from stored object" do
+      -> { @frozen.instance_variable_set(:@ivar, :replacement) }.should raise_error(FrozenError)
+    end
+
+    it "accepts unicode instance variable names" do
+      o = Object.new
+      o.instance_variable_set(:@💙, 42)
+      o.instance_variable_get(:@💙).should == 42
+    end
+
+    it "raises for frozen objects" do
+      -> { nil.instance_variable_set(:@foo, 42) }.should raise_error(FrozenError)
+      -> { nil.instance_variable_set(:foo, 42) }.should raise_error(NameError)
+      -> { :foo.instance_variable_set(:@foo, 42) }.should raise_error(FrozenError)
+    end
+  end
+end
