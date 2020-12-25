@@ -52,4 +52,71 @@ public class TruffleRubyScriptEngineFactory implements ScriptEngineFactory {
 
     @Override
     public String getLanguageVersion() {
-        return query
+        return query("RUBY_VERSION");
+    }
+
+    @Override
+    public Object getParameter(String key) {
+        switch (key) {
+            case ScriptEngine.NAME:
+                return "ruby";
+            case ScriptEngine.ENGINE:
+                return getEngineName();
+            case ScriptEngine.ENGINE_VERSION:
+                return getEngineVersion();
+            case ScriptEngine.LANGUAGE:
+                return getLanguageName();
+            case ScriptEngine.LANGUAGE_VERSION:
+                return getLanguageVersion();
+            case "THREADING":
+                return "MULTITHREADED";
+            default:
+                return null;
+        }
+    }
+
+    @Override
+    public String getMethodCallSyntax(String object, String method, String... args) {
+        final StringBuilder builder = new StringBuilder().append(object).append('.').append(method).append('(');
+
+        final int length = args.length;
+
+        if (length > 0) {
+            builder.append(args[0]);
+        }
+
+        for (int i = 1; i < length; i++) {
+            builder.append(',').append(args[i]);
+        }
+
+        builder.append(')');
+
+        return builder.toString();
+    }
+
+    @Override
+    public String getOutputStatement(String toDisplay) {
+        return String.format("puts %s", toDisplay);
+    }
+
+    @Override
+    public String getProgram(String... statements) {
+        return String.join("\n", statements);
+    }
+
+    @Override
+    public ScriptEngine getScriptEngine() {
+        return getScriptEngine(false);
+    }
+
+    public ScriptEngine getScriptEngine(boolean allowAllAccess) {
+        return new TruffleRubyScriptEngine(this, allowAllAccess);
+    }
+
+    private String query(String expression) {
+        try (Context context = Context.create("ruby")) {
+            return context.eval("ruby", expression).asString();
+        }
+    }
+
+}
