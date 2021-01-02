@@ -90,4 +90,11 @@ void Init_rbasic_spec(void) {
 
   cls = rb_define_class("CApiRBasicRDataSpecs", rb_cObject);
   rb_define_method(cls, "get_flags", rbasic_rdata_spec_get_flags, 1);
-  rb_define_method(cls, "set_flags", rbasic_rdata_spec_set_flags, 
+  rb_define_method(cls, "set_flags", rbasic_rdata_spec_set_flags, 2);
+  rb_define_method(cls, "copy_flags", rbasic_rdata_spec_copy_flags, 2);
+  rb_define_method(cls, "get_klass", rbasic_rdata_spec_get_klass, 1);
+}
+
+#ifdef __cplusplus
+}
+#endif
