@@ -98,4 +98,36 @@ class MSpecTag < MSpecScript
   end
 
   def register
-    require
+    require 'mspec/runner/actions'
+
+    case config[:tagger]
+    when :add, :del
+      tag = SpecTag.new config[:tag]
+      tagger = TagAction.new(config[:tagger], config[:outcome], tag.tag, tag.comment,
+                             config[:atags], config[:astrings])
+    when :list, :list_all
+      tagger = TagListAction.new config[:tagger] == :list_all ? nil : config[:ltags]
+      MSpec.register_mode :pretend
+      config[:formatter] = false
+    when :purge
+      tagger = TagPurgeAction.new
+      MSpec.register_mode :pretend
+      MSpec.register_mode :unguarded
+      config[:formatter] = false
+    else
+      raise ArgumentError, "No recognized action given"
+    end
+    tagger.register
+
+    super
+  end
+
+  def run
+    MSpec.register_tags_patterns config[:tags_patterns]
+    MSpec.register_files @files
+
+    MSpec.process
+    exit MSpec.exit_code
+  end
+end
+
