@@ -14,4 +14,24 @@ describe "Math.sinh" do
   end
 
   it "raises a TypeError if the argument cannot be coerced with Float()" do
-    -> { M
+    -> { Math.sinh("test") }.should raise_error(TypeError)
+  end
+
+  it "returns NaN given NaN" do
+    Math.sinh(nan_value).nan?.should be_true
+  end
+
+  it "raises a TypeError if the argument is nil" do
+    -> { Math.sinh(nil) }.should raise_error(TypeError)
+  end
+
+  it "accepts any argument that can be coerced with Float()" do
+    Math.sinh(MathSpecs::Float.new).should be_close(1.1752011936438, TOLERANCE)
+  end
+end
+
+describe "Math#sinh" do
+  it "is accessible as a private instance method" do
+    IncludesMath.new.send(:sinh, 1.99).should be_close(3.58941916843202, TOLERANCE)
+  end
+end
