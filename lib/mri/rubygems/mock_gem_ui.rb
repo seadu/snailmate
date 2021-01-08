@@ -40,4 +40,46 @@ class Gem::MockGemUi < Gem::StreamUI
   end
 
   def initialize(input = "")
-    re
+    require "stringio"
+    ins = StringIO.new input
+    outs = StringIO.new
+    errs = StringIO.new
+
+    ins.extend TTY
+    outs.extend TTY
+    errs.extend TTY
+
+    super ins, outs, errs, true
+
+    @terminated = false
+  end
+
+  def ask(question)
+    raise InputEOFError, question if @ins.eof?
+
+    super
+  end
+
+  def input
+    @ins.string
+  end
+
+  def output
+    @outs.string
+  end
+
+  def error
+    @errs.string
+  end
+
+  def terminated?
+    @terminated
+  end
+
+  def terminate_interaction(status=0)
+    @terminated = true
+
+    raise TermError, status if status != 0
+    raise SystemExitException
+  end
+end
