@@ -119,4 +119,166 @@ public class UnsizedQueue {
         lock.lock();
 
         try {
-            if (takeEnd 
+            if (takeEnd == null) {
+                final boolean signalled = canTake.await(timeoutMilliseconds, TimeUnit.MILLISECONDS);
+
+                if (Thread.interrupted()) { // See comment of take()
+                    throw new InterruptedException();
+                }
+
+                if (!signalled) {
+                    return null;
+                }
+
+                if (closed) {
+                    return CLOSED;
+                }
+            }
+
+            return doTake();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @TruffleBoundary
+    public Object poll() {
+        lock.lock();
+
+        try {
+            if (takeEnd == null) {
+                return null;
+            } else {
+                return doTake();
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private Object doTake() {
+        final Object item = takeEnd.getItem();
+        final Item nextToTake = takeEnd.getNextToTake();
+        takeEnd.clearNextReference();
+        takeEnd = nextToTake;
+        if (takeEnd == null) {
+            addEnd = null;
+        }
+        size--;
+        return item;
+    }
+
+    @TruffleBoundary
+    public int size() {
+        lock.lock();
+
+        try {
+            return size;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public boolean isEmpty() {
+        return size() == 0;
+    }
+
+    @TruffleBoundary
+    public void clear() {
+        lock.lock();
+
+        try {
+            while (takeEnd != null) {
+                final Item next = takeEnd.getNextToTake();
+                takeEnd.clearNextReference();
+                takeEnd = next;
+            }
+            addEnd = null;
+            takeEnd = null;
+            size = 0;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @TruffleBoundary
+    public int getNumberWaitingToTake() {
+        lock.lock();
+
+        try {
+            return lock.getWaitQueueLength(canTake);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @TruffleBoundary
+    public Collection<Object> getContents() {
+        final Collection<Object> objects = new ArrayList<>();
+
+        lock.lock();
+        try {
+            Item iterator = takeEnd;
+
+            while (iterator != null) {
+                objects.add(iterator.getItem());
+                iterator = iterator.getNextToTake();
+            }
+        } finally {
+            lock.unlock();
+        }
+
+        return objects;
+    }
+
+    @TruffleBoundary
+    public void close() {
+        lock.lock();
+
+        try {
+            closed = true;
+            canTake.signalAll();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @TruffleBoundary
+    public boolean isClosed() {
+        lock.lock();
+
+        try {
+            return closed;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private static class Item {
+
+        private final Object item;
+        private Item nextToTake;
+
+        public Item(Object item) {
+            this.item = Objects.requireNonNull(item);
+        }
+
+        public Object getItem() {
+            return item;
+        }
+
+        public void setNextToTake(Item nextToTake) {
+            this.nextToTake = nextToTake;
+        }
+
+        public Item getNextToTake() {
+            return nextToTake;
+        }
+
+        public void clearNextReference() {
+            nextToTake = null;
+        }
+
+    }
+
+}
