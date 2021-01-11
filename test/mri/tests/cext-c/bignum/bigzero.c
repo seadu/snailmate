@@ -22,4 +22,5 @@ void
 Init_bigzero(VALUE klass)
 {
     rb_define_singleton_method(klass, "zero", bug_big_zero, 1);
-    rb_defi
+    rb_define_singleton_method(klass, "negzero", bug_big_negzero, 1);
+}
