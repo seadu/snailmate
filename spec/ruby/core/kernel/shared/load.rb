@@ -106,4 +106,102 @@ describe :kernel_load, shared: true do
       path = File.expand_path "load_wrap_fixture.rb", CODE_LOADING_DIR
       @object.load(path, true)
 
-      ScratchPad.
+      ScratchPad.recorded[0].should equal(String)
+    end
+
+    it "sets self as a copy of the top-level main" do
+      path = File.expand_path "load_wrap_fixture.rb", CODE_LOADING_DIR
+      @object.load(path, true)
+
+      top_level = ScratchPad.recorded[2]
+      top_level.to_s.should == "main"
+      top_level.method(:to_s).owner.should == top_level.singleton_class
+      top_level.should_not equal(main)
+      top_level.should be_an_instance_of(Object)
+    end
+
+    it "includes modules included in main's singleton class in self's class" do
+      mod = Module.new
+      main.extend(mod)
+
+      main_ancestors = main.singleton_class.ancestors[1..-1]
+      main_ancestors.first.should == mod
+
+      path = File.expand_path "load_wrap_fixture.rb", CODE_LOADING_DIR
+      @object.load(path, true)
+
+      top_level = ScratchPad.recorded[2]
+      top_level_ancestors = top_level.singleton_class.ancestors[-main_ancestors.size..-1]
+      top_level_ancestors.should == main_ancestors
+
+      wrap_module = ScratchPad.recorded[1]
+      top_level.singleton_class.ancestors.should == [top_level.singleton_class, wrap_module, *main_ancestors]
+    end
+
+    describe "with top-level methods" do
+      before :each do
+        path = File.expand_path "load_wrap_method_fixture.rb", CODE_LOADING_DIR
+        @object.load(path, true)
+      end
+
+      it "allows calling top-level methods" do
+        ScratchPad.recorded.last.should == :load_wrap_loaded
+      end
+
+      it "does not pollute the receiver" do
+        -> { @object.send(:top_level_method) }.should raise_error(NameError)
+      end
+    end
+  end
+
+  describe "when passed a module for 'wrap'" do
+    ruby_version_is "3.1" do
+      it "sets the enclosing scope to the supplied module" do
+        path = File.expand_path "load_wrap_fixture.rb", CODE_LOADING_DIR
+        mod = Module.new
+        @object.load(path, mod)
+
+        Object.const_defined?(:LoadSpecWrap).should be_false
+        mod.const_defined?(:LoadSpecWrap).should be_true
+
+        wrap_module = ScratchPad.recorded[1]
+        wrap_module.should == mod
+      end
+
+      it "makes constants and instance methods in the source file reachable with the supplied module" do
+        path = File.expand_path "load_wrap_fixture.rb", CODE_LOADING_DIR
+        mod = Module.new
+        @object.load(path, mod)
+
+        mod::LOAD_WRAP_SPECS_TOP_LEVEL_CONSTANT.should == 1
+        obj = Object.new
+        obj.extend(mod)
+        obj.send(:load_wrap_specs_top_level_method).should == :load_wrap_specs_top_level_method
+      end
+
+      it "makes instance methods in the source file private" do
+        path = File.expand_path "load_wrap_fixture.rb", CODE_LOADING_DIR
+        mod = Module.new
+        @object.load(path, mod)
+
+        mod.private_instance_methods.include?(:load_wrap_specs_top_level_method).should == true
+      end
+    end
+  end
+
+  describe "(shell expansion)" do
+    before :each do
+      @env_home = ENV["HOME"]
+      ENV["HOME"] = CODE_LOADING_DIR
+    end
+
+    after :each do
+      ENV["HOME"] = @env_home
+    end
+
+    it "expands a tilde to the HOME environment variable as the path to load" do
+      @object.require("~/load_fixture.rb").should be_true
+      ScratchPad.recorded.should == [:loaded]
+    end
+  end
+end
