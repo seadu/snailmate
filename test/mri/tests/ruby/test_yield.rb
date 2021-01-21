@@ -80,4 +80,190 @@ class TestRubyYield < Test::Unit::TestCase
   end
 
   def test_block_args_unleashed
-    r = block_args_unleashed {|a,b=1,*c,d
+    r = block_args_unleashed {|a,b=1,*c,d,e|
+      [a,b,c,d,e]
+    }
+    assert_equal([1,2,[3],4,5], r, "[ruby-core:19485]")
+  end
+end
+
+require_relative 'sentence'
+class TestRubyYieldGen < Test::Unit::TestCase
+  Syntax = {
+    :exp => [["0"],
+             ["nil"],
+             ["false"],
+             ["[]"],
+             ["[",:exps,"]"]],
+    :exps => [[:exp],
+              [:exp,",",:exps]],
+    :opt_block_param => [[],
+                         [:block_param_def]],
+    :block_param_def => [['|', '|'],
+                         ['|', :block_param, '|']],
+    :block_param => [[:f_arg, ",", :f_rest_arg, :opt_f_block_arg],
+                     [:f_arg, ","],
+                     [:f_arg, ',', :f_rest_arg, ",", :f_arg, :opt_f_block_arg],
+                     [:f_arg, :opt_f_block_arg],
+                     [:f_rest_arg, :opt_f_block_arg],
+                     [:f_rest_arg, ',', :f_arg, :opt_f_block_arg],
+                     [:f_block_arg]],
+    :f_arg => [[:f_arg_item],
+               [:f_arg, ',', :f_arg_item]],
+    :f_rest_arg => [['*', "var"],
+                    ['*']],
+    :opt_f_block_arg => [[',', :f_block_arg],
+                         []],
+    :f_block_arg => [['&', 'var']],
+    :f_arg_item => [[:f_norm_arg],
+                    ['(', :f_margs, ')']],
+    :f_margs => [[:f_marg_list],
+                 [:f_marg_list, ',', '*', :f_norm_arg],
+                 [:f_marg_list, ',', '*', :f_norm_arg, ',', :f_marg_list],
+                 [:f_marg_list, ',', '*'],
+                 [:f_marg_list, ',', '*',              ',', :f_marg_list],
+                 [                   '*', :f_norm_arg],
+                 [                   '*', :f_norm_arg, ',', :f_marg_list],
+                 [                   '*'],
+                 [                   '*',              ',', :f_marg_list]],
+    :f_marg_list => [[:f_marg],
+                     [:f_marg_list, ',', :f_marg]],
+    :f_marg => [[:f_norm_arg],
+                ['(', :f_margs, ')']],
+    :f_norm_arg => [['var']],
+
+    :command_args => [[:open_args]],
+    :open_args => [[' ',:call_args],
+                   ['(', ')'],
+                   ['(', :call_args2, ')']],
+    :call_args =>  [[:command],
+                    [           :args,               :opt_block_arg],
+                    [                       :assocs, :opt_block_arg],
+                    [           :args, ',', :assocs, :opt_block_arg],
+                    [                                    :block_arg]],
+    :call_args2 => [[:arg, ',', :args,               :opt_block_arg],
+                    [:arg, ',',                          :block_arg],
+                    [                       :assocs, :opt_block_arg],
+                    [:arg, ',',             :assocs, :opt_block_arg],
+                    [:arg, ',', :args, ',', :assocs, :opt_block_arg],
+                    [                                    :block_arg]],
+
+    :command_args_noblock => [[:open_args_noblock]],
+    :open_args_noblock => [[' ',:call_args_noblock],
+                   ['(', ')'],
+                   ['(', :call_args2_noblock, ')']],
+    :call_args_noblock =>  [[:command],
+                    [           :args],
+                    [                       :assocs],
+                    [           :args, ',', :assocs]],
+    :call_args2_noblock => [[:arg, ',', :args],
+                            [                       :assocs],
+                            [:arg, ',',             :assocs],
+                            [:arg, ',', :args, ',', :assocs]],
+
+    :command => [],
+    :args => [[:arg],
+              ["*",:arg],
+              [:args,",",:arg],
+              [:args,",","*",:arg]],
+    :arg => [[:exp]],
+    :assocs => [[:assoc],
+                [:assocs, ',', :assoc]],
+    :assoc => [[:arg, '=>', :arg],
+               ['label', ':', :arg]],
+    :opt_block_arg => [[',', :block_arg],
+                       []],
+    :block_arg => [['&', :arg]],
+    #:test => [['def m() yield', :command_args_noblock, ' end; r = m {', :block_param_def, 'vars', '}; undef m; r']]
+    :test_proc => [['def m() yield', :command_args_noblock, ' end; r = m {', :block_param_def, 'vars', '}; undef m; r']],
+    :test_lambda => [['def m() yield', :command_args_noblock, ' end; r = m(&lambda {', :block_param_def, 'vars', '}); undef m; r']],
+    :test_enum => [['o = Object.new; def o.each() yield', :command_args_noblock, ' end; r1 = r2 = nil; o.each {|*x| r1 = x }; o.to_enum.each {|*x| r2 = x }; [r1, r2]']]
+  }
+
+  def rename_var(obj)
+    vars = []
+    r = obj.subst('var') {
+      var = "v#{vars.length}"
+      vars << var
+      var
+    }
+    return r, vars
+  end
+
+  def split_by_comma(ary)
+    return [] if ary.empty?
+    result = [[]]
+    ary.each {|e|
+      if e == ','
+        result << []
+      else
+        result.last << e
+      end
+    }
+    result
+  end
+
+  def emu_return_args(*vs)
+    vs
+  end
+
+  def emu_eval_args(args)
+    if args.last == []
+      args = args[0...-1]
+    end
+    code = "emu_return_args(#{args.map {|a| a.join('') }.join(",")})"
+    eval code, nil, 'generated_code_in_emu_eval_args'
+  end
+
+  def emu_bind_single(arg, param, result_binding)
+    #p [:emu_bind_single, arg, param]
+    if param.length == 1 && String === param[0] && /\A[a-z0-9]+\z/ =~ param[0]
+      result_binding[param[0]] = arg
+    elsif param.length == 1 && Array === param[0] && param[0][0] == '(' && param[0][-1] == ')'
+      arg = [arg] unless Array === arg
+      emu_bind_params(arg, split_by_comma(param[0][1...-1]), false, result_binding)
+    else
+      raise "unexpected param: #{param.inspect}"
+    end
+    result_binding
+  end
+
+  def emu_bind_params(args, params, islambda, result_binding={})
+    #p [:emu_bind_params, args, params]
+    if params.last == [] # extra comma
+      params.pop
+    end
+
+    star_index = nil
+    params.each_with_index {|par, i|
+      star_index = i if par[0] == '*'
+    }
+
+    if islambda
+      if star_index
+        if args.length < params.length - 1
+          throw :emuerror, ArgumentError
+        end
+      else
+        if args.length != params.length
+          throw :emuerror, ArgumentError
+        end
+      end
+    end
+
+    # TRICK #2 : adjust mismatch on number of arguments
+    if star_index
+      pre_params = params[0...star_index]
+      rest_param = params[star_index]
+      post_params = params[(star_index+1)..-1]
+      pre_params.each {|par| emu_bind_single(args.shift, par, result_binding) }
+      if post_params.length <= args.length
+        post_params.reverse_each {|par| emu_bind_single(args.pop, par, result_binding) }
+      else
+        post_params.each {|par| emu_bind_single(args.shift, par, result_binding) }
+      end
+      if rest_param != ['*']
+        emu_bind_single(args, rest_param[1..-1], result_binding)
+      end
+    else
+      params.each
