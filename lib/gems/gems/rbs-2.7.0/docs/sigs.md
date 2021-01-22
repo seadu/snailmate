@@ -134,4 +134,34 @@ The default is `-I sig`.
 RBS_TEST_OPT='-r pathname -I sig'
 ```
 
-Replacing `pathname` with the `stdlib` you want to include. For example, if you need to load `Set` and `BigDecimal` in `stdlib`, you would
+Replacing `pathname` with the `stdlib` you want to include. For example, if you need to load `Set` and `BigDecimal` in `stdlib`, you would need to have `RBS_TEST_OPT='-r set -r bigdecimal -I sig'`
+
+`RBS_TEST_LOGLEVEL` can be used to configure log level. Defaults to `info`.
+
+`RBS_TEST_RAISE` may help to debug the type signatures.
+If the environment variable is set, it raises an exception when a type error is detected.
+You can see the backtrace how the type error is caused and debug your program or signature.
+
+So, a typical command line to start the test would look like the following:
+
+```
+$ RBS_TEST_LOGLEVEL=error \
+  RBS_TEST_TARGET='Kaigi::*' \
+  RBS_TEST_SKIP='Kaigi::MonkeyPatch' \
+  RBS_TEST_OPT='-rset -rpathname -Isig -Iprivate' \
+  RBS_TEST_RAISE=true \
+  RUBYOPT='-rbundler/setup -rrbs/test/setup' \
+  bundle exec rake test
+```
+
+## Testing tips
+
+### Skipping a method
+
+You can skip installing the instrumentation per-method basis using `rbs:test:skip` annotation.
+
+```
+class String
+  %a{rbs:test:skip} def =~: (Regexp) -> Integer?
+end
+```
