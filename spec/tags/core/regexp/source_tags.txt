@@ -1,0 +1,2 @@
+
+fails:Regexp#source will remove escape characters

@@ -266,4 +266,160 @@ class TestRubyYieldGen < Test::Unit::TestCase
         emu_bind_single(args, rest_param[1..-1], result_binding)
       end
     else
-      params.each
+      params.each_with_index {|par, i|
+        emu_bind_single(args[i], par, result_binding)
+      }
+    end
+
+    #p [args, params, result_binding]
+
+    result_binding
+  end
+
+  def emu_bind(t, islambda)
+    #puts
+    #p t
+    command_args_noblock = t[1]
+    block_param_def = t[3]
+    command_args_noblock = command_args_noblock.expand {|a| !(a[0] == '[' && a[-1] == ']') }
+    block_param_def = block_param_def.expand {|a| !(a[0] == '(' && a[-1] == ')') }
+
+    if command_args_noblock.to_a[0] == ' '
+      args = command_args_noblock.to_a[1..-1]
+    elsif command_args_noblock.to_a[0] == '(' && command_args_noblock.to_a[-1] == ')'
+      args = command_args_noblock.to_a[1...-1]
+    else
+      raise "unexpected command_args_noblock: #{command_args_noblock.inspect}"
+    end
+    args = emu_eval_args(split_by_comma(args))
+
+    params = block_param_def.to_a[1...-1]
+    params = split_by_comma(params)
+
+    #p [:emu0, args, params]
+
+    result_binding = {}
+
+    if params.last && params.last[0] == '&'
+      result_binding[params.last[1]] = nil
+      params.pop
+    end
+
+    if !islambda
+      # TRICK #1 : single array argument is expanded if there are two or more params.
+      # * block parameter is not counted.
+      # * extra comma after single param forces the expansion.
+      if args.length == 1 && Array === args[0] && 1 < params.length
+        args = args[0]
+      end
+    end
+
+    emu_bind_params(args, params, islambda, result_binding)
+    #p result_binding
+    result_binding
+  end
+
+  def emu(t, vars, islambda)
+    catch(:emuerror) {
+      emu_binding = emu_bind(t, islambda)
+      vars.map {|var| emu_binding.fetch(var, "NOVAL") }
+    }
+  end
+
+  def disable_stderr
+    begin
+      save_stderr = $stderr
+      $stderr = StringIO.new
+      yield
+    ensure
+      $stderr = save_stderr
+    end
+  end
+
+  def check_nofork(t, islambda=false)
+    t, vars = rename_var(t)
+    t = t.subst('vars') { " [#{vars.join(",")}]" }
+    emu_values = emu(t, vars, islambda)
+    s = t.to_s
+    o = Object.new
+    #print "#{s}\t\t"
+    #STDOUT.flush
+    eval_values = disable_stderr {
+      begin
+        o.instance_eval(s, 'generated_code_in_check_nofork')
+      rescue ArgumentError
+        ArgumentError
+      end
+    }
+    #success = emu_values == eval_values ? 'succ' : 'fail'
+    #puts "eval:#{vs_ev.inspect[1...-1].delete(' ')}\temu:#{vs_emu.inspect[1...-1].delete(' ')}\t#{success}"
+    assert_equal(emu_values, eval_values, s)
+  end
+
+  def assert_all_sentences(syntax, *args)
+    syntax = Sentence.expand_syntax(syntax)
+    all_assertions do |a|
+      Sentence.each(syntax, *args) {|t|
+        a.for(t) {yield t}
+      }
+    end
+  end
+
+  def test_yield
+    assert_all_sentences(Syntax, :test_proc, 4) {|t|
+      check_nofork(t)
+    }
+  end
+
+  def test_yield_lambda
+    assert_all_sentences(Syntax, :test_lambda, 4) {|t|
+      check_nofork(t, true)
+    }
+  end
+
+  def test_yield_enum
+    assert_all_sentences(Syntax, :test_enum, 4) {|t|
+      code = t.to_s
+      r1, r2 = disable_stderr {
+        eval(code, nil, 'generated_code_in_test_yield_enum')
+      }
+      assert_equal(r1, r2, "#{t}")
+    }
+  end
+
+  def test_block_with_mock
+    y = Object.new
+    def y.s(a)
+      yield(a)
+    end
+    m = Object.new
+    def m.method_missing(*a)
+      super
+    end
+    assert_equal [m, nil], y.s(m){|a,b|[a,b]}
+  end
+
+  def test_block_cached_argc
+    # [Bug #11451]
+    assert_separately([], <<-"end;")
+      class Yielder
+        def each
+          yield :x, :y, :z
+        end
+      end
+      class Getter1
+        include Enumerable
+        def each(&block)
+          Yielder.new.each(&block)
+        end
+      end
+      class Getter2
+        include Enumerable
+        def each
+          Yielder.new.each { |a, b, c, d| yield(a) }
+        end
+      end
+      Getter1.new.map{Getter2.new.each{|x|}}
+    end;
+  end
+end
