@@ -194,4 +194,119 @@ module RDoc::Text
   # trademark symbols in +text+ to properly encoded characters.
 
   def to_html text
-    html = (''.encode text.encoding).du
+    html = (''.encode text.encoding).dup
+
+    encoded = RDoc::Text::TO_HTML_CHARACTERS[text.encoding]
+
+    s = StringScanner.new text
+    insquotes = false
+    indquotes = false
+    after_word = nil
+
+    until s.eos? do
+      case
+      when s.scan(/<(tt|code)>.*?<\/\1>/) then # skip contents of tt
+        html << s.matched.gsub('\\\\', '\\')
+      when s.scan(/<(tt|code)>.*?/) then
+        warn "mismatched <#{s[1]}> tag" # TODO signal file/line
+        html << s.matched
+      when s.scan(/<[^>]+\/?s*>/) then # skip HTML tags
+        html << s.matched
+      when s.scan(/\\(\S)/) then # unhandled suppressed crossref
+        html << s[1]
+        after_word = nil
+      when s.scan(/\.\.\.(\.?)/) then
+        html << s[1] << encoded[:ellipsis]
+        after_word = nil
+      when s.scan(/\(c\)/i) then
+        html << encoded[:copyright]
+        after_word = nil
+      when s.scan(/\(r\)/i) then
+        html << encoded[:trademark]
+        after_word = nil
+      when s.scan(/---/) then
+        html << encoded[:em_dash]
+        after_word = nil
+      when s.scan(/--/) then
+        html << encoded[:en_dash]
+        after_word = nil
+      when s.scan(/&quot;|"/) then
+        html << encoded[indquotes ? :close_dquote : :open_dquote]
+        indquotes = !indquotes
+        after_word = nil
+      when s.scan(/``/) then # backtick double quote
+        html << encoded[:open_dquote]
+        after_word = nil
+      when s.scan(/(?:&#39;|'){2}/) then # tick double quote
+        html << encoded[:close_dquote]
+        after_word = nil
+      when s.scan(/`/) then # backtick
+        if insquotes or after_word
+          html << '`'
+          after_word = false
+        else
+          html << encoded[:open_squote]
+          insquotes = true
+        end
+      when s.scan(/&#39;|'/) then # single quote
+        if insquotes
+          html << encoded[:close_squote]
+          insquotes = false
+        elsif after_word
+          # Mary's dog, my parents' house: do not start paired quotes
+          html << encoded[:close_squote]
+        else
+          html << encoded[:open_squote]
+          insquotes = true
+        end
+
+        after_word = nil
+      else # advance to the next potentially significant character
+        match = s.scan(/.+?(?=[<\\.("'`&-])/) #"
+
+        if match then
+          html << match
+          after_word = match =~ /\w$/
+        else
+          html << s.rest
+          break
+        end
+      end
+    end
+
+    html
+  end
+
+  ##
+  # Wraps +txt+ to +line_len+
+
+  def wrap(txt, line_len = 76)
+    res = []
+    sp = 0
+    ep = txt.length
+
+    while sp < ep
+      # scan back for a space
+      p = sp + line_len - 1
+      if p >= ep
+        p = ep
+      else
+        while p > sp and txt[p] != ?\s
+          p -= 1
+        end
+        if p <= sp
+          p = sp + line_len
+          while p < ep and txt[p] != ?\s
+            p += 1
+          end
+        end
+      end
+      res << txt[sp...p] << "\n"
+      sp = p
+      sp += 1 while sp < ep and txt[sp] == ?\s
+    end
+
+    res.join.strip
+  end
+
+end
