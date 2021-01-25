@@ -47,4 +47,23 @@ if defined?(WIN32OLE_VARIANT)
         sql = "INSERT INTO data.csv VALUES (5, 'E')"
         @db.execute(sql, -1)
         c = WIN32OLE::ARGV[1]
-        assert_equal(1,
+        assert_equal(1, c)
+        obj = WIN32OLE_VARIANT.new(nil, WIN32OLE::VARIANT::VT_VARIANT|WIN32OLE::VARIANT::VT_BYREF)
+        assert_equal(nil, obj.value)
+        @db.execute(sql , obj)
+        assert_equal(1, obj.value)
+        obj = WIN32OLE_VARIANT.new(-100, WIN32OLE::VARIANT::VT_VARIANT|WIN32OLE::VARIANT::VT_BYREF)
+        assert_equal(-100, obj.value)
+        @db.execute(sql, obj)
+        assert_equal(1, obj.value)
+      end
+
+      def teardown
+        return if !ado_csv_installed?
+        if @db && @db.state == ADO::AdStateOpen
+          @db.close
+        end
+        File.unlink("data.csv")
+      end
+    end
+end
