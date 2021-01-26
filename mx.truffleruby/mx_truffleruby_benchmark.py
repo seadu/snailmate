@@ -328,4 +328,241 @@ class AllBenchmarksBenchmarkSuite(RubyBenchmarkSuite):
                     'benchmark': benchmark,
                     'metric.name': 'throughput',
                     'metric.value': sample,
-                    'me
+                    'metric.unit': 'op/s',
+                    'metric.better': 'higher',
+                    'metric.iteration': n,
+                    'extra.metric.warmedup': 'false',
+                    'extra.metric.elapsed-num': e
+                } for n, (e, sample) in enumerate(zip(elapsed, samples))] + [{
+                    'benchmark': benchmark,
+                    'metric.name': 'throughput',
+                    'metric.value': 2147483647, # arbitrary high value (--simple won't run more than this many ips)
+                    'metric.unit': 'op/s',
+                    'metric.better': 'higher',
+                    'metric.iteration': len(samples),
+                    'extra.metric.warmedup': 'true',
+                    'extra.metric.elapsed-num': elapsed[-1] + 2.0 if elapsed else 2.0, # just put the data point beyond the last one a bit
+                    'error': 'optimised away'
+                }]
+            elif self.config()['kind'] == 'fixed-iterations':
+                iteration_config = self.config()['iterations'][benchmark]
+                return [{
+                    'benchmark': benchmark,
+                    'metric.name': iteration_config[iteration],
+                    'metric.iteration': iteration,
+                    'metric.value': e,
+                    'metric.unit': 's',
+                    'metric.better': 'lower'
+                } for n, (e, iteration) in enumerate(zip(elapsed, iterations)) if iteration in iteration_config]
+            else:
+                return [{
+                    'benchmark': benchmark,
+                    'metric.name': 'throughput',
+                    'metric.value': sample,
+                    'metric.unit': 'op/s',
+                    'metric.better': 'higher',
+                    'metric.iteration': n,
+                    'extra.metric.warmedup': 'true' if n / float(len(samples)) >= 0.5 else 'false',
+                    'extra.metric.elapsed-num': e
+                } for n, (e, sample) in enumerate(zip(elapsed, samples))]
+        else:
+            mx.log_error("ERROR:")
+            mx.log_error(out.data)
+
+            return [{
+                'benchmark': benchmark,
+                'metric.name': 'throughput',
+                'metric.value': 0,
+                'metric.unit': 'op/s',
+                'metric.better': 'higher',
+                'extra.metric.warmedup': 'true',
+                'error': 'failed'
+            }]
+
+classic_benchmarks = [
+    'aobench',
+    'binary-trees',
+    'deltablue',
+    'fannkuch',
+    'mandelbrot',
+    'matrix-multiply',
+    'n-body',
+    'neural-net',
+    'pidigits',
+    'red-black',
+    'richards',
+    'richards-kwargs',
+    'spectral-norm'
+]
+
+classic_benchmark_time = 120
+
+class ClassicBenchmarkSuite(AllBenchmarksBenchmarkSuite):
+    def name(self):
+        return 'classic'
+
+    def directory(self):
+        return 'classic'
+
+    def benchmarkList(self, bmSuiteArgs):
+        return classic_benchmarks
+
+    def time(self):
+        return classic_benchmark_time
+
+chunky_benchmarks = [
+    'chunky-color-r',
+    'chunky-color-g',
+    'chunky-color-b',
+    'chunky-color-a',
+    'chunky-color-compose-quick',
+    'chunky-canvas-resampling-bilinear',
+    'chunky-canvas-resampling-nearest-neighbor',
+    'chunky-canvas-resampling-steps-residues',
+    'chunky-canvas-resampling-steps',
+    'chunky-decode-png-image-pass',
+    'chunky-encode-png-image-pass-to-stream',
+    'chunky-operations-compose',
+    'chunky-operations-replace'
+]
+
+chunky_benchmark_time = 120
+
+class ChunkyBenchmarkSuite(AllBenchmarksBenchmarkSuite):
+    def name(self):
+        return 'chunky'
+
+    def directory(self):
+        return 'chunky_png'
+
+    def benchmarkList(self, bmSuiteArgs):
+        return chunky_benchmarks
+
+    def time(self):
+        return chunky_benchmark_time
+
+psd_benchmarks = [
+    'psd-color-cmyk-to-rgb',
+    'psd-compose-color-burn',
+    'psd-compose-color-dodge',
+    'psd-compose-darken',
+    'psd-compose-difference',
+    'psd-compose-exclusion',
+    'psd-compose-hard-light',
+    'psd-compose-hard-mix',
+    'psd-compose-lighten',
+    'psd-compose-linear-burn',
+    'psd-compose-linear-dodge',
+    'psd-compose-linear-light',
+    'psd-compose-multiply',
+    'psd-compose-normal',
+    'psd-compose-overlay',
+    'psd-compose-pin-light',
+    'psd-compose-screen',
+    'psd-compose-soft-light',
+    'psd-compose-vivid-light',
+    'psd-imageformat-layerraw-parse-raw',
+    'psd-imageformat-rle-decode-rle-channel',
+    'psd-imagemode-cmyk-combine-cmyk-channel',
+    'psd-imagemode-greyscale-combine-greyscale-channel',
+    'psd-imagemode-rgb-combine-rgb-channel',
+    'psd-renderer-blender-compose',
+    'psd-renderer-clippingmask-apply',
+    'psd-renderer-mask-apply',
+    'psd-util-clamp',
+    'psd-util-pad2',
+    'psd-util-pad4'
+]
+
+psd_benchmark_time = 120
+
+class PSDBenchmarkSuite(AllBenchmarksBenchmarkSuite):
+    def name(self):
+        return 'psd'
+
+    def directory(self):
+        return 'psd.rb'
+
+    def benchmarkList(self, bmSuiteArgs):
+        return psd_benchmarks
+
+    def time(self):
+        return psd_benchmark_time
+
+image_demo_benchmarks = [
+    'image-demo-conv',
+    'image-demo-sobel',
+]
+
+image_demo_benchmark_time = 120
+
+class ImageDemoBenchmarkSuite(AllBenchmarksBenchmarkSuite):
+    def name(self):
+        return 'image-demo'
+
+    def directory(self):
+        return 'image-demo'
+
+    def benchmarkList(self, bmSuiteArgs):
+        return image_demo_benchmarks
+
+    def time(self):
+        return image_demo_benchmark_time
+
+asciidoctor_benchmarks = [
+    'asciidoctor:file-lines',
+    'asciidoctor:string-lines',
+    'asciidoctor:read-line',
+    'asciidoctor:restore-line',
+    'asciidoctor:quote-match',
+    'asciidoctor:quote-sub',
+    'asciidoctor:join-lines',
+    'asciidoctor-convert',
+    'asciidoctor-load-file',
+]
+
+asciidoctor_benchmark_time = {
+    'asciidoctor-convert': 400,
+    'asciidoctor-load-file': 400,
+    'default': 120
+}
+
+class AsciidoctorBenchmarkSuite(AllBenchmarksBenchmarkSuite):
+    def name(self):
+        return 'asciidoctor'
+
+    def benchmarkList(self, bmSuiteArgs):
+        return asciidoctor_benchmarks
+
+    def time(self):
+        return asciidoctor_benchmark_time
+
+class OptcarrotBenchmarkSuite(AllBenchmarksBenchmarkSuite):
+    def name(self):
+        return 'optcarrot'
+
+    def directory(self):
+        return 'optcarrot'
+
+    def benchmarkList(self, bmSuiteArgs):
+        return ['optcarrot']
+
+    def time(self):
+        return 200
+
+synthetic_benchmarks = [
+    'acid'
+]
+
+synthetic_benchmark_time = 120
+
+class SyntheticBenchmarkSuite(AllBenchmarksBenchmarkSuite):
+    def name(self):
+        return 'synthetic'
+
+    def benchmarkList(self, bmSuiteArgs):
+        return synthetic_benchmarks
+
+    def time(self):
+        return synthetic_benchmark_time
+
