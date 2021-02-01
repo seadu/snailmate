@@ -566,3 +566,181 @@ class SyntheticBenchmarkSuite(AllBenchmarksBenchmarkSuite):
     def time(self):
         return synthetic_benchmark_time
 
+micro_benchmark_time = 30
+
+class MicroBenchmarkSuite(AllBenchmarksBenchmarkSuite):
+    def name(self):
+        return 'micro'
+
+    def benchmarkList(self, bmSuiteArgs):
+        # Generates a list similar to `asciidoctor_benchmarks` to handle multiple benchmarks per file
+        ruby_benchmarks = join(rubyDir, 'bench')
+        benchmarks = []
+        micro_dir = join(ruby_benchmarks, 'micro')
+        for root, _, files in os.walk(micro_dir):
+            for name in files:
+                if name.endswith('.rb'):
+                    benchmark_file = join(root, name)
+                    out = mx.OutputCapture()
+                    jt(['benchmark', 'list', benchmark_file], out=out)
+                    benchmark_file_from_micro_dir = benchmark_file[len(micro_dir)+1:-3]
+                    benchmarks.extend([benchmark_file_from_micro_dir + ':' + b.strip() for b in out.data.split('\n') if len(b.strip()) > 0])
+        return benchmarks
+
+    def time(self):
+        return micro_benchmark_time
+
+savina_benchmarks = [
+    'savina-apsp',
+    'savina-radix-sort',
+    'savina-trapezoidal',
+]
+
+class SavinaBenchmarkSuite(AllBenchmarksBenchmarkSuite):
+    def name(self):
+        return 'savina'
+
+    def directory(self):
+        return 'parallel/savina'
+
+    def benchmarkList(self, bmSuiteArgs):
+        return savina_benchmarks
+
+    def time(self):
+        return 120
+
+server_benchmarks = [
+    'tcp-server',
+    'webrick'
+]
+
+server_benchmark_time = 60 * 4 # Seems unstable otherwise
+
+class ServerBenchmarkSuite(RubyBenchmarkSuite):
+    def benchmarkList(self, bmSuiteArgs):
+        return server_benchmarks
+
+    def name(self):
+        return 'server'
+
+    def runBenchmark(self, benchmark, bmSuiteArgs):
+        arguments = ['ruby']
+        if not bmSuiteArgs:
+            arguments.extend(['--check-compilation'])
+        arguments.extend(['bench/servers/' + benchmark + '.rb'])
+
+        server = BackgroundJT(arguments + bmSuiteArgs)
+
+        with server:
+            time.sleep(10)
+            out = mx.OutputCapture()
+            if mx.run(
+                    ['ruby', 'bench/servers/harness.rb', str(server_benchmark_time)],
+                    out=out,
+                    nonZeroIsFatal=False) == 0 and server.is_running():
+                samples = [float(s) for s in out.data.split('\n')[0:-1]]
+                mx.log(samples)
+                half_samples = len(samples) // 2
+                used_samples = samples[len(samples)-half_samples-1:]
+                ips = sum(used_samples) / float(len(used_samples))
+
+                return [{
+                    'benchmark': benchmark,
+                    'metric.name': 'throughput',
+                    'metric.value': ips,
+                    'metric.unit': 'op/s',
+                    'metric.better': 'higher'
+                }]
+            else:
+                sys.stderr.write(out.data)
+
+                # TODO CS 24-Jun-16, how can we fail the wider suite?
+                return [{
+                    'benchmark': benchmark,
+                    'metric.name': 'throughput',
+                    'metric.value': 0,
+                    'metric.unit': 'op/s',
+                    'metric.better': 'higher',
+                    'error': 'failed'
+                }]
+
+class RubykonBenchmarkSuite(AllBenchmarksBenchmarkSuite):
+    def name(self):
+        return 'rubykon'
+
+    def directory(self):
+        return 'rubykon'
+
+    def benchmarkList(self, bmSuiteArgs):
+        return ['rubykon']
+
+    def time(self):
+        return 120
+
+class LiquidBenchmarkSuite(AllBenchmarksBenchmarkSuite):
+    def name(self):
+        return 'liquid'
+
+    def directory(self):
+        return 'liquid'
+
+    def benchmarkList(self, bmSuiteArgs):
+        return ['liquid-cart-parse', 'liquid-cart-render', 'liquid-middleware']
+
+    def time(self):
+        return 60
+
+warmup_benchmarks = [
+    'asciidoctor/asciidoctor-convert',
+    'asciidoctor/asciidoctor-load-file',
+    'rubykon/rubykon',
+]
+
+blog6_benchmarks = [
+    'rails/blog6-bundle-install',
+    'rails/blog6-rails-routes',
+]
+
+class WarmupBenchmarkSuite(AllBenchmarksBenchmarkSuite):
+    def config(self):
+        # NOTE: also update mx.truffleruby/warmup-fork-counts.json when updating this list
+        iterations = {
+            'asciidoctor-convert':     {10:'startup', 100:'early-warmup', 500:'late-warmup'},
+            'asciidoctor-load-file':   {10:'startup', 100:'early-warmup', 500:'late-warmup'},
+            'rubykon':                 {1:'startup', 10:'early-warmup', 30:'late-warmup'},
+            'blog6-bundle-install':    {1:'single-shot'},
+            'blog6-rails-routes':      {1:'single-shot'},
+        }
+        return {'kind': 'fixed-iterations', 'iterations': iterations}
+
+    def name(self):
+        return 'ruby-warmup'
+
+    def directory(self):
+        return None
+
+    def benchmarkList(self, bmSuiteArgs):
+        benchmarks = warmup_benchmarks[:]
+        if os.getenv('HOST_VM') != "jruby":
+            benchmarks.extend(blog6_benchmarks)
+        return benchmarks
+
+mx_benchmark.add_bm_suite(BuildStatsBenchmarkSuite())
+mx_benchmark.add_bm_suite(AllocationBenchmarkSuite())
+mx_benchmark.add_bm_suite(InstructionsBenchmarkSuite())
+mx_benchmark.add_bm_suite(MinHeapBenchmarkSuite())
+mx_benchmark.add_bm_suite(MaxRssBenchmarkSuite())
+mx_benchmark.add_bm_suite(TimeBenchmarkSuite())
+mx_benchmark.add_bm_suite(ClassicBenchmarkSuite())
+mx_benchmark.add_bm_suite(ChunkyBenchmarkSuite())
+mx_benchmark.add_bm_suite(PSDBenchmarkSuite())
+mx_benchmark.add_bm_suite(ImageDemoBenchmarkSuite())
+mx_benchmark.add_bm_suite(AsciidoctorBenchmarkSuite())
+mx_benchmark.add_bm_suite(OptcarrotBenchmarkSuite())
+mx_benchmark.add_bm_suite(SyntheticBenchmarkSuite())
+mx_benchmark.add_bm_suite(MicroBenchmarkSuite())
+mx_benchmark.add_bm_suite(SavinaBenchmarkSuite())
+mx_benchmark.add_bm_suite(ServerBenchmarkSuite())
+mx_benchmark.add_bm_suite(RubykonBenchmarkSuite())
+mx_benchmark.add_bm_suite(LiquidBenchmarkSuite())
+mx_benchmark.add_bm_suite(WarmupBenchmarkSuite())
