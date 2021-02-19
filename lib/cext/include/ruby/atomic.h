@@ -249,4 +249,226 @@ typedef unsigned int rb_atomic_t;
 #define RUBY_ATOMIC_SIZE_ADD(var, val) rbimpl_atomic_size_add(&(var), (val))
 
 /**
- * Identical to #RUBY_ATOMIC_SUB, except it expects its argu
+ * Identical to #RUBY_ATOMIC_SUB, except it expects its arguments are `size_t`.
+ * There are cases where ::rb_atomic_t is 32bit while `size_t` is 64bit.  This
+ * should be used for size related operations to support such platforms.
+ *
+ * @param   var  A variable of `size_t`.
+ * @param   val  Value to subtract.
+ * @return  void
+ * @post    `var` holds `var - val`.
+ */
+#define RUBY_ATOMIC_SIZE_SUB(var, val) rbimpl_atomic_size_sub(&(var), (val))
+
+/**
+ * Identical  to #RUBY_ATOMIC_EXCHANGE,  except  it expects  its arguments  are
+ * `void*`.   There are  cases where  ::rb_atomic_t is  32bit while  `void*` is
+ * 64bit.  This should  be used for pointer related operations  to support such
+ * platforms.
+ *
+ * @param   var  A variable of `void *`.
+ * @param   val   Value to set.
+ * @return  What was stored in `var` before the assignment.
+ * @post    `var` holds `val`.
+ *
+ * @internal
+ *
+ * :FIXME: this `(void*)` cast is evil!  However `void*` is incompatible with
+ * some pointers, most notably function pointers.
+ */
+#define RUBY_ATOMIC_PTR_EXCHANGE(var, val) \
+    RBIMPL_CAST(rbimpl_atomic_ptr_exchange((void **)&(var), (void *)val))
+
+/**
+ * Identical to #RUBY_ATOMIC_CAS, except it expects its arguments are `void*`.
+ * There are cases where ::rb_atomic_t is 32bit while `void*` is 64bit.  This
+ * should be used for size related operations to support such platforms.
+ *
+ * @param   var        A variable of `void*`.
+ * @param   oldval     Expected value of `var` before the assignment.
+ * @param   newval     What you want to store at `var`.
+ * @retval  oldval     Successful assignment (`var` is now `newval`).
+ * @retval  otherwise  Something else is at `var`; not updated.
+ */
+#define RUBY_ATOMIC_PTR_CAS(var, oldval, newval) \
+    RBIMPL_CAST(rbimpl_atomic_ptr_cas((void **)&(var), (oldval), (newval)))
+
+/**
+ * Identical  to #RUBY_ATOMIC_EXCHANGE,  except  it expects  its arguments  are
+ * ::VALUE.   There are  cases where  ::rb_atomic_t is  32bit while  ::VALUE is
+ * 64bit.  This should  be used for pointer related operations  to support such
+ * platforms.
+ *
+ * @param   var  A variable of ::VALUE.
+ * @param   val   Value to set.
+ * @return  What was stored in `var` before the assignment.
+ * @post    `var` holds `val`.
+ */
+#define RUBY_ATOMIC_VALUE_EXCHANGE(var, val) \
+    rbimpl_atomic_value_exchange(&(var), (val))
+
+/**
+ * Identical to #RUBY_ATOMIC_CAS, except it  expects its arguments are ::VALUE.
+ * There are cases  where ::rb_atomic_t is 32bit while ::VALUE  is 64bit.  This
+ * should be used for size related operations to support such platforms.
+ *
+ * @param   var        A variable of `void*`.
+ * @param   oldval     Expected value of `var` before the assignment.
+ * @param   newval     What you want to store at `var`.
+ * @retval  oldval     Successful assignment (`var` is now `newval`).
+ * @retval  otherwise  Something else is at `var`; not updated.
+ */
+#define RUBY_ATOMIC_VALUE_CAS(var, oldval, newval) \
+    rbimpl_atomic_value_cas(&(var), (oldval), (newval))
+
+/** @cond INTERNAL_MACRO */
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline rb_atomic_t
+rbimpl_atomic_fetch_add(volatile rb_atomic_t *ptr, rb_atomic_t val)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS)
+    return __atomic_fetch_add(ptr, val, __ATOMIC_SEQ_CST);
+
+#elif defined(HAVE_GCC_SYNC_BUILTINS)
+    return __sync_fetch_and_add(ptr, val);
+
+#elif defined(_WIN32)
+    return InterlockedExchangeAdd(ptr, val);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H)
+    /*
+     * `atomic_add_int_nv` takes its second argument as `int`!  Meanwhile our
+     * `rb_atomic_t` is unsigned.  We cannot pass `val` as-is.  We have to
+     * manually check integer overflow.
+     */
+    RBIMPL_ASSERT_OR_ASSUME(val <= INT_MAX);
+    return atomic_add_int_nv(ptr, val) - val;
+
+#else
+# error Unsupported platform.
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline void
+rbimpl_atomic_add(volatile rb_atomic_t *ptr, rb_atomic_t val)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS)
+    /*
+     * GCC on amd64 is smart enough to detect this `__atomic_add_fetch`'s
+     * return value is not used, then compiles it into single `LOCK ADD`
+     * instruction.
+     */
+    __atomic_add_fetch(ptr, val, __ATOMIC_SEQ_CST);
+
+#elif defined(HAVE_GCC_SYNC_BUILTINS)
+    __sync_add_and_fetch(ptr, val);
+
+#elif defined(_WIN32)
+    /*
+     * `InterlockedExchangeAdd` is `LOCK XADD`.  It seems there also is
+     * `_InterlockedAdd` intrinsic in ARM Windows but not for x86?  Sticking to
+     * `InterlockedExchangeAdd` for better portability.
+     */
+    InterlockedExchangeAdd(ptr, val);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H)
+    /* Ditto for `atomic_add_int_nv`. */
+    RBIMPL_ASSERT_OR_ASSUME(val <= INT_MAX);
+    atomic_add_int(ptr, val);
+
+#else
+# error Unsupported platform.
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline void
+rbimpl_atomic_size_add(volatile size_t *ptr, size_t val)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS)
+    __atomic_add_fetch(ptr, val, __ATOMIC_SEQ_CST);
+
+#elif defined(HAVE_GCC_SYNC_BUILTINS)
+    __sync_add_and_fetch(ptr, val);
+
+#elif defined(_WIN32) && defined(_M_AMD64)
+    /* Ditto for `InterlockeExchangedAdd`. */
+    InterlockedExchangeAdd64(ptr, val);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H) && (defined(_LP64) || defined(_I32LPx))
+    /* Ditto for `atomic_add_int_nv`. */
+    RBIMPL_ASSERT_OR_ASSUME(val <= LONG_MAX);
+    atomic_add_long(ptr, val);
+
+#else
+    RBIMPL_STATIC_ASSERT(size_of_rb_atomic_t, sizeof *ptr == sizeof(rb_atomic_t));
+
+    volatile rb_atomic_t *const tmp = RBIMPL_CAST((volatile rb_atomic_t *)ptr);
+    rbimpl_atomic_add(tmp, val);
+
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline void
+rbimpl_atomic_inc(volatile rb_atomic_t *ptr)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS) || defined(HAVE_GCC_SYNC_BUILTINS)
+    rbimpl_atomic_add(ptr, 1);
+
+#elif defined(_WIN32)
+    InterlockedIncrement(ptr);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H)
+    atomic_inc_uint(ptr);
+
+#else
+    rbimpl_atomic_add(ptr, 1);
+
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline void
+rbimpl_atomic_size_inc(volatile size_t *ptr)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS) || defined(HAVE_GCC_SYNC_BUILTINS)
+    rbimpl_atomic_size_add(ptr, 1);
+
+#elif defined(_WIN32) && defined(_M_AMD64)
+    InterlockedIncrement64(ptr);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H) && (defined(_LP64) || defined(_I32LPx))
+    atomic_inc_ulong(ptr);
+
+#else
+    rbimpl_atomic_size_add(ptr, 1);
+
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static in
