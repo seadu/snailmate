@@ -31,4 +31,19 @@ module RBS
         def manifest_of(config_entry)
           config_entry['version'] or raise
           manifest_path = (lookup(config_entry) or raise).join('manifest.yaml')
-          YAML.safe_load(manifest_path.read) if manifest_pat
+          YAML.safe_load(manifest_path.read) if manifest_path.exist?
+        end
+
+        def to_lockfile
+          {
+            'type' => 'stdlib',
+          }
+        end
+
+        private def lookup(config_entry)
+          REPO.lookup(config_entry['name'], config_entry['version'])
+        end
+      end
+    end
+  end
+end
