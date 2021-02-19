@@ -471,4 +471,271 @@ rbimpl_atomic_size_inc(volatile size_t *ptr)
 RBIMPL_ATTR_ARTIFICIAL()
 RBIMPL_ATTR_NOALIAS()
 RBIMPL_ATTR_NONNULL((1))
-static in
+static inline rb_atomic_t
+rbimpl_atomic_fetch_sub(volatile rb_atomic_t *ptr, rb_atomic_t val)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS)
+    return __atomic_fetch_sub(ptr, val, __ATOMIC_SEQ_CST);
+
+#elif defined(HAVE_GCC_SYNC_BUILTINS)
+    return __sync_fetch_and_sub(ptr, val);
+
+#elif defined(_WIN32)
+    /* rb_atomic_t is signed here! Safe to do `-val`. */
+    return InterlockedExchangeAdd(ptr, -val);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H)
+    /* Ditto for `rbimpl_atomic_fetch_add`. */
+    const signed neg = -1;
+    RBIMPL_ASSERT_OR_ASSUME(val <= INT_MAX);
+    return atomic_add_int_nv(ptr, neg * val) + val;
+
+#else
+# error Unsupported platform.
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline void
+rbimpl_atomic_sub(volatile rb_atomic_t *ptr, rb_atomic_t val)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS)
+    __atomic_sub_fetch(ptr, val, __ATOMIC_SEQ_CST);
+
+#elif defined(HAVE_GCC_SYNC_BUILTINS)
+    __sync_sub_and_fetch(ptr, val);
+
+#elif defined(_WIN32)
+    InterlockedExchangeAdd(ptr, -val);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H)
+    const signed neg = -1;
+    RBIMPL_ASSERT_OR_ASSUME(val <= INT_MAX);
+    atomic_add_int(ptr, neg * val);
+
+#else
+# error Unsupported platform.
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline void
+rbimpl_atomic_size_sub(volatile size_t *ptr, size_t val)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS)
+    __atomic_sub_fetch(ptr, val, __ATOMIC_SEQ_CST);
+
+#elif defined(HAVE_GCC_SYNC_BUILTINS)
+    __sync_sub_and_fetch(ptr, val);
+
+#elif defined(_WIN32) && defined(_M_AMD64)
+    const ssize_t neg = -1;
+    InterlockedExchangeAdd64(ptr, neg * val);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H) && (defined(_LP64) || defined(_I32LPx))
+    const signed neg = -1;
+    RBIMPL_ASSERT_OR_ASSUME(val <= LONG_MAX);
+    atomic_add_long(ptr, neg * val);
+
+#else
+    RBIMPL_STATIC_ASSERT(size_of_rb_atomic_t, sizeof *ptr == sizeof(rb_atomic_t));
+
+    volatile rb_atomic_t *const tmp = RBIMPL_CAST((volatile rb_atomic_t *)ptr);
+    rbimpl_atomic_sub(tmp, val);
+
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline void
+rbimpl_atomic_dec(volatile rb_atomic_t *ptr)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS) || defined(HAVE_GCC_SYNC_BUILTINS)
+    rbimpl_atomic_sub(ptr, 1);
+
+#elif defined(_WIN32)
+    InterlockedDecrement(ptr);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H)
+    atomic_dec_uint(ptr);
+
+#else
+    rbimpl_atomic_sub(ptr, 1);
+
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline void
+rbimpl_atomic_size_dec(volatile size_t *ptr)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS) || defined(HAVE_GCC_SYNC_BUILTINS)
+    rbimpl_atomic_size_sub(ptr, 1);
+
+#elif defined(_WIN32) && defined(_M_AMD64)
+    InterlockedDecrement64(ptr);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H) && (defined(_LP64) || defined(_I32LPx))
+    atomic_dec_ulong(ptr);
+
+#else
+    rbimpl_atomic_size_sub(ptr, 1);
+
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline void
+rbimpl_atomic_or(volatile rb_atomic_t *ptr, rb_atomic_t val)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS)
+    __atomic_or_fetch(ptr, val, __ATOMIC_SEQ_CST);
+
+#elif defined(HAVE_GCC_SYNC_BUILTINS)
+    __sync_or_and_fetch(ptr, val);
+
+#elif RBIMPL_COMPILER_SINCE(MSVC, 13, 0, 0)
+    _InterlockedOr(ptr, val);
+
+#elif defined(_WIN32) && defined(__GNUC__)
+    /* This was for old MinGW.  Maybe not needed any longer? */
+    __asm__(
+        "lock\n\t"
+        "orl\t%1, %0"
+        : "=m"(ptr)
+        : "Ir"(val));
+
+#elif defined(_WIN32) && defined(_M_IX86)
+    __asm mov eax, ptr;
+    __asm mov ecx, val;
+    __asm lock or [eax], ecx;
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H)
+    atomic_or_uint(ptr, val);
+
+#else
+# error Unsupported platform.
+#endif
+}
+
+/* Nobody uses this but for theoretical backwards compatibility... */
+#if RBIMPL_COMPILER_BEFORE(MSVC, 13, 0, 0)
+static inline rb_atomic_t
+rb_w32_atomic_or(volatile rb_atomic_t *var, rb_atomic_t val)
+{
+    return rbimpl_atomic_or(var, val);
+}
+#endif
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline rb_atomic_t
+rbimpl_atomic_exchange(volatile rb_atomic_t *ptr, rb_atomic_t val)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS)
+    return __atomic_exchange_n(ptr, val, __ATOMIC_SEQ_CST);
+
+#elif defined(HAVE_GCC_SYNC_BUILTINS)
+    return __sync_lock_test_and_set(ptr, val);
+
+#elif defined(_WIN32)
+    return InterlockedExchange(ptr, val);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H)
+    return atomic_swap_uint(ptr, val);
+
+#else
+# error Unsupported platform.
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline size_t
+rbimpl_atomic_size_exchange(volatile size_t *ptr, size_t val)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS)
+    return __atomic_exchange_n(ptr, val, __ATOMIC_SEQ_CST);
+
+#elif defined(HAVE_GCC_SYNC_BUILTINS)
+    return __sync_lock_test_and_set(ptr, val);
+
+#elif defined(_WIN32) && defined(_M_AMD64)
+    return InterlockedExchange64(ptr, val);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H) && (defined(_LP64) || defined(_I32LPx))
+    return atomic_swap_ulong(ptr, val);
+
+#else
+    RBIMPL_STATIC_ASSERT(size_of_size_t, sizeof *ptr == sizeof(rb_atomic_t));
+
+    volatile rb_atomic_t *const tmp = RBIMPL_CAST((volatile rb_atomic_t *)ptr);
+    const rb_atomic_t ret = rbimpl_atomic_exchange(tmp, val);
+    return RBIMPL_CAST((size_t)ret);
+
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline void *
+rbimpl_atomic_ptr_exchange(void *volatile *ptr, const void *val)
+{
+#if 0
+
+#elif defined(InterlockedExchangePointer)
+    /* const_cast */
+    PVOID *pptr = RBIMPL_CAST((PVOID *)ptr);
+    PVOID pval = RBIMPL_CAST((PVOID)val);
+    return InterlockedExchangePointer(pptr, pval);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H)
+    return atomic_swap_ptr(ptr, RBIMPL_CAST((void *)val));
+
+#else
+    RBIMPL_STATIC_ASSERT(sizeof_voidp, sizeof *ptr == sizeof(size_t));
+
+    const size_t sval = RBIMPL_CAST((size_t)val);
+    volatile size_t *const sptr = RBIMPL_CAST((volatile size_t *)ptr);
+    const size_t sret = rbimpl_atomic_size_exchange(sptr, sval);
+    return RBIMPL_CAST((void *)sret);
+
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline VALUE
+rbimpl_atomic_value_exchange(volatile VALUE *ptr, VALUE val)
+{
+    RBIMPL_STATIC_ASSERT(sizeof_value, sizeof *ptr == sizeof(size_t));
