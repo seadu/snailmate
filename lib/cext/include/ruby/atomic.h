@@ -739,3 +739,152 @@ static inline VALUE
 rbimpl_atomic_value_exchange(volatile VALUE *ptr, VALUE val)
 {
     RBIMPL_STATIC_ASSERT(sizeof_value, sizeof *ptr == sizeof(size_t));
+
+    const size_t sval = RBIMPL_CAST((size_t)val);
+    volatile size_t *const sptr = RBIMPL_CAST((volatile size_t *)ptr);
+    const size_t sret = rbimpl_atomic_size_exchange(sptr, sval);
+    return RBIMPL_CAST((VALUE)sret);
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline void
+rbimpl_atomic_set(volatile rb_atomic_t *ptr, rb_atomic_t val)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS)
+    __atomic_store_n(ptr, val, __ATOMIC_SEQ_CST);
+
+#else
+    /* Maybe std::atomic<rb_atomic_t>::store can be faster? */
+    rbimpl_atomic_exchange(ptr, val);
+
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline rb_atomic_t
+rbimpl_atomic_cas(volatile rb_atomic_t *ptr, rb_atomic_t oldval, rb_atomic_t newval)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS)
+    __atomic_compare_exchange_n(
+        ptr, &oldval, newval, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+    return oldval;
+
+#elif defined(HAVE_GCC_SYNC_BUILTINS)
+    return __sync_val_compare_and_swap(ptr, oldval, newval);
+
+#elif RBIMPL_COMPILER_SINCE(MSVC, 13, 0, 0)
+    return InterlockedCompareExchange(ptr, newval, oldval);
+
+#elif defined(_WIN32)
+    PVOID *pptr = RBIMPL_CAST((PVOID *)ptr);
+    PVOID pold = RBIMPL_CAST((PVOID)oldval);
+    PVOID pnew = RBIMPL_CAST((PVOID)newval);
+    PVOID pret = InterlockedCompareExchange(pptr, pnew, pold);
+    return RBIMPL_CAST((rb_atomic_t)pret);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H)
+    return atomic_cas_uint(ptr, oldval, newval);
+
+#else
+# error Unsupported platform.
+#endif
+}
+
+/* Nobody uses this but for theoretical backwards compatibility... */
+#if RBIMPL_COMPILER_BEFORE(MSVC, 13, 0, 0)
+static inline rb_atomic_t
+rb_w32_atomic_cas(volatile rb_atomic_t *var, rb_atomic_t oldval, rb_atomic_t newval)
+{
+    return rbimpl_atomic_cas(var, oldval, newval);
+}
+#endif
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline size_t
+rbimpl_atomic_size_cas(volatile size_t *ptr, size_t oldval, size_t newval)
+{
+#if 0
+
+#elif defined(HAVE_GCC_ATOMIC_BUILTINS)
+    __atomic_compare_exchange_n(
+        ptr, &oldval, newval, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+    return oldval;
+
+#elif defined(HAVE_GCC_SYNC_BUILTINS)
+    return __sync_val_compare_and_swap(ptr, oldval, newval);
+
+#elif defined(_WIN32) && defined(_M_AMD64)
+    return InterlockedCompareExchange64(ptr, newval, oldval);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H) && (defined(_LP64) || defined(_I32LPx))
+    return atomic_cas_ulong(ptr, oldval, newval);
+
+#else
+    RBIMPL_STATIC_ASSERT(size_of_size_t, sizeof *ptr == sizeof(rb_atomic_t));
+
+    volatile rb_atomic_t *tmp = RBIMPL_CAST((volatile rb_atomic_t *)ptr);
+    return rbimpl_atomic_cas(tmp, oldval, newval);
+
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline void *
+rbimpl_atomic_ptr_cas(void **ptr, const void *oldval, const void *newval)
+{
+#if 0
+
+#elif defined(InterlockedExchangePointer)
+    /* ... Can we say that InterlockedCompareExchangePtr surly exists when
+     * InterlockedExchangePointer is defined?  Seems so but...?*/
+    PVOID *pptr = RBIMPL_CAST((PVOID *)ptr);
+    PVOID pold = RBIMPL_CAST((PVOID)oldval);
+    PVOID pnew = RBIMPL_CAST((PVOID)newval);
+    return InterlockedCompareExchangePointer(pptr, pnew, pold);
+
+#elif defined(__sun) && defined(HAVE_ATOMIC_H)
+    void *pold = RBIMPL_CAST((void *)oldval);
+    void *pnew = RBIMPL_CAST((void *)newval);
+    return atomic_cas_ptr(ptr, pold, pnew);
+
+
+#else
+    RBIMPL_STATIC_ASSERT(sizeof_voidp, sizeof *ptr == sizeof(size_t));
+
+    const size_t snew = RBIMPL_CAST((size_t)newval);
+    const size_t sold = RBIMPL_CAST((size_t)oldval);
+    volatile size_t *const sptr = RBIMPL_CAST((volatile size_t *)ptr);
+    const size_t sret = rbimpl_atomic_size_cas(sptr, sold, snew);
+    return RBIMPL_CAST((void *)sret);
+
+#endif
+}
+
+RBIMPL_ATTR_ARTIFICIAL()
+RBIMPL_ATTR_NOALIAS()
+RBIMPL_ATTR_NONNULL((1))
+static inline VALUE
+rbimpl_atomic_value_cas(volatile VALUE *ptr, VALUE oldval, VALUE newval)
+{
+    RBIMPL_STATIC_ASSERT(sizeof_value, sizeof *ptr == sizeof(size_t));
+
+    const size_t snew = RBIMPL_CAST((size_t)newval);
+    const size_t sold = RBIMPL_CAST((size_t)oldval);
+    volatile size_t *const sptr = RBIMPL_CAST((volatile size_t *)ptr);
+    const size_t sret = rbimpl_atomic_size_cas(sptr, sold, snew);
+    return RBIMPL_CAST((VALUE)sret);
+}
+/** @endcond */
+#endif /* RUBY_ATOMIC_H */
