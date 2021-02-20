@@ -308,4 +308,29 @@ module_eval(<<'.,.,', 'php_serialization.y', 57)
 module_eval(<<'.,.,', 'php_serialization.y', 60)
   def _reduce_16(val, _values, result)
      result = val
-   
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'php_serialization.y', 65)
+  def _reduce_17(val, _values, result)
+                          # Checks if the keys are a sequence of integers
+                      idx = -1
+                      arr = val[5].all? { |(k,v)| k == (idx += 1) }
+
+                      if arr
+                        result = val[5].map { |(k,v)| v }
+                      else
+                        result = Hash[val[5]]
+                      end
+
+    result
+  end
+.,.,
+
+def _reduce_none(val, _values, result)
+  val[0]
+end
+
+  end   # class Unserializer
+end   # module PhpSerialization
