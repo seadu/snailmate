@@ -207,4 +207,102 @@ describe :float_to_s, shared: true do
       892.89999999999997726263.send(@method).should == "892.9"
       68.27299999999999613465.send(@method).should == "68.273"
       904.10000000000002273737.send(@method).should == "904.1"
-      5.23200000000000020606.send(@method).should =
+      5.23200000000000020606.send(@method).should == "5.232"
+      4.09628000000000014325.send(@method).should == "4.09628"
+      46.05152633699999853434.send(@method).should == "46.051526337"
+      142.12884990599999923688.send(@method).should == "142.128849906"
+      3.83057023500000015659.send(@method).should == "3.830570235"
+      11.81684594699999912848.send(@method).should == "11.816845947"
+      80.50000000000000000000.send(@method).should == "80.5"
+      382.18215010000000120272.send(@method).should == "382.1821501"
+      55.38444606899999911320.send(@method).should == "55.384446069"
+      5.78000000000000024869.send(@method).should == "5.78"
+      2.88244999999999995666.send(@method).should == "2.88245"
+      43.27709999999999723741.send(@method).should == "43.2771"
+    end
+
+    it "random values from divisions" do
+      (1.0 / 7).send(@method).should == "0.14285714285714285"
+
+      # 50.times do
+      #    a = rand(10)
+      #    b = rand(10)
+      #    c = rand(10)
+      #    d = rand(10)
+      #    expression = "#{a}.#{b} / #{c}.#{d}"
+      #    puts "      (#{expression}).send(@method).should == #{eval(expression).send(@method).inspect}"
+      #  end
+
+      (1.1 / 7.1).send(@method).should == "0.15492957746478875"
+      (6.5 / 8.8).send(@method).should == "0.7386363636363635"
+      (4.8 / 4.3).send(@method).should == "1.1162790697674418"
+      (4.0 / 1.9).send(@method).should == "2.1052631578947367"
+      (9.1 / 0.8).send(@method).should == "11.374999999999998"
+      (5.3 / 7.5).send(@method).should == "0.7066666666666667"
+      (2.8 / 1.8).send(@method).should == "1.5555555555555554"
+      (2.1 / 2.5).send(@method).should == "0.8400000000000001"
+      (3.5 / 6.0).send(@method).should == "0.5833333333333334"
+      (4.6 / 0.3).send(@method).should == "15.333333333333332"
+      (0.6 / 2.4).send(@method).should == "0.25"
+      (1.3 / 9.1).send(@method).should == "0.14285714285714288"
+      (0.3 / 5.0).send(@method).should == "0.06"
+      (5.0 / 4.2).send(@method).should == "1.1904761904761905"
+      (3.0 / 2.0).send(@method).should == "1.5"
+      (6.3 / 2.0).send(@method).should == "3.15"
+      (5.4 / 6.0).send(@method).should == "0.9"
+      (9.6 / 8.1).send(@method).should == "1.1851851851851851"
+      (8.7 / 1.6).send(@method).should == "5.437499999999999"
+      (1.9 / 7.8).send(@method).should == "0.24358974358974358"
+      (0.5 / 2.1).send(@method).should == "0.23809523809523808"
+      (9.3 / 5.8).send(@method).should == "1.6034482758620692"
+      (2.7 / 8.0).send(@method).should == "0.3375"
+      (9.7 / 7.8).send(@method).should == "1.2435897435897436"
+      (8.1 / 2.4).send(@method).should == "3.375"
+      (7.7 / 2.7).send(@method).should == "2.8518518518518516"
+      (7.9 / 1.7).send(@method).should == "4.647058823529412"
+      (6.5 / 8.2).send(@method).should == "0.7926829268292683"
+      (7.8 / 9.6).send(@method).should == "0.8125"
+      (2.2 / 4.6).send(@method).should == "0.47826086956521746"
+      (0.0 / 1.0).send(@method).should == "0.0"
+      (8.3 / 2.9).send(@method).should == "2.8620689655172415"
+      (3.1 / 6.1).send(@method).should == "0.5081967213114754"
+      (2.8 / 7.8).send(@method).should == "0.358974358974359"
+      (8.0 / 0.1).send(@method).should == "80.0"
+      (1.7 / 6.4).send(@method).should == "0.265625"
+      (1.8 / 5.4).send(@method).should == "0.3333333333333333"
+      (8.0 / 5.8).send(@method).should == "1.3793103448275863"
+      (5.2 / 4.1).send(@method).should == "1.2682926829268295"
+      (9.8 / 5.8).send(@method).should == "1.6896551724137934"
+      (5.4 / 9.5).send(@method).should == "0.5684210526315789"
+      (8.4 / 4.9).send(@method).should == "1.7142857142857142"
+      (1.7 / 3.5).send(@method).should == "0.4857142857142857"
+      (1.2 / 5.1).send(@method).should == "0.23529411764705882"
+      (1.4 / 2.0).send(@method).should == "0.7"
+      (4.8 / 8.0).send(@method).should == "0.6"
+      (9.0 / 2.5).send(@method).should == "3.6"
+      (0.2 / 0.6).send(@method).should == "0.33333333333333337"
+      (7.8 / 5.2).send(@method).should == "1.5"
+      (9.5 / 5.5).send(@method).should == "1.7272727272727273"
+    end
+  end
+
+  describe 'encoding' do
+    before :each do
+      @internal = Encoding.default_internal
+    end
+
+    after :each do
+      Encoding.default_internal = @internal
+    end
+
+    it "returns a String in US-ASCII encoding when Encoding.default_internal is nil" do
+      Encoding.default_internal = nil
+      1.23.send(@method).encoding.should equal(Encoding::US_ASCII)
+    end
+
+    it "returns a String in US-ASCII encoding when Encoding.default_internal is not nil" do
+      Encoding.default_internal = Encoding::IBM437
+      5.47.send(@method).encoding.should equal(Encoding::US_ASCII)
+    end
+  end
+end
