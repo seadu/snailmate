@@ -44,4 +44,33 @@ public class DRegexpParseNode extends DParseNode implements ILiteralNode {
     private final RegexpOptions options;
 
     // 1.9 constructor
-    public DRegexpParseNode(SourceIndexLength position, R
+    public DRegexpParseNode(SourceIndexLength position, RegexpOptions options, Encoding encoding) {
+        super(position, encoding);
+        this.options = options;
+    }
+
+    @Override
+    public NodeType getNodeType() {
+        return NodeType.DREGEXPNODE;
+    }
+
+    /** Accept for the visitor pattern.
+     * 
+     * @param iVisitor the visitor **/
+    @Override
+    public <T> T accept(NodeVisitor<T> iVisitor) {
+        return iVisitor.visitDRegxNode(this);
+    }
+
+    /** Gets the once.
+     * 
+     * @return Returns a boolean */
+    public boolean getOnce() {
+        return options.isOnce();
+    }
+
+    /** Gets the options. */
+    public RegexpOptions getOptions() {
+        return options;
+    }
+}
