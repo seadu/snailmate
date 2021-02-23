@@ -49,4 +49,46 @@ describe "BigDecimal#remainder" do
   it "returns NaN if NaN is involved" do
     @nan.remainder(@nan).should.nan?
     @nan.remainder(@one).should.nan?
-    @one.remainder(@nan).
+    @one.remainder(@nan).should.nan?
+    @infinity.remainder(@nan).should.nan?
+    @nan.remainder(@infinity).should.nan?
+  end
+
+  version_is BigDecimal::VERSION, ""..."3.1.4" do
+    it "returns NaN if Infinity is involved" do
+      @infinity.remainder(@infinity).should.nan?
+      @infinity.remainder(@one).should.nan?
+      @infinity.remainder(@mixed).should.nan?
+      @infinity.remainder(@one_minus).should.nan?
+      @infinity.remainder(@frac_1).should.nan?
+      @one.remainder(@infinity).should.nan?
+
+      @infinity_minus.remainder(@infinity_minus).should.nan?
+      @infinity_minus.remainder(@one).should.nan?
+      @one.remainder(@infinity_minus).should.nan?
+      @frac_2.remainder(@infinity_minus).should.nan?
+
+      @infinity.remainder(@infinity_minus).should.nan?
+      @infinity_minus.remainder(@infinity).should.nan?
+    end
+  end
+
+  it "coerces arguments to BigDecimal if possible" do
+    @three.remainder(2).should == @one
+  end
+
+  describe "with Object" do
+    it "tries to coerce the other operand to self" do
+      object = mock("Object")
+      object.should_receive(:coerce).with(@three).and_return([@three, 2])
+      @three.remainder(object).should == @one
+    end
+  end
+
+  it "raises TypeError if the argument cannot be coerced to BigDecimal" do
+    -> {
+      @one.remainder('2')
+    }.should raise_error(TypeError)
+  end
+
+end
