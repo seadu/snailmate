@@ -374,4 +374,168 @@ suite = {
                 "truffleruby:TRUFFLERUBY-ANNOTATIONS",
                 "truffle:TRUFFLE_API",
             ],
-            "description": "
+            "description": "TruffleRuby Annotation Processor",
+            "license": ["EPL-2.0"],
+        },
+
+        "TRUFFLERUBY-SERVICES": {
+            "moduleInfo": {
+                "name": "org.truffleruby.services",
+                "exports": ["org.truffleruby.services.scriptengine"],
+            },
+            "dependencies": [
+                "org.truffleruby.services"
+            ],
+            "distDependencies": [
+                "sdk:GRAAL_SDK",
+            ],
+            "description": "TruffleRuby services",
+            "license": ["EPL-2.0"]
+        },
+
+        "TRUFFLERUBY": {
+            "mainClass": "org.truffleruby.launcher.RubyLauncher",
+            "dependencies": [
+                "org.truffleruby",
+                "org.truffleruby.ruby",
+            ],
+            "distDependencies": [
+                "regex:TREGEX",
+                "truffle:TRUFFLE_API",
+                "truffle:TRUFFLE_NFI",
+                "sulong:SULONG_API",
+                "truffleruby:TRUFFLERUBY-ANNOTATIONS",
+                "truffleruby:TRUFFLERUBY-SHARED",
+            ],
+            "description": "TruffleRuby",
+            "license": [
+                "EPL-2.0",          # JRuby (we're choosing EPL out of EPL,GPL,LGPL)
+                "BSD-new",          # Rubinius
+                "BSD-simplified",   # MRI
+                "MIT",              # Joni, JCodings
+            ],
+        },
+
+        "TRUFFLERUBY-BOOTSTRAP-LAUNCHER": {
+            "native": True,
+            "layout": {
+                "./": "dependency:org.truffleruby.bootstrap.launcher/*",
+            },
+            "description": "TruffleRuby Bootstrap Launcher to build core C extensions",
+            "license": ["EPL-2.0"],
+        },
+
+        "TRUFFLERUBY-LAUNCHER": {
+            "dependencies": [
+                "org.truffleruby.launcher"
+            ],
+            "distDependencies": [
+                "truffleruby:TRUFFLERUBY-ANNOTATIONS",
+                "truffleruby:TRUFFLERUBY-SHARED",
+                "sdk:GRAAL_SDK",
+                "sdk:LAUNCHER_COMMON",
+            ],
+            "description": "TruffleRuby Launcher",
+            "license": ["EPL-2.0"],
+        },
+
+        "TRUFFLERUBY_GRAALVM_SUPPORT": {
+            "fileListPurpose": 'native-image-resources',
+            "native": True,
+            "platformDependent": True,
+            "description": "TruffleRuby support distribution for the GraalVM",
+            "layout": {
+                "lib/": [
+                    "file:lib/json",
+                    "file:lib/mri",
+                    "file:lib/patches",
+                    "file:lib/truffle",
+                ],
+                "lib/cext/": [
+                    "file:lib/cext/*.rb",
+                    "file:lib/cext/ABI_version.txt",
+                    "dependency:org.truffleruby.cext/src/main/c/truffleposix/<lib:truffleposix>",
+                    "dependency:org.truffleruby.cext/src/main/c/cext/<lib:truffleruby>",
+                    "dependency:org.truffleruby.rubysignal",
+                ],
+                "lib/cext/include/": [
+                    "file:lib/cext/include/*",
+                ],
+                "lib/gems/": [
+                    {
+                        "source_type": "file",
+                        "path": "lib/gems/*",
+                        "exclude": [
+                            "lib/gems/gems/debug-*/ext",
+                            "lib/gems/gems/rbs-*/ext",
+                        ],
+                    },
+                ],
+                "lib/mri/": [
+                    "dependency:org.truffleruby.cext/src/main/c/bigdecimal/<extsuffix:bigdecimal>",
+                    "dependency:org.truffleruby.cext/src/main/c/date/<extsuffix:date_core>",
+                    "dependency:org.truffleruby.cext/src/main/c/etc/<extsuffix:etc>",
+                    "dependency:org.truffleruby.cext/src/main/c/nkf/<extsuffix:nkf>",
+                    "dependency:org.truffleruby.cext/src/main/c/openssl/<extsuffix:openssl>",
+                    "dependency:org.truffleruby.cext/src/main/c/psych/<extsuffix:psych>",
+                    "dependency:org.truffleruby.cext/src/main/c/ripper/<extsuffix:ripper>",
+                    "dependency:org.truffleruby.cext/src/main/c/syslog/<extsuffix:syslog>",
+                    "dependency:org.truffleruby.cext/src/main/c/zlib/<extsuffix:zlib>",
+                ],
+                "lib/mri/io/": [
+                    "dependency:org.truffleruby.cext/src/main/c/io-console/<extsuffix:console>",
+                ],
+                "lib/mri/rbconfig/": [
+                    "dependency:org.truffleruby.cext/src/main/c/rbconfig-sizeof/<extsuffix:sizeof>",
+                ],
+                "lib/truffle/": [
+                    "dependency:org.truffleruby.cext/src/main/c/spawn-helper/spawn-helper",
+                ],
+            },
+            "license": [
+                "EPL-2.0",          # JRuby (we're choosing EPL out of EPL,GPL,LGPL)
+                "MIT",              # minitest, did_you_mean, rake
+                "BSD-simplified",   # MRI
+                "BSD-new",          # Rubinius, FFI
+            ],
+        },
+
+        "TRUFFLERUBY_GRAALVM_SUPPORT_NO_NI_RESOURCES": {
+            "native": True,
+            "platformDependent": True,
+            "description": "TruffleRuby support distribution for the GraalVM, the contents is not included as native image resources.",
+            "layout": {
+                "./": [
+                    "file:CHANGELOG.md",
+                    "file:README.md",
+                    "file:mx.truffleruby/native-image.properties",
+                ],
+                "bin/": [
+                    "file:exe/*",
+                ],
+                "doc/": [
+                    "file:doc/user",
+                    "file:doc/legal",
+                ],
+                "logo/": [
+                    "file:logo/ATTRIBUTION.md",
+                    "file:logo/LICENSE.txt",
+                ],
+                "logo/png/": [
+                    "file:logo/png/truffleruby_logo_horizontal_medium.png",
+                ],
+                "src/main/c/openssl/": [
+                    "file:src/main/c/openssl/extconf.rb",
+                    "file:src/main/c/openssl/*.c",
+                    "file:src/main/c/openssl/ossl*.h",
+                    "file:src/main/c/openssl/openssl_missing.h",
+                ],
+            },
+        },
+
+        "TRUFFLERUBY_GRAALVM_LICENSES": {
+            "fileListPurpose": 'native-image-resources',
+            "native": True,
+            "platformDependent": True,
+            "description": "TruffleRuby support distribution for the GraalVM license files",
+    
