@@ -191,4 +191,187 @@ suite = {
             ],
             "use_jdk_headers": True, # the generated JNI header includes jni.h
             "cflags": ["-g", "-Wall", "-Werror", "-pthread"],
-            "ldflags": ["-pthr
+            "ldflags": ["-pthread"],
+        },
+
+        "org.truffleruby": {
+            "dir": "src/main",
+            "sourceDirs": ["java"],
+            "jniHeaders": True,
+            "requires": [
+                "java.logging",
+                "java.management",
+                "jdk.management",
+                "jdk.unsupported", # sun.misc.Signal
+            ],
+            "dependencies": [
+                "truffleruby:TRUFFLERUBY-ANNOTATIONS",
+                "truffleruby:TRUFFLERUBY-SHARED",
+                "truffle:TRUFFLE_API",
+                "truffle:TRUFFLE_NFI",
+                "sdk:JLINE3",
+                "regex:TREGEX",
+                "sulong:SULONG_API",
+                "JONI",
+                "JCODINGS",
+            ],
+            "annotationProcessors": [
+                "truffle:TRUFFLE_DSL_PROCESSOR",
+                "TRUFFLERUBY-PROCESSOR",
+            ],
+            "jacoco": "include",
+            "javaCompliance": "17+",
+            "checkstyle": "org.truffleruby",
+            "workingSets": "TruffleRuby",
+            "findbugsIgnoresGenerated": True,
+            "license": [
+                "EPL-2.0",          # JRuby (we're choosing EPL out of EPL,GPL,LGPL)
+                "BSD-new",          # Rubinius
+                "BSD-simplified",   # MRI
+                "MIT",              # Joni, JCodings
+            ],
+        },
+
+        "org.truffleruby.ruby": {
+            "dir": "src/main/ruby",
+            "sourceDirs": ["."],
+            "javaCompliance": "17+",
+            "license": [
+                "EPL-2.0",          # JRuby (we're choosing EPL out of EPL,GPL,LGPL)
+                "BSD-new",          # Rubinius
+            ],
+            "externalProjects": {
+                "core-library": {
+                    "type": "ruby",
+                    "path": "truffleruby",
+                    "source": ["core", "post-boot"],
+                    "load_path": ["core"]
+                }
+            }
+        },
+
+        "org.truffleruby.launcher": {
+            "dir": "src/launcher",
+            "sourceDirs": ["java"],
+            "requires": ["java.logging"],
+            "dependencies": [
+                "truffleruby:TRUFFLERUBY-ANNOTATIONS",
+                "truffleruby:TRUFFLERUBY-SHARED",
+                "sdk:GRAAL_SDK",
+                "sdk:LAUNCHER_COMMON",
+            ],
+            "jacoco": "include",
+            "javaCompliance": "17+",
+            "checkstyle": "org.truffleruby",
+            "workingSets": "TruffleRuby",
+            "license": ["EPL-2.0"],
+        },
+
+        "org.truffleruby.test": {
+            "dir": "src/test",
+            "sourceDirs": ["java", "ruby"],
+            "requires": ["java.scripting", "java.management", "jdk.management"],
+            "dependencies": [
+                "org.truffleruby",
+                "org.truffleruby.services",
+                "mx:JUNIT",
+                "NETBEANS-LIB-PROFILER",
+                "sdk:LAUNCHER_COMMON"
+            ],
+            "javaCompliance": "17+",
+            "checkstyle": "org.truffleruby",
+            "license": ["EPL-2.0"],
+        },
+
+        "org.truffleruby.tck": {
+            "testProject": True,
+            "dir": "src/tck",
+            "sourceDirs": ["java", "ruby"],
+            "dependencies": ["truffle:TRUFFLE_TCK"],
+            "javaCompliance": "17+",
+            "checkstyle": "org.truffleruby",
+            "license": ["EPL-2.0"],
+        },
+
+        "org.truffleruby.bootstrap.launcher": {
+            "class": "TruffleRubyBootstrapLauncherProject",
+            "buildDependencies": [
+                "TRUFFLERUBY", # We need this jar to run extconf.rb
+                "TRUFFLERUBY-LAUNCHER", # We need this jar to run extconf.rb
+                "sulong:SULONG_NATIVE", # We need this jar to find the toolchain with Toolchain#getToolPath
+            ],
+            "license": ["EPL-2.0"],
+        },
+
+        "org.truffleruby.cext": {
+            "native": True,
+            "dir": "src/main/c",
+            "buildDependencies": [
+                "sulong:SULONG_BOOTSTRAP_TOOLCHAIN", # graalvm-native-clang
+                "sulong:SULONG_HOME", # polyglot.h
+                "TRUFFLERUBY-BOOTSTRAP-LAUNCHER",
+            ],
+            "buildEnv": {
+                "TRUFFLERUBY_BOOTSTRAP_LAUNCHER": "<path:TRUFFLERUBY-BOOTSTRAP-LAUNCHER>/miniruby",
+                "GRAALVM_TOOLCHAIN_CC": "<toolchainGetToolPath:native,CC>",
+            },
+            "output": ".",
+            "results": [
+                "src/main/c/spawn-helper/spawn-helper",
+                "src/main/c/truffleposix/<lib:truffleposix>",
+                "src/main/c/cext/<lib:truffleruby>",
+                "src/main/c/bigdecimal/<extsuffix:bigdecimal>",
+                "src/main/c/date/<extsuffix:date_core>",
+                "src/main/c/etc/<extsuffix:etc>",
+                "src/main/c/io-console/<extsuffix:console>",
+                "src/main/c/nkf/<extsuffix:nkf>",
+                "src/main/c/openssl/<extsuffix:openssl>",
+                "src/main/c/psych/<extsuffix:psych>",
+                "src/main/c/rbconfig-sizeof/<extsuffix:sizeof>",
+                "src/main/c/ripper/<extsuffix:ripper>",
+                "src/main/c/syslog/<extsuffix:syslog>",
+                "src/main/c/zlib/<extsuffix:zlib>",
+            ],
+            "license": [
+                "EPL-2.0",          # JRuby (we're choosing EPL out of EPL,GPL,LGPL)
+                "BSD-simplified",   # MRI
+            ],
+        },
+    },
+
+    "distributions": {
+
+        # ------------- Distributions -------------
+
+        "TRUFFLERUBY-ANNOTATIONS": {
+            "dependencies": [
+                "org.truffleruby.annotations"
+            ],
+            "description": "TruffleRuby Annotations",
+            "license": ["EPL-2.0"]
+        },
+
+        # Required to share code between the launcher and the rest,
+        # since the rest cannot depend on the launcher and the shared code cannot be there.
+        # This code is loaded twice in different classloaders, therefore any created instances should not be passed around.
+        "TRUFFLERUBY-SHARED": {
+            "dependencies": [
+                "org.truffleruby.shared"
+            ],
+            "distDependencies": [
+                "truffleruby:TRUFFLERUBY-ANNOTATIONS",
+                "sdk:GRAAL_SDK",
+            ],
+            "description": "TruffleRuby Shared constants and predicates",
+            "license": ["EPL-2.0"]
+        },
+
+        "TRUFFLERUBY-PROCESSOR": {
+            "dependencies": [
+                "org.truffleruby.processor"
+            ],
+            "distDependencies": [
+                "truffleruby:TRUFFLERUBY-ANNOTATIONS",
+                "truffle:TRUFFLE_API",
+            ],
+            "description": "
