@@ -538,4 +538,42 @@ suite = {
             "native": True,
             "platformDependent": True,
             "description": "TruffleRuby support distribution for the GraalVM license files",
-    
+            "layout": {
+                "LICENSE_TRUFFLERUBY.txt": "file:LICENCE.md",
+                "3rd_party_licenses_truffleruby.txt": "file:3rd_party_licenses.txt",
+            },
+        },
+
+        "TRUFFLERUBY-TEST": {
+            "testDistribution": True,
+            "dependencies": [
+                "org.truffleruby.test",
+            ],
+            "exclude": [
+                "mx:HAMCREST",
+                "mx:JUNIT"
+            ],
+            "distDependencies": [
+                "NETBEANS-LIB-PROFILER",
+                "sdk:LAUNCHER_COMMON",
+                "TRUFFLERUBY",
+                "TRUFFLERUBY-SERVICES",
+                "TRUFFLERUBY_GRAALVM_SUPPORT",
+            ],
+            "javaProperties": {
+                "org.graalvm.language.ruby.home": "<path:TRUFFLERUBY_GRAALVM_SUPPORT>"
+            },
+            "license": ["EPL-2.0"],
+        },
+
+        "TRUFFLERUBY-TCK": {
+            "testDistribution": True,
+            "dependencies": ["org.truffleruby.tck"],
+            "distDependencies": ["truffle:TRUFFLE_TCK"],
+            "javaProperties": {
+                "org.graalvm.language.ruby.home": "<path:TRUFFLERUBY_GRAALVM_SUPPORT>"
+            },
+            "license": ["EPL-2.0"],
+        },
+    },
+}
