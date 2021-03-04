@@ -289,4 +289,48 @@ VALUE rb_fiber_scheduler_io_pwrite(VALUE scheduler, VALUE io, VALUE buffer, size
 
 /**
  * Nonblocking read from the passed IO using a native buffer.
- 
+ *
+ * @param[in]   scheduler    Target scheduler.
+ * @param[out]  io           An io object to read from.
+ * @param[out]  buffer       Return buffer.
+ * @param[in]   length       Requested number of bytes to read.
+ * @retval      RUBY_Qundef  `scheduler` doesn't have `#io_read`.
+ * @return      otherwise    What `scheduler.io_read` returns.
+ */
+VALUE rb_fiber_scheduler_io_read_memory(VALUE scheduler, VALUE io, void *buffer, size_t size, size_t length);
+
+/**
+ * Nonblocking write to the passed IO using a native buffer.
+ *
+ * @param[in]   scheduler    Target scheduler.
+ * @param[out]  io           An io object to write to.
+ * @param[in]   buffer       What to write.
+ * @param[in]   length       Number of bytes to write.
+ * @retval      RUBY_Qundef  `scheduler` doesn't have `#io_write`.
+ * @return      otherwise    What `scheduler.io_write` returns.
+ */
+VALUE rb_fiber_scheduler_io_write_memory(VALUE scheduler, VALUE io, const void *buffer, size_t size, size_t length);
+
+/**
+ * Nonblocking close the given IO.
+ *
+ * @param[in]  scheduler    Target scheduler.
+ * @param[in]  io           An io object to close.
+ * @retval     RUBY_Qundef  `scheduler` doesn't have `#io_close`.
+ * @return     otherwise    What `scheduler.io_close` returns.
+ */
+VALUE rb_fiber_scheduler_io_close(VALUE scheduler, VALUE io);
+
+/**
+ * Nonblocking DNS lookup.
+ *
+ * @param[in]  scheduler    Target scheduler.
+ * @param[in]  hostname     A host name to query.
+ * @retval     RUBY_Qundef  `scheduler` doesn't have `#address_resolve`.
+ * @return     otherwise    What `scheduler.address_resolve` returns.
+ */
+VALUE rb_fiber_scheduler_address_resolve(VALUE scheduler, VALUE hostname);
+
+RBIMPL_SYMBOL_EXPORT_END()
+
+#endif /* RUBY_FIBER_SCHEDULER_H */
