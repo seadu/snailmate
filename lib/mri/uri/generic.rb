@@ -317,4 +317,308 @@ module URI
     #
     # Checks the scheme +v+ component against the URI::Parser Regexp for :SCHEME.
     #
-    de
+    def check_scheme(v)
+      if v && parser.regexp[:SCHEME] !~ v
+        raise InvalidComponentError,
+          "bad component(expected scheme component): #{v}"
+      end
+
+      return true
+    end
+    private :check_scheme
+
+    # Protected setter for the scheme component +v+.
+    #
+    # See also URI::Generic.scheme=.
+    #
+    def set_scheme(v)
+      @scheme = v&.downcase
+    end
+    protected :set_scheme
+
+    #
+    # == Args
+    #
+    # +v+::
+    #    String
+    #
+    # == Description
+    #
+    # Public setter for the scheme component +v+
+    # (with validation).
+    #
+    # See also URI::Generic.check_scheme.
+    #
+    # == Usage
+    #
+    #   require 'uri'
+    #
+    #   uri = URI.parse("http://my.example.com")
+    #   uri.scheme = "https"
+    #   uri.to_s  #=> "https://my.example.com"
+    #
+    def scheme=(v)
+      check_scheme(v)
+      set_scheme(v)
+      v
+    end
+
+    #
+    # Checks the +user+ and +password+.
+    #
+    # If +password+ is not provided, then +user+ is
+    # split, using URI::Generic.split_userinfo, to
+    # pull +user+ and +password.
+    #
+    # See also URI::Generic.check_user, URI::Generic.check_password.
+    #
+    def check_userinfo(user, password = nil)
+      if !password
+        user, password = split_userinfo(user)
+      end
+      check_user(user)
+      check_password(password, user)
+
+      return true
+    end
+    private :check_userinfo
+
+    #
+    # Checks the user +v+ component for RFC2396 compliance
+    # and against the URI::Parser Regexp for :USERINFO.
+    #
+    # Can not have a registry or opaque component defined,
+    # with a user component defined.
+    #
+    def check_user(v)
+      if @opaque
+        raise InvalidURIError,
+          "can not set user with opaque"
+      end
+
+      return v unless v
+
+      if parser.regexp[:USERINFO] !~ v
+        raise InvalidComponentError,
+          "bad component(expected userinfo component or user component): #{v}"
+      end
+
+      return true
+    end
+    private :check_user
+
+    #
+    # Checks the password +v+ component for RFC2396 compliance
+    # and against the URI::Parser Regexp for :USERINFO.
+    #
+    # Can not have a registry or opaque component defined,
+    # with a user component defined.
+    #
+    def check_password(v, user = @user)
+      if @opaque
+        raise InvalidURIError,
+          "can not set password with opaque"
+      end
+      return v unless v
+
+      if !user
+        raise InvalidURIError,
+          "password component depends user component"
+      end
+
+      if parser.regexp[:USERINFO] !~ v
+        raise InvalidComponentError,
+          "bad password component"
+      end
+
+      return true
+    end
+    private :check_password
+
+    #
+    # Sets userinfo, argument is string like 'name:pass'.
+    #
+    def userinfo=(userinfo)
+      if userinfo.nil?
+        return nil
+      end
+      check_userinfo(*userinfo)
+      set_userinfo(*userinfo)
+      # returns userinfo
+    end
+
+    #
+    # == Args
+    #
+    # +v+::
+    #    String
+    #
+    # == Description
+    #
+    # Public setter for the +user+ component
+    # (with validation).
+    #
+    # See also URI::Generic.check_user.
+    #
+    # == Usage
+    #
+    #   require 'uri'
+    #
+    #   uri = URI.parse("http://john:S3nsit1ve@my.example.com")
+    #   uri.user = "sam"
+    #   uri.to_s  #=> "http://sam:V3ry_S3nsit1ve@my.example.com"
+    #
+    def user=(user)
+      check_user(user)
+      set_user(user)
+      # returns user
+    end
+
+    #
+    # == Args
+    #
+    # +v+::
+    #    String
+    #
+    # == Description
+    #
+    # Public setter for the +password+ component
+    # (with validation).
+    #
+    # See also URI::Generic.check_password.
+    #
+    # == Usage
+    #
+    #   require 'uri'
+    #
+    #   uri = URI.parse("http://john:S3nsit1ve@my.example.com")
+    #   uri.password = "V3ry_S3nsit1ve"
+    #   uri.to_s  #=> "http://john:V3ry_S3nsit1ve@my.example.com"
+    #
+    def password=(password)
+      check_password(password)
+      set_password(password)
+      # returns password
+    end
+
+    # Protected setter for the +user+ component, and +password+ if available
+    # (with validation).
+    #
+    # See also URI::Generic.userinfo=.
+    #
+    def set_userinfo(user, password = nil)
+      unless password
+        user, password = split_userinfo(user)
+      end
+      @user     = user
+      @password = password if password
+
+      [@user, @password]
+    end
+    protected :set_userinfo
+
+    # Protected setter for the user component +v+.
+    #
+    # See also URI::Generic.user=.
+    #
+    def set_user(v)
+      set_userinfo(v, @password)
+      v
+    end
+    protected :set_user
+
+    # Protected setter for the password component +v+.
+    #
+    # See also URI::Generic.password=.
+    #
+    def set_password(v)
+      @password = v
+      # returns v
+    end
+    protected :set_password
+
+    # Returns the userinfo +ui+ as <code>[user, password]</code>
+    # if properly formatted as 'user:password'.
+    def split_userinfo(ui)
+      return nil, nil unless ui
+      user, password = ui.split(':', 2)
+
+      return user, password
+    end
+    private :split_userinfo
+
+    # Escapes 'user:password' +v+ based on RFC 1738 section 3.1.
+    def escape_userpass(v)
+      parser.escape(v, /[@:\/]/o) # RFC 1738 section 3.1 #/
+    end
+    private :escape_userpass
+
+    # Returns the userinfo, either as 'user' or 'user:password'.
+    def userinfo
+      if @user.nil?
+        nil
+      elsif @password.nil?
+        @user
+      else
+        @user + ':' + @password
+      end
+    end
+
+    # Returns the user component.
+    def user
+      @user
+    end
+
+    # Returns the password component.
+    def password
+      @password
+    end
+
+    #
+    # Checks the host +v+ component for RFC2396 compliance
+    # and against the URI::Parser Regexp for :HOST.
+    #
+    # Can not have a registry or opaque component defined,
+    # with a host component defined.
+    #
+    def check_host(v)
+      return v unless v
+
+      if @opaque
+        raise InvalidURIError,
+          "can not set host with registry or opaque"
+      else
+        if defined?(::TruffleRuby)
+          bad = !parser.regexp[:HOST].match(v)
+        else
+          bad = parser.regexp[:HOST] !~ v
+        end
+        
+        if bad
+          raise InvalidComponentError,
+            "bad component(expected host component): #{v}"
+        end
+      end
+
+      return true
+    end
+    private :check_host
+
+    # Protected setter for the host component +v+.
+    #
+    # See also URI::Generic.host=.
+    #
+    def set_host(v)
+      @host = v
+    end
+    protected :set_host
+
+    #
+    # == Args
+    #
+    # +v+::
+    #    String
+    #
+    # == Description
+    #
+    # Public 
