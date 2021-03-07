@@ -621,4 +621,264 @@ module URI
     #
     # == Description
     #
-    # Public 
+    # Public setter for the host component +v+
+    # (with validation).
+    #
+    # See also URI::Generic.check_host.
+    #
+    # == Usage
+    #
+    #   require 'uri'
+    #
+    #   uri = URI.parse("http://my.example.com")
+    #   uri.host = "foo.com"
+    #   uri.to_s  #=> "http://foo.com"
+    #
+    def host=(v)
+      check_host(v)
+      set_host(v)
+      v
+    end
+
+    # Extract the host part of the URI and unwrap brackets for IPv6 addresses.
+    #
+    # This method is the same as URI::Generic#host except
+    # brackets for IPv6 (and future IP) addresses are removed.
+    #
+    #   uri = URI("http://[::1]/bar")
+    #   uri.hostname      #=> "::1"
+    #   uri.host          #=> "[::1]"
+    #
+    def hostname
+      v = self.host
+      v&.start_with?('[') && v.end_with?(']') ? v[1..-2] : v
+    end
+
+    # Sets the host part of the URI as the argument with brackets for IPv6 addresses.
+    #
+    # This method is the same as URI::Generic#host= except
+    # the argument can be a bare IPv6 address.
+    #
+    #   uri = URI("http://foo/bar")
+    #   uri.hostname = "::1"
+    #   uri.to_s  #=> "http://[::1]/bar"
+    #
+    # If the argument seems to be an IPv6 address,
+    # it is wrapped with brackets.
+    #
+    def hostname=(v)
+      v = "[#{v}]" if !(v&.start_with?('[') && v&.end_with?(']')) && v&.index(':')
+      self.host = v
+    end
+
+    #
+    # Checks the port +v+ component for RFC2396 compliance
+    # and against the URI::Parser Regexp for :PORT.
+    #
+    # Can not have a registry or opaque component defined,
+    # with a port component defined.
+    #
+    def check_port(v)
+      return v unless v
+
+      if @opaque
+        raise InvalidURIError,
+          "can not set port with registry or opaque"
+      elsif !v.kind_of?(Integer) && parser.regexp[:PORT] !~ v
+        raise InvalidComponentError,
+          "bad component(expected port component): #{v.inspect}"
+      end
+
+      return true
+    end
+    private :check_port
+
+    # Protected setter for the port component +v+.
+    #
+    # See also URI::Generic.port=.
+    #
+    def set_port(v)
+      v = v.empty? ? nil : v.to_i unless !v || v.kind_of?(Integer)
+      @port = v
+    end
+    protected :set_port
+
+    #
+    # == Args
+    #
+    # +v+::
+    #    String
+    #
+    # == Description
+    #
+    # Public setter for the port component +v+
+    # (with validation).
+    #
+    # See also URI::Generic.check_port.
+    #
+    # == Usage
+    #
+    #   require 'uri'
+    #
+    #   uri = URI.parse("http://my.example.com")
+    #   uri.port = 8080
+    #   uri.to_s  #=> "http://my.example.com:8080"
+    #
+    def port=(v)
+      check_port(v)
+      set_port(v)
+      port
+    end
+
+    def check_registry(v) # :nodoc:
+      raise InvalidURIError, "can not set registry"
+    end
+    private :check_registry
+
+    def set_registry(v) #:nodoc:
+      raise InvalidURIError, "can not set registry"
+    end
+    protected :set_registry
+
+    def registry=(v)
+      raise InvalidURIError, "can not set registry"
+    end
+
+    #
+    # Checks the path +v+ component for RFC2396 compliance
+    # and against the URI::Parser Regexp
+    # for :ABS_PATH and :REL_PATH.
+    #
+    # Can not have a opaque component defined,
+    # with a path component defined.
+    #
+    def check_path(v)
+      # raise if both hier and opaque are not nil, because:
+      # absoluteURI   = scheme ":" ( hier_part | opaque_part )
+      # hier_part     = ( net_path | abs_path ) [ "?" query ]
+      if v && @opaque
+        raise InvalidURIError,
+          "path conflicts with opaque"
+      end
+
+      # If scheme is ftp, path may be relative.
+      # See RFC 1738 section 3.2.2, and RFC 2396.
+      if @scheme && @scheme != "ftp"
+        if v && v != '' && parser.regexp[:ABS_PATH] !~ v
+          raise InvalidComponentError,
+            "bad component(expected absolute path component): #{v}"
+        end
+      else
+        if v && v != '' && parser.regexp[:ABS_PATH] !~ v &&
+           parser.regexp[:REL_PATH] !~ v
+          raise InvalidComponentError,
+            "bad component(expected relative path component): #{v}"
+        end
+      end
+
+      return true
+    end
+    private :check_path
+
+    # Protected setter for the path component +v+.
+    #
+    # See also URI::Generic.path=.
+    #
+    def set_path(v)
+      @path = v
+    end
+    protected :set_path
+
+    #
+    # == Args
+    #
+    # +v+::
+    #    String
+    #
+    # == Description
+    #
+    # Public setter for the path component +v+
+    # (with validation).
+    #
+    # See also URI::Generic.check_path.
+    #
+    # == Usage
+    #
+    #   require 'uri'
+    #
+    #   uri = URI.parse("http://my.example.com/pub/files")
+    #   uri.path = "/faq/"
+    #   uri.to_s  #=> "http://my.example.com/faq/"
+    #
+    def path=(v)
+      check_path(v)
+      set_path(v)
+      v
+    end
+
+    #
+    # == Args
+    #
+    # +v+::
+    #    String
+    #
+    # == Description
+    #
+    # Public setter for the query component +v+.
+    #
+    # == Usage
+    #
+    #   require 'uri'
+    #
+    #   uri = URI.parse("http://my.example.com/?id=25")
+    #   uri.query = "id=1"
+    #   uri.to_s  #=> "http://my.example.com/?id=1"
+    #
+    def query=(v)
+      return @query = nil unless v
+      raise InvalidURIError, "query conflicts with opaque" if @opaque
+
+      x = v.to_str
+      v = x.dup if x.equal? v
+      v.encode!(Encoding::UTF_8) rescue nil
+      v.delete!("\t\r\n")
+      v.force_encoding(Encoding::ASCII_8BIT)
+      raise InvalidURIError, "invalid percent escape: #{$1}" if /(%\H\H)/n.match(v)
+      v.gsub!(/(?!%\h\h|[!$-&(-;=?-_a-~])./n.freeze){'%%%02X' % $&.ord}
+      v.force_encoding(Encoding::US_ASCII)
+      @query = v
+    end
+
+    #
+    # Checks the opaque +v+ component for RFC2396 compliance and
+    # against the URI::Parser Regexp for :OPAQUE.
+    #
+    # Can not have a host, port, user, or path component defined,
+    # with an opaque component defined.
+    #
+    def check_opaque(v)
+      return v unless v
+
+      # raise if both hier and opaque are not nil, because:
+      # absoluteURI   = scheme ":" ( hier_part | opaque_part )
+      # hier_part     = ( net_path | abs_path ) [ "?" query ]
+      if @host || @port || @user || @path  # userinfo = @user + ':' + @password
+        raise InvalidURIError,
+          "can not set opaque with host, port, userinfo or path"
+      elsif v && parser.regexp[:OPAQUE] !~ v
+        raise InvalidComponentError,
+          "bad component(expected opaque component): #{v}"
+      end
+
+      return true
+    end
+    private :check_opaque
+
+    # Protected setter for the opaque component +v+.
+    #
+    # See also URI::Generic.opaque=.
+    #
+    def set_opaque(v)
+      @opaque = v
+    end
+    
