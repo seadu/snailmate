@@ -1178,3 +1178,310 @@ module URI
           return './'
         elsif dst_path.first.include?(':') # (see RFC2396 Section 5)
           return './' + tmp
+        else
+          return tmp
+        end
+      end
+
+      return '../' * src_path.size + tmp
+    end
+    private :route_from_path
+    # :startdoc:
+
+    # :stopdoc:
+    def route_from0(oth)
+      oth = parser.__send__(:convert_to_uri, oth)
+      if self.relative?
+        raise BadURIError,
+          "relative URI: #{self}"
+      end
+      if oth.relative?
+        raise BadURIError,
+          "relative URI: #{oth}"
+      end
+
+      if self.scheme != oth.scheme
+        return self, self.dup
+      end
+      rel = URI::Generic.new(nil, # it is relative URI
+                             self.userinfo, self.host, self.port,
+                             nil, self.path, self.opaque,
+                             self.query, self.fragment, parser)
+
+      if rel.userinfo != oth.userinfo ||
+          rel.host.to_s.downcase != oth.host.to_s.downcase ||
+          rel.port != oth.port
+
+        if self.userinfo.nil? && self.host.nil?
+          return self, self.dup
+        end
+
+        rel.set_port(nil) if rel.port == oth.default_port
+        return rel, rel
+      end
+      rel.set_userinfo(nil)
+      rel.set_host(nil)
+      rel.set_port(nil)
+
+      if rel.path && rel.path == oth.path
+        rel.set_path('')
+        rel.query = nil if rel.query == oth.query
+        return rel, rel
+      elsif rel.opaque && rel.opaque == oth.opaque
+        rel.set_opaque('')
+        rel.query = nil if rel.query == oth.query
+        return rel, rel
+      end
+
+      # you can modify `rel', but can not `oth'.
+      return oth, rel
+    end
+    private :route_from0
+    # :startdoc:
+
+    #
+    # == Args
+    #
+    # +oth+::
+    #    URI or String
+    #
+    # == Description
+    #
+    # Calculates relative path from oth to self.
+    #
+    # == Usage
+    #
+    #   require 'uri'
+    #
+    #   uri = URI.parse('http://my.example.com/main.rbx?page=1')
+    #   uri.route_from('http://my.example.com')
+    #   #=> #<URI::Generic /main.rbx?page=1>
+    #
+    def route_from(oth)
+      # you can modify `rel', but can not `oth'.
+      begin
+        oth, rel = route_from0(oth)
+      rescue
+        raise $!.class, $!.message
+      end
+      if oth == rel
+        return rel
+      end
+
+      rel.set_path(route_from_path(oth.path, self.path))
+      if rel.path == './' && self.query
+        # "./?foo" -> "?foo"
+        rel.set_path('')
+      end
+
+      return rel
+    end
+
+    alias - route_from
+
+    #
+    # == Args
+    #
+    # +oth+::
+    #    URI or String
+    #
+    # == Description
+    #
+    # Calculates relative path to oth from self.
+    #
+    # == Usage
+    #
+    #   require 'uri'
+    #
+    #   uri = URI.parse('http://my.example.com')
+    #   uri.route_to('http://my.example.com/main.rbx?page=1')
+    #   #=> #<URI::Generic /main.rbx?page=1>
+    #
+    def route_to(oth)
+      parser.__send__(:convert_to_uri, oth).route_from(self)
+    end
+
+    #
+    # Returns normalized URI.
+    #
+    #   require 'uri'
+    #
+    #   URI("HTTP://my.EXAMPLE.com").normalize
+    #   #=> #<URI::HTTP http://my.example.com/>
+    #
+    # Normalization here means:
+    #
+    # * scheme and host are converted to lowercase,
+    # * an empty path component is set to "/".
+    #
+    def normalize
+      uri = dup
+      uri.normalize!
+      uri
+    end
+
+    #
+    # Destructive version of #normalize.
+    #
+    def normalize!
+      if path&.empty?
+        set_path('/')
+      end
+      if scheme && scheme != scheme.downcase
+        set_scheme(self.scheme.downcase)
+      end
+      if host && host != host.downcase
+        set_host(self.host.downcase)
+      end
+    end
+
+    #
+    # Constructs String from URI.
+    #
+    def to_s
+      str = ''.dup
+      if @scheme
+        str << @scheme
+        str << ':'
+      end
+
+      if @opaque
+        str << @opaque
+      else
+        if @host || %w[file postgres].include?(@scheme)
+          str << '//'
+        end
+        if self.userinfo
+          str << self.userinfo
+          str << '@'
+        end
+        if @host
+          str << @host
+        end
+        if @port && @port != self.default_port
+          str << ':'
+          str << @port.to_s
+        end
+        str << @path
+        if @query
+          str << '?'
+          str << @query
+        end
+      end
+      if @fragment
+        str << '#'
+        str << @fragment
+      end
+      str
+    end
+
+    #
+    # Compares two URIs.
+    #
+    def ==(oth)
+      if self.class == oth.class
+        self.normalize.component_ary == oth.normalize.component_ary
+      else
+        false
+      end
+    end
+
+    def hash
+      self.component_ary.hash
+    end
+
+    def eql?(oth)
+      self.class == oth.class &&
+      parser == oth.parser &&
+      self.component_ary.eql?(oth.component_ary)
+    end
+
+=begin
+
+--- URI::Generic#===(oth)
+
+=end
+#    def ===(oth)
+#      raise NotImplementedError
+#    end
+
+=begin
+=end
+
+
+    # Returns an Array of the components defined from the COMPONENT Array.
+    def component_ary
+      component.collect do |x|
+        self.__send__(x)
+      end
+    end
+    protected :component_ary
+
+    # == Args
+    #
+    # +components+::
+    #    Multiple Symbol arguments defined in URI::HTTP.
+    #
+    # == Description
+    #
+    # Selects specified components from URI.
+    #
+    # == Usage
+    #
+    #   require 'uri'
+    #
+    #   uri = URI.parse('http://myuser:mypass@my.example.com/test.rbx')
+    #   uri.select(:userinfo, :host, :path)
+    #   # => ["myuser:mypass", "my.example.com", "/test.rbx"]
+    #
+    def select(*components)
+      components.collect do |c|
+        if component.include?(c)
+          self.__send__(c)
+        else
+          raise ArgumentError,
+            "expected of components of #{self.class} (#{self.class.component.join(', ')})"
+        end
+      end
+    end
+
+    def inspect
+      "#<#{self.class} #{self}>"
+    end
+
+    #
+    # == Args
+    #
+    # +v+::
+    #    URI or String
+    #
+    # == Description
+    #
+    # Attempts to parse other URI +oth+,
+    # returns [parsed_oth, self].
+    #
+    # == Usage
+    #
+    #   require 'uri'
+    #
+    #   uri = URI.parse("http://my.example.com")
+    #   uri.coerce("http://foo.com")
+    #   #=> [#<URI::HTTP http://foo.com>, #<URI::HTTP http://my.example.com>]
+    #
+    def coerce(oth)
+      case oth
+      when String
+        oth = parser.parse(oth)
+      else
+        super
+      end
+
+      return oth, self
+    end
+
+    # Returns a proxy URI.
+    # The proxy URI is obtained from environment variables such as http_proxy,
+    # ftp_proxy, no_proxy, etc.
+    # If there is no proper proxy, nil is returned.
+    #
+    # If the optional parameter +env
