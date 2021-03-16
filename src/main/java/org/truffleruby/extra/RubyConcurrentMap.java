@@ -30,4 +30,51 @@ public class RubyConcurrentMap extends RubyDynamicObject {
         private final int hashCode;
 
         public Key(Object key, int hashCode) {
-           
+            this.key = key;
+            this.hashCode = hashCode;
+        }
+
+        @Override
+        public int hashCode() {
+            return hashCode;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            assert other instanceof Key;
+            final Key otherKey = (Key) other;
+
+            if (key == otherKey.key) {
+                // If they're exactly the same object then they must be equal
+                return true;
+            } else if (hashCode != otherKey.hashCode) {
+                // If they have different hash codes then they cannot be equal
+                return false;
+            } else {
+                // Last resort - we have to actually call eql?
+                return SameOrEqlNode.getUncached().execute(key, otherKey.key);
+            }
+        }
+    }
+
+    private ConcurrentHashMap<Key, Object> map;
+
+    public RubyConcurrentMap(RubyClass rubyClass, Shape shape) {
+        super(rubyClass, shape);
+    }
+
+    @TruffleBoundary
+    public void allocateMap(int initialCapacity, float loadFactor) {
+        if (initialCapacity <= 0) {
+            map = new ConcurrentHashMap<>();
+        } else if (loadFactor <= 0.0f) {
+            map = new ConcurrentHashMap<>(initialCapacity);
+        } else {
+            map = new ConcurrentHashMap<>(initialCapacity, loadFactor);
+        }
+    }
+
+    public ConcurrentHashMap<Key, Object> getMap() {
+        return map;
+    }
+}
