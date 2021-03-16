@@ -23,4 +23,56 @@
 # DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
 # FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
 # DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-# SERVICES; LOSS OF USE, 
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# The Computer Language Benchmarks Game
+# http://benchmarksgame.alioth.debian.org
+
+# transliterated from Mario Pernici's Python program
+# contributed by Rick Branson
+
+# http://benchmarksgame.alioth.debian.org/u64q/program.php?test=pidigits&lang=yarv&id=3
+
+def pidigits(n_prime)
+  sum = 0
+
+  i = k = ns = 0
+  k1 = 1
+  n,a,d,t,u = [1,0,1,0,0]
+
+  loop do
+    k += 1
+    t = n<<1
+    n *= k
+    a += t
+    k1 += 2
+    a *= k1
+    d *= k1
+    if a >= n
+      t,u = (n*3 + a).divmod(d)
+      u += n
+      if d > u
+        ns = ns*10 + t
+        i += 1
+        if i % 10 == 0
+          sum ^= ns/1000
+          ns = 0
+        end
+        break if i >= n_prime
+
+        a -= d*t
+        a *= 10
+        n *= 10
+      end
+    end
+  end
+
+  sum
+end
+
+benchmark do
+  pidigits 2500
+end
