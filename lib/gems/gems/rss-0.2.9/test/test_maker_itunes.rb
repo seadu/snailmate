@@ -218,4 +218,158 @@ module RSS
                                                             maker_readers,
                                                             feed_readers)
       _assert_maker_itunes_duration_by(hour, minute, second, value,
-                                       maker_readers, feed_r
+                                       maker_readers, feed_readers) do |target|
+        target.itunes_duration do |duration|
+          duration.hour = hour
+          duration.minute = minute
+          duration.second = second
+        end
+        value.split(":").collect {|v| "%02d" % v.to_i}.join(":")
+      end
+    end
+
+    def _assert_maker_itunes_duration_invalid_value(value, maker_readers)
+      assert_raise(ArgumentError) do
+        ::RSS::Maker.make("rss2.0") do |maker|
+          setup_dummy_channel(maker)
+          setup_dummy_item(maker)
+
+          target = chain_reader(maker, maker_readers)
+          target.itunes_duration = value
+        end
+      end
+    end
+
+    def assert_maker_itunes_duration(maker_readers, feed_readers=nil)
+      _wrap_assertion do
+        feed_readers ||= maker_readers
+        _assert_maker_itunes_duration(7, 14, 5, "07:14:05", maker_readers,
+                                      feed_readers)
+        _assert_maker_itunes_duration(7, 14, 5, "7:14:05", maker_readers,
+                                      feed_readers)
+        _assert_maker_itunes_duration(0, 4, 55, "04:55", maker_readers,
+                                      feed_readers)
+        _assert_maker_itunes_duration(0, 4, 5, "4:05", maker_readers,
+                                      feed_readers)
+        _assert_maker_itunes_duration(0, 0, 5, "0:05", maker_readers,
+                                      feed_readers)
+        _assert_maker_itunes_duration_by_value(0, 5, 15, "315", maker_readers,
+                                               feed_readers)
+        _assert_maker_itunes_duration_by_value(1, 0, 1, "3601", maker_readers,
+                                               feed_readers)
+
+        _assert_maker_itunes_duration_invalid_value("09:07:14:05", maker_readers)
+        _assert_maker_itunes_duration_invalid_value("10:5", maker_readers)
+        _assert_maker_itunes_duration_invalid_value("10:03:5", maker_readers)
+        _assert_maker_itunes_duration_invalid_value("10:3:05", maker_readers)
+
+        _assert_maker_itunes_duration_invalid_value("xx:xx:xx", maker_readers)
+
+        _assert_maker_itunes_duration_invalid_value("", maker_readers)
+      end
+    end
+
+    def _assert_maker_itunes_explicit(explicit, value,
+                                      maker_readers, feed_readers)
+      rss20 = ::RSS::Maker.make("rss2.0") do |maker|
+        setup_dummy_channel(maker)
+        setup_dummy_item(maker)
+
+        target = chain_reader(maker, maker_readers)
+        target.itunes_explicit = value
+        assert_equal(explicit, target.itunes_explicit?)
+      end
+      target = chain_reader(rss20, feed_readers)
+      assert_equal(value, target.itunes_explicit)
+      assert_equal(explicit, target.itunes_explicit?)
+    end
+
+    def assert_maker_itunes_explicit(maker_readers, feed_readers=nil)
+      _wrap_assertion do
+        feed_readers ||= maker_readers
+        _assert_maker_itunes_explicit(true, "explicit",
+                                      maker_readers, feed_readers)
+        _assert_maker_itunes_explicit(true, "yes",
+                                      maker_readers, feed_readers)
+        _assert_maker_itunes_explicit(true, "true",
+                                      maker_readers, feed_readers)
+        _assert_maker_itunes_explicit(false, "clean",
+                                      maker_readers, feed_readers)
+        _assert_maker_itunes_explicit(false, "no",
+                                      maker_readers, feed_readers)
+        _assert_maker_itunes_explicit(false, "false",
+                                      maker_readers, feed_readers)
+        _assert_maker_itunes_explicit(nil, "invalid",
+                                      maker_readers, feed_readers)
+      end
+    end
+
+    def _assert_maker_itunes_keywords(keywords, value,
+                                      maker_readers, feed_readers)
+      _assert_maker_itunes_keywords_by_value(keywords, value,
+                                             maker_readers, feed_readers)
+      _assert_maker_itunes_keywords_by_keywords(keywords, maker_readers,
+                                                feed_readers)
+    end
+
+    def _assert_maker_itunes_keywords_by(keywords, maker_readers, feed_readers)
+      rss20 = ::RSS::Maker.make("rss2.0") do |maker|
+        setup_dummy_channel(maker)
+        setup_dummy_item(maker)
+
+        target = chain_reader(maker, maker_readers)
+        yield(target)
+      end
+      assert_nothing_raised do
+        rss20 = ::RSS::Parser.parse(rss20.to_s)
+      end
+      target = chain_reader(rss20, feed_readers)
+      assert_equal(keywords, target.itunes_keywords)
+    end
+
+    def _assert_maker_itunes_keywords_by_value(keywords, value,
+                                               maker_readers, feed_readers)
+      _assert_maker_itunes_keywords_by(keywords, maker_readers,
+                                       feed_readers) do |target|
+        target.itunes_keywords = value
+      end
+    end
+
+    def _assert_maker_itunes_keywords_by_keywords(keywords,
+                                                  maker_readers, feed_readers)
+      _assert_maker_itunes_keywords_by(keywords, maker_readers,
+                                       feed_readers) do |target|
+        target.itunes_keywords = keywords
+      end
+    end
+
+    def assert_maker_itunes_keywords(maker_readers, feed_readers=nil)
+      _wrap_assertion do
+        feed_readers ||= maker_readers
+        _assert_maker_itunes_keywords(["salt"], "salt",
+                                      maker_readers, feed_readers)
+        _assert_maker_itunes_keywords(["salt"], " salt ",
+                                      maker_readers, feed_readers)
+        _assert_maker_itunes_keywords(["salt", "pepper", "shaker", "exciting"],
+                                      "salt, pepper, shaker, exciting",
+                                      maker_readers, feed_readers)
+        _assert_maker_itunes_keywords(["metric", "socket", "wrenches",
+                                       "toolsalt"],
+                                      "metric, socket, wrenches, toolsalt",
+                                      maker_readers, feed_readers)
+        _assert_maker_itunes_keywords(["olitics", "red", "blue", "state"],
+                                      "olitics, red, blue, state",
+                                      maker_readers, feed_readers)
+      end
+    end
+
+    def assert_maker_itunes_new_feed_url(maker_readers, feed_readers=nil)
+      feed_readers ||= maker_readers
+      url = "http://newlocation.com/example.rss"
+
+      rss20 = ::RSS::Maker.make("rss2.0") do |maker|
+        setup_dummy_channel(maker)
+        setup_dummy_item(maker)
+
+        target = chain_reader(maker, maker_readers)
+        target.itunes_new_feed_url = 
