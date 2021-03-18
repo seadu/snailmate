@@ -372,4 +372,117 @@ module RSS
         setup_dummy_item(maker)
 
         target = chain_reader(maker, maker_readers)
-        target.itunes_new_feed_url = 
+        target.itunes_new_feed_url = url
+      end
+      target = chain_reader(rss20, feed_readers)
+      assert_equal(url, target.itunes_new_feed_url)
+    end
+
+    def _assert_maker_itunes_owner(name, email, maker_readers, feed_readers)
+      rss20 = ::RSS::Maker.make("rss2.0") do |maker|
+        setup_dummy_channel(maker)
+        setup_dummy_item(maker)
+
+        target = chain_reader(maker, maker_readers)
+        owner = target.itunes_owner
+        owner.itunes_name = name
+        owner.itunes_email = email
+      end
+      owner = chain_reader(rss20, feed_readers).itunes_owner
+      if name.nil? and email.nil?
+        assert_nil(owner)
+      else
+        assert_not_nil(owner)
+        assert_equal(name, owner.itunes_name)
+        assert_equal(email, owner.itunes_email)
+      end
+    end
+
+    def assert_maker_itunes_owner(maker_readers, feed_readers=nil)
+      _wrap_assertion do
+        feed_readers ||= maker_readers
+        _assert_maker_itunes_owner("John Doe", "john.doe@example.com",
+                                   maker_readers, feed_readers)
+
+        not_set_name = (["maker"] + maker_readers + ["itunes_owner"]).join(".")
+        assert_not_set_error(not_set_name, ["itunes_name"]) do
+          _assert_maker_itunes_owner(nil, "john.doe@example.com",
+                                     maker_readers, feed_readers)
+        end
+        assert_not_set_error(not_set_name, ["itunes_email"]) do
+          _assert_maker_itunes_owner("John Doe", nil,
+                                     maker_readers, feed_readers)
+        end
+
+        _assert_maker_itunes_owner(nil, nil, maker_readers, feed_readers)
+      end
+    end
+
+    def _assert_maker_itunes_subtitle(subtitle, maker_readers, feed_readers)
+      rss20 = ::RSS::Maker.make("rss2.0") do |maker|
+        setup_dummy_channel(maker)
+        setup_dummy_item(maker)
+
+        target = chain_reader(maker, maker_readers)
+        target.itunes_subtitle = subtitle
+      end
+
+      target = chain_reader(rss20, feed_readers)
+      assert_equal(subtitle, target.itunes_subtitle)
+    end
+
+    def assert_maker_itunes_subtitle(maker_readers, feed_readers=nil)
+      _wrap_assertion do
+        feed_readers ||= maker_readers
+        _assert_maker_itunes_subtitle("A show about everything",
+                                      maker_readers, feed_readers)
+        _assert_maker_itunes_subtitle("A short primer on table spices",
+                                      maker_readers, feed_readers)
+        _assert_maker_itunes_subtitle("Comparing socket wrenches is fun!",
+                                      maker_readers, feed_readers)
+        _assert_maker_itunes_subtitle("Red + Blue != Purple",
+                                      maker_readers, feed_readers)
+      end
+    end
+
+    def _assert_maker_itunes_summary(summary, maker_readers, feed_readers)
+      rss20 = ::RSS::Maker.make("rss2.0") do |maker|
+        setup_dummy_channel(maker)
+        setup_dummy_item(maker)
+
+        target = chain_reader(maker, maker_readers)
+        target.itunes_summary = summary
+      end
+
+      target = chain_reader(rss20, feed_readers)
+      assert_equal(summary, target.itunes_summary)
+    end
+
+    def assert_maker_itunes_summary(maker_readers, feed_readers=nil)
+      _wrap_assertion do
+        feed_readers ||= maker_readers
+        _assert_maker_itunes_summary("All About Everything is a show about " +
+                                     "everything. Each week we dive into any " +
+                                     "subject known to man and talk about it " +
+                                     "as much as we can. Look for our Podcast " +
+                                     "in the iTunes Music Store",
+                                     maker_readers, feed_readers)
+        _assert_maker_itunes_summary("This week we talk about salt and pepper " +
+                                     "shakers, comparing and contrasting pour " +
+                                     "rates, construction materials, and " +
+                                     "overall aesthetics. Come and join the " +
+                                     "party!",
+                                     maker_readers, feed_readers)
+        _assert_maker_itunes_summary("This week we talk about metric vs. old " +
+                                     "english socket wrenches. Which one is " +
+                                     "better? Do you really need both? Get " +
+                                     "all of your answers here.",
+                                     maker_readers, feed_readers)
+        _assert_maker_itunes_summary("This week we talk about surviving in a " +
+                                     "Red state if you're a Blue person. Or " +
+                                     "vice versa.",
+                                     maker_readers, feed_readers)
+      end
+    end
+  end
+end
