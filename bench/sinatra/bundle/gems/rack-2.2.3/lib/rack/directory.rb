@@ -110,4 +110,90 @@ table { width:100%%; }
     end
 
     # Rack response to use for requests with paths outside the root, or nil if path is inside the root.
-    def check_forb
+    def check_forbidden(path_info)
+      return unless path_info.include? ".."
+      return if ::File.expand_path(::File.join(@root, path_info)).start_with?(@root)
+
+      body = "Forbidden\n"
+      [403, { CONTENT_TYPE => "text/plain",
+        CONTENT_LENGTH => body.bytesize.to_s,
+        "X-Cascade" => "pass" }, [body]]
+    end
+
+    # Rack response to use for directories under the root.
+    def list_directory(path_info, path, script_name)
+      url_head = (script_name.split('/') + path_info.split('/')).map do |part|
+        Utils.escape_path part
+      end
+
+      # Globbing not safe as path could contain glob metacharacters
+      body = DirectoryBody.new(@root, path, ->(basename) do
+        stat = stat(::File.join(path, basename))
+        next unless stat
+
+        url = ::File.join(*url_head + [Utils.escape_path(basename)])
+        mtime = stat.mtime.httpdate
+        if stat.directory?
+          type = 'directory'
+          size = '-'
+          url << '/'
+          if basename == '..'
+            basename = 'Parent Directory'
+          else
+            basename << '/'
+          end
+        else
+          type = Mime.mime_type(::File.extname(basename))
+          size = filesize_format(stat.size)
+        end
+
+        [ url, basename, size, type, mtime ]
+      end)
+
+      [ 200, { CONTENT_TYPE => 'text/html; charset=utf-8' }, body ]
+    end
+
+    # File::Stat for the given path, but return nil for missing/bad entries.
+    def stat(path)
+      ::File.stat(path)
+    rescue Errno::ENOENT, Errno::ELOOP
+      return nil
+    end
+
+    # Rack response to use for files and directories under the root.
+    # Unreadable and non-file, non-directory entries will get a 404 response.
+    def list_path(env, path, path_info, script_name)
+      if (stat = stat(path)) && stat.readable?
+        return @app.call(env) if stat.file?
+        return list_directory(path_info, path, script_name) if stat.directory?
+      end
+
+      entity_not_found(path_info)
+    end
+
+    # Rack response to use for unreadable and non-file, non-directory entries.
+    def entity_not_found(path_info)
+      body = "Entity not found: #{path_info}\n"
+      [404, { CONTENT_TYPE => "text/plain",
+        CONTENT_LENGTH => body.bytesize.to_s,
+        "X-Cascade" => "pass" }, [body]]
+    end
+
+    # Stolen from Ramaze
+    FILESIZE_FORMAT = [
+      ['%.1fT', 1 << 40],
+      ['%.1fG', 1 << 30],
+      ['%.1fM', 1 << 20],
+      ['%.1fK', 1 << 10],
+    ]
+
+    # Provide human readable file sizes
+    def filesize_format(int)
+      FILESIZE_FORMAT.each do |format, size|
+        return format % (int.to_f / size) if int >= size
+      end
+
+      "#{int}B"
+    end
+  end
+end
