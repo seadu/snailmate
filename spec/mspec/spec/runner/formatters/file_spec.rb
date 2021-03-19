@@ -60,4 +60,25 @@ RSpec.describe FileFormatter, "#unload" do
   end
 
   it "prints an 'F' if there was an expectation failure" do
-    exc = SpecExpectationNotMetError.
+    exc = SpecExpectationNotMetError.new "failed"
+    @formatter.exception ExceptionState.new(@state, nil, exc)
+    @formatter.unload(@state)
+    expect(@out).to eq("F")
+  end
+
+  it "prints an 'E' if there was an exception other than expectation failure" do
+    exc = MSpecExampleError.new("boom!")
+    @formatter.exception ExceptionState.new(@state, nil, exc)
+    @formatter.unload(@state)
+    expect(@out).to eq("E")
+  end
+
+  it "prints an 'E' if there are mixed exceptions and exepctation failures" do
+    exc = SpecExpectationNotMetError.new "failed"
+    @formatter.exception ExceptionState.new(@state, nil, exc)
+    exc = MSpecExampleError.new("boom!")
+    @formatter.exception ExceptionState.new(@state, nil, exc)
+    @formatter.unload(@state)
+    expect(@out).to eq("E")
+  end
+end
