@@ -1,0 +1,5 @@
+slow:The END keyword runs after all other code
+slow:The END keyword runs in reverse order of registration
+slow:The END keyword allows calling exit inside a handler
+slow:The END keyword gives access to the last raised exception - global variables $! and $@
+slow:The END keyword both exceptions in a handler and in the main 
