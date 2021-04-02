@@ -332,4 +332,30 @@ class PSD
     private
 
     def calculate_alphas(fg, bg, opts)
-      opacity = calculate_opacity(op
+      opacity = calculate_opacity(opts)
+      src_alpha = a(fg) * opacity >> 8
+      dst_alpha = a(bg)
+
+      mix_alpha = (src_alpha << 8) / (src_alpha + ((256 - src_alpha) * dst_alpha >> 8))
+      dst_alpha = dst_alpha + ((256 - dst_alpha) * src_alpha >> 8)
+
+      return mix_alpha, dst_alpha
+    end
+
+    def calculate_opacity(opts)
+      opts[:opacity] * opts[:fill_opacity] / 255
+    end
+
+    def apply_opacity(color, opts)
+      (color & 0xffffff00) | ((color & 0x000000ff) * calculate_opacity(opts) / 255)
+    end
+
+    def blend_channel(bg, fg, alpha)
+      ((bg << 8) + (fg - bg) * alpha) >> 8
+    end
+
+    def blend_alpha(bg, fg)
+      bg + ((255 - bg) * fg >> 8)
+    end
+  end
+end
