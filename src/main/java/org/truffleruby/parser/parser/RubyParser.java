@@ -1083,3 +1083,133 @@ states[3] = (support, lexer, yyVal, yyVals, yyTop) -> {
     yyVal = ((ParseNode)yyVals[-1+yyTop]);
     return yyVal;
 };
+states[5] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.newline_node(((ParseNode)yyVals[0+yyTop]), support.getPosition(((ParseNode)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[6] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.appendToBlock(((ParseNode)yyVals[-2+yyTop]), support.newline_node(((ParseNode)yyVals[0+yyTop]), support.getPosition(((ParseNode)yyVals[0+yyTop]))));
+    return yyVal;
+};
+states[7] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[9] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.getResult().addBeginNode(new PreExe19ParseNode(((SourceIndexLength)yyVals[-3+yyTop]), support.getCurrentScope(), ((ParseNode)yyVals[-1+yyTop])));
+    yyVal = null;
+    return yyVal;
+};
+states[10] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ParseNode node = ((ParseNode)yyVals[-3+yyTop]);
+
+    if (((RescueBodyParseNode)yyVals[-2+yyTop]) != null) {
+        node = new RescueParseNode(support.getPosition(((ParseNode)yyVals[-3+yyTop])), ((ParseNode)yyVals[-3+yyTop]), ((RescueBodyParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[-1+yyTop]));
+    } else if (((ParseNode)yyVals[-1+yyTop]) != null) {
+        support.warn(support.getPosition(((ParseNode)yyVals[-3+yyTop])), "else without rescue is useless");
+        node = support.appendToBlock(((ParseNode)yyVals[-3+yyTop]), ((ParseNode)yyVals[-1+yyTop]));
+    }
+    if (((ParseNode)yyVals[0+yyTop]) != null) {
+        if (node != null) {
+            node = new EnsureParseNode(support.extendedUntil(support.getPosition(((ParseNode)yyVals[-3+yyTop])), support.getPosition(((ParseNode)yyVals[0+yyTop]))), support.makeNullNil(node), ((ParseNode)yyVals[0+yyTop]));
+        } else {
+            node = support.appendToBlock(((ParseNode)yyVals[0+yyTop]), NilImplicitParseNode.NIL);
+        }
+    }
+
+    yyVal = node;
+    return yyVal;
+};
+states[11] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (((ParseNode)yyVals[-1+yyTop]) instanceof BlockParseNode) {
+        support.checkUselessStatements(((BlockParseNode)yyVals[-1+yyTop]));
+    }
+    yyVal = ((ParseNode)yyVals[-1+yyTop]);
+    return yyVal;
+};
+states[13] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.newline_node(((ParseNode)yyVals[0+yyTop]), support.getPosition(((ParseNode)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[14] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.appendToBlock(((ParseNode)yyVals[-2+yyTop]), support.newline_node(((ParseNode)yyVals[0+yyTop]), support.getPosition(((ParseNode)yyVals[0+yyTop]))));
+    return yyVal;
+};
+states[15] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[16] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[17] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.yyerror("BEGIN is permitted only at toplevel");
+    return yyVal;
+};
+states[18] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new BeginParseNode(((SourceIndexLength)yyVals[-4+yyTop]), support.makeNullNil(((ParseNode)yyVals[-3+yyTop])));
+    return yyVal;
+};
+states[19] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setState(EXPR_FNAME|EXPR_FITEM);
+    return yyVal;
+};
+states[20] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.newAlias(((SourceIndexLength)yyVals[-3+yyTop]), ((ParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[21] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new VAliasParseNode(((SourceIndexLength)yyVals[-2+yyTop]), support.symbolID(((TruffleString)yyVals[-1+yyTop])), support.symbolID(((TruffleString)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[22] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new VAliasParseNode(((SourceIndexLength)yyVals[-2+yyTop]), support.symbolID(((TruffleString)yyVals[-1+yyTop])), support.symbolID(((BackRefParseNode)yyVals[0+yyTop]).getByteName()));
+    return yyVal;
+};
+states[23] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.yyerror("can't make alias for the number variables");
+    return yyVal;
+};
+states[24] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[25] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new IfParseNode(support.getPosition(((ParseNode)yyVals[-2+yyTop])), support.getConditionNode(((ParseNode)yyVals[0+yyTop])), ((ParseNode)yyVals[-2+yyTop]), null);
+    ((ParseNode)yyVal).extendPosition(((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[26] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new IfParseNode(support.getPosition(((ParseNode)yyVals[-2+yyTop])), support.getConditionNode(((ParseNode)yyVals[0+yyTop])), null, ((ParseNode)yyVals[-2+yyTop]));
+    ((ParseNode)yyVal).extendPosition(((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[27] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (((ParseNode)yyVals[-2+yyTop]) != null && ((ParseNode)yyVals[-2+yyTop]) instanceof BeginParseNode) {
+        yyVal = new WhileParseNode(support.getPosition(((ParseNode)yyVals[-2+yyTop])), support.getConditionNode(((ParseNode)yyVals[0+yyTop])), ((BeginParseNode)yyVals[-2+yyTop]).getBodyNode(), false);
+    } else {
+        yyVal = new WhileParseNode(support.getPosition(((ParseNode)yyVals[-2+yyTop])), support.getConditionNode(((ParseNode)yyVals[0+yyTop])), ((ParseNode)yyVals[-2+yyTop]), true);
+    }
+    return yyVal;
+};
+states[28] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (((ParseNode)yyVals[-2+yyTop]) != null && ((ParseNode)yyVals[-2+yyTop]) instanceof BeginParseNode) {
+        yyVal = new UntilParseNode(support.getPosition(((ParseNode)yyVals[-2+yyTop])), support.getConditionNode(((ParseNode)yyVals[0+yyTop])), ((BeginParseNode)yyVals[-2+yyTop]).getBodyNode(), false);
+    } else {
+        yyVal = new UntilParseNode(support.getPosition(((ParseNode)yyVals[-2+yyTop])), support.getConditionNode(((ParseNode)yyVals[0+yyTop])), ((ParseNode)yyVals[-2+yyTop]), true);
+    }
+    return yyVal;
+};
+states[29] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.newRescueModNode(((ParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[30] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (support.isInDef()) {
+        support.warn(((SourceIndexLength)yyVals[-3+yyTop]), "END in method; use at_exit");
+    }
+    yyVal = new PostExeParseNode(((SourceIndexLength)yyVals[-3+yyTop]), ((ParseNode)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[32] = (support, lexer, yyVal, yyVals, yyT
