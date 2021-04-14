@@ -1460,3 +1460,175 @@ states[95] = (support, lexer, yyVal, yyVals, yyTop) -> {
     if (support.isInDef()) support.compile_error("dynamic constant assignment");
     yyVal = new ConstDeclParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])), null, NilImplicitParseNode.NIL);
     return yyVal;
+};
+states[96] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new ClassVarAsgnParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])), NilImplicitParseNode.NIL);
+    return yyVal;
+};
+states[97] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to nil");
+    yyVal = null;
+    return yyVal;
+};
+states[98] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't change the value of self");
+    yyVal = null;
+    return yyVal;
+};
+states[99] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to true");
+    yyVal = null;
+    return yyVal;
+};
+states[100] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to false");
+    yyVal = null;
+    return yyVal;
+};
+states[101] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to __FILE__");
+    yyVal = null;
+    return yyVal;
+};
+states[102] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to __LINE__");
+    yyVal = null;
+    return yyVal;
+};
+states[103] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to __ENCODING__");
+    yyVal = null;
+    return yyVal;
+};
+states[104] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.aryset(((ParseNode)yyVals[-3+yyTop]), ((ParseNode)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[105] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.attrset(((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[106] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.attrset(((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[107] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.attrset(((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[108] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (support.isInDef()) support.yyerror("dynamic constant assignment");
+
+    SourceIndexLength position = support.getPosition(((ParseNode)yyVals[-2+yyTop]));
+
+    yyVal = new ConstDeclParseNode(position, (TruffleString) null, support.new_colon2(position, ((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[0+yyTop])), NilImplicitParseNode.NIL);
+    return yyVal;
+};
+states[109] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (support.isInDef()) {
+        support.yyerror("dynamic constant assignment");
+    }
+
+    SourceIndexLength position = lexer.tokline;
+
+    yyVal = new ConstDeclParseNode(position, (TruffleString) null, support.new_colon3(position, ((TruffleString)yyVals[0+yyTop])), NilImplicitParseNode.NIL);
+    return yyVal;
+};
+states[110] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.backrefAssignError(((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[111] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.assignableLabelOrIdentifier(((TruffleString)yyVals[0+yyTop]), null);
+    return yyVal;
+};
+states[112] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new InstAsgnParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])), NilImplicitParseNode.NIL);
+    return yyVal;
+};
+states[113] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new GlobalAsgnParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])), NilImplicitParseNode.NIL);
+    return yyVal;
+};
+states[114] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (support.isInDef()) support.compile_error("dynamic constant assignment");
+
+    yyVal = new ConstDeclParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])), null, NilImplicitParseNode.NIL);
+    return yyVal;
+};
+states[115] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new ClassVarAsgnParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])), NilImplicitParseNode.NIL);
+    return yyVal;
+};
+states[116] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to nil");
+    yyVal = null;
+    return yyVal;
+};
+states[117] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't change the value of self");
+    yyVal = null;
+    return yyVal;
+};
+states[118] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to true");
+    yyVal = null;
+    return yyVal;
+};
+states[119] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to false");
+    yyVal = null;
+    return yyVal;
+};
+states[120] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to __FILE__");
+    yyVal = null;
+    return yyVal;
+};
+states[121] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to __LINE__");
+    yyVal = null;
+    return yyVal;
+};
+states[122] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to __ENCODING__");
+    yyVal = null;
+    return yyVal;
+};
+states[123] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.aryset(((ParseNode)yyVals[-3+yyTop]), ((ParseNode)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[124] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.attrset(((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[125] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.attrset(((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[126] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.attrset(((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[127] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (support.isInDef()) {
+        support.yyerror("dynamic constant assignment");
+    }
+
+    SourceIndexLength position = support.getPosition(((ParseNode)yyVals[-2+yyTop]));
+
+    yyVal = new ConstDeclParseNode(position, (TruffleString) null, support.new_colon2(position, ((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[0+yyTop])), NilImplicitParseNode.NIL);
+    return yyVal;
+};
+states[128] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (support.isInDef()) {
+        support.yyerror("dynamic constant assignment");
+    }
+
+    SourceIndexLength position = lexer.tokline;
+
+    yyVal = new ConstDeclParseNode(position, (TruffleString) null, support.new_colon3(position, ((TruffleString)yyVals[0+yyTop])), NilImplicitParseNode.NIL);
+    return yyVal;
+};
+state
