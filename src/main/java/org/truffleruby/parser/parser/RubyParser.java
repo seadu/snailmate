@@ -1212,4 +1212,126 @@ states[30] = (support, lexer, yyVal, yyVals, yyTop) -> {
     yyVal = new PostExeParseNode(((SourceIndexLength)yyVals[-3+yyTop]), ((ParseNode)yyVals[-1+yyTop]));
     return yyVal;
 };
-states[32] = (support, lexer, yyVal, yyVals, yyT
+states[32] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    ((MultipleAsgnParseNode)yyVals[-2+yyTop]).setValueNode(((ParseNode)yyVals[0+yyTop]));
+    yyVal = ((MultipleAsgnParseNode)yyVals[-2+yyTop]);
+    return yyVal;
+};
+states[33] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    yyVal = support.node_assign(((ParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[34] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[-2+yyTop]));
+    yyVal = support.node_assign(((MultipleAsgnParseNode)yyVals[-4+yyTop]), support.newRescueModNode(((ParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[35] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ((AssignableParseNode)yyVals[-2+yyTop]).setValueNode(((ParseNode)yyVals[0+yyTop]));
+    yyVal = ((MultipleAsgnParseNode)yyVals[-2+yyTop]);
+    return yyVal;
+};
+states[37] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    yyVal = support.node_assign(((ParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[38] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+
+    SourceIndexLength pos = ((AssignableParseNode)yyVals[-2+yyTop]).getPosition();
+    TruffleString asgnOp = ((TruffleString)yyVals[-1+yyTop]);
+    if (asgnOp == TStringConstants.OR_OR) {
+        ((AssignableParseNode)yyVals[-2+yyTop]).setValueNode(((ParseNode)yyVals[0+yyTop]));
+        yyVal = new OpAsgnOrParseNode(pos, support.gettable2(((AssignableParseNode)yyVals[-2+yyTop])), ((AssignableParseNode)yyVals[-2+yyTop]));
+    } else if (asgnOp == TStringConstants.AMPERSAND_AMPERSAND) {
+        ((AssignableParseNode)yyVals[-2+yyTop]).setValueNode(((ParseNode)yyVals[0+yyTop]));
+        yyVal = new OpAsgnAndParseNode(pos, support.gettable2(((AssignableParseNode)yyVals[-2+yyTop])), ((AssignableParseNode)yyVals[-2+yyTop]));
+    } else {
+        ((AssignableParseNode)yyVals[-2+yyTop]).setValueNode(support.getOperatorCallNode(support.gettable2(((AssignableParseNode)yyVals[-2+yyTop])), asgnOp, ((ParseNode)yyVals[0+yyTop])));
+        yyVal = ((AssignableParseNode)yyVals[-2+yyTop]);
+    }
+    return yyVal;
+};
+states[39] = (support, lexer, yyVal, yyVals, yyTop) -> {
+  /* FIXME: arg_concat logic missing for opt_call_args*/
+                    yyVal = support.new_opElementAsgnNode(((ParseNode)yyVals[-5+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[-3+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[40] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    yyVal = support.newOpAsgn(support.getPosition(((ParseNode)yyVals[-4+yyTop])), ((ParseNode)yyVals[-4+yyTop]), ((TruffleString)yyVals[-3+yyTop]), ((ParseNode)yyVals[0+yyTop]), ((TruffleString)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[41] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    yyVal = support.newOpAsgn(support.getPosition(((ParseNode)yyVals[-4+yyTop])), ((ParseNode)yyVals[-4+yyTop]), ((TruffleString)yyVals[-3+yyTop]), ((ParseNode)yyVals[0+yyTop]), ((TruffleString)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[42] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    SourceIndexLength pos = ((ParseNode)yyVals[-4+yyTop]).getPosition();
+    yyVal = support.newOpConstAsgn(pos, support.new_colon2(pos, ((ParseNode)yyVals[-4+yyTop]), ((TruffleString)yyVals[-2+yyTop])), ((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[43] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    yyVal = support.newOpAsgn(support.getPosition(((ParseNode)yyVals[-4+yyTop])), ((ParseNode)yyVals[-4+yyTop]), ((TruffleString)yyVals[-3+yyTop]), ((ParseNode)yyVals[0+yyTop]), ((TruffleString)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[44] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.backrefAssignError(((ParseNode)yyVals[-2+yyTop]));
+    return yyVal;
+};
+states[45] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[46] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[-2+yyTop]));
+    yyVal = support.newRescueModNode(((ParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[49] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.newAndNode(support.getPosition(((ParseNode)yyVals[-2+yyTop])), ((ParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[50] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.newOrNode(support.getPosition(((ParseNode)yyVals[-2+yyTop])), ((ParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[51] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.getOperatorCallNode(support.getConditionNode(((ParseNode)yyVals[0+yyTop])), TStringConstants.BANG);
+    return yyVal;
+};
+states[52] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.getOperatorCallNode(support.getConditionNode(((ParseNode)yyVals[0+yyTop])), ((TruffleString)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[54] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[58] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_call(((ParseNode)yyVals[-3+yyTop]), ((TruffleString)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]), null);
+    return yyVal;
+};
+states[59] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((IterParseNode)yyVals[-1+yyTop]);
+    return yyVal;
+};
+states[60] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_fcall(((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[61] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.frobnicate_fcall_args(((FCallParseNode)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]), null);
+    yyVal = ((FCallParseNode)yyVals[-1+yyTop]);
+    return yyVal;
+};
+states[62] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.frobnicate_fcall_args(((FCallParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[-1+yyTop]), ((IterParseNode)yyVals[0+yyTop]));
+    yyVal = ((FCallParseNode)yyVals[-2+yyTop]);
+    return y
