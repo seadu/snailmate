@@ -1825,4 +1825,197 @@ states[176] = (support, lexer, yyVal, yyVals, yyTop) -> {
     yyVal = ((TruffleString)yyVals[0+yyTop]);
     return yyVal;
 };
-states[177] = (sup
+states[177] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.__LINE__.bytes;
+    return yyVal;
+};
+states[178] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.__FILE__.bytes;
+    return yyVal;
+};
+states[179] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.__ENCODING__.bytes;
+    return yyVal;
+};
+states[180] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.LBEGIN.bytes;
+    return yyVal;
+};
+states[181] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.LEND.bytes;
+    return yyVal;
+};
+states[182] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.ALIAS.bytes;
+    return yyVal;
+};
+states[183] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.AND.bytes;
+    return yyVal;
+};
+states[184] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.BEGIN.bytes;
+    return yyVal;
+};
+states[185] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.BREAK.bytes;
+    return yyVal;
+};
+states[186] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.CASE.bytes;
+    return yyVal;
+};
+states[187] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.CLASS.bytes;
+    return yyVal;
+};
+states[188] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.DEF.bytes;
+    return yyVal;
+};
+states[189] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.DEFINED_P.bytes;
+    return yyVal;
+};
+states[190] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.DO.bytes;
+    return yyVal;
+};
+states[191] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.ELSE.bytes;
+    return yyVal;
+};
+states[192] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.ELSIF.bytes;
+    return yyVal;
+};
+states[193] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.END.bytes;
+    return yyVal;
+};
+states[194] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.ENSURE.bytes;
+    return yyVal;
+};
+states[195] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.FALSE.bytes;
+    return yyVal;
+};
+states[196] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.FOR.bytes;
+    return yyVal;
+};
+states[197] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.IN.bytes;
+    return yyVal;
+};
+states[198] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.MODULE.bytes;
+    return yyVal;
+};
+states[199] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.NEXT.bytes;
+    return yyVal;
+};
+states[200] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.NIL.bytes;
+    return yyVal;
+};
+states[201] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.NOT.bytes;
+    return yyVal;
+};
+states[202] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.OR.bytes;
+    return yyVal;
+};
+states[203] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.REDO.bytes;
+    return yyVal;
+};
+states[204] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.RESCUE.bytes;
+    return yyVal;
+};
+states[205] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.RETRY.bytes;
+    return yyVal;
+};
+states[206] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.RETURN.bytes;
+    return yyVal;
+};
+states[207] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.SELF.bytes;
+    return yyVal;
+};
+states[208] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.SUPER.bytes;
+    return yyVal;
+};
+states[209] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.THEN.bytes;
+    return yyVal;
+};
+states[210] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.TRUE.bytes;
+    return yyVal;
+};
+states[211] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.UNDEF.bytes;
+    return yyVal;
+};
+states[212] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.WHEN.bytes;
+    return yyVal;
+};
+states[213] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.YIELD.bytes;
+    return yyVal;
+};
+states[214] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.IF.bytes;
+    return yyVal;
+};
+states[215] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.UNLESS.bytes;
+    return yyVal;
+};
+states[216] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.WHILE.bytes;
+    return yyVal;
+};
+states[217] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.UNTIL.bytes;
+    return yyVal;
+};
+states[218] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = RubyLexer.Keyword.RESCUE.bytes;
+    return yyVal;
+};
+states[219] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.node_assign(((ParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    /* FIXME: Consider fixing node_assign itself rather than single case*/
+    ((ParseNode)yyVal).extendPosition(((ParseNode)yyVals[-2+yyTop]));
+    return yyVal;
+};
+states[220] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+
+    SourceIndexLength pos = ((AssignableParseNode)yyVals[-2+yyTop]).getPosition();
+    TruffleString asgnOp = ((TruffleString)yyVals[-1+yyTop]);
+    if (asgnOp == TStringConstants.OR_OR) {
+        ((AssignableParseNode)yyVals[-2+yyTop]).setValueNode(((ParseNode)yyVals[0+yyTop]));
+        yyVal = new OpAsgnOrParseNode(pos, support.gettable2(((AssignableParseNode)yyVals[-2+yyTop])), ((AssignableParseNode)yyVals[-2+yyTop]));
+    } else if (asgnOp == TStringConstants.AMPERSAND_AMPERSAND) {
+        ((AssignableParseNode)yyVals[-2+yyTop]).setValueNode(((ParseNode)yyVals[0+yyTop]));
+        yyVal = new OpAsgnAndParseNode(pos, support.gettable2(((AssignableParseNode)yyVals[-2+yyTop])), ((AssignableParseNode)yyVals[-2+yyTop]));
+    } else {
+        ((AssignableParseNode)yyVals[-2+yyTop]).setValueNode(support.getOperatorCallNode(support.gettable2(((AssignableParseNode)yyVals[-2+yyTop])), asgnOp, ((ParseNode)yyVals[0+yyTop])));
+        yyVal = ((AssignableParseNode)yyVals[-2+yyTop]);
+    }
+    return yyVal;
+};
+states[221] = (support, lexer, yyVal, yyVals, yyTop) -> {
+  /* FIXME: arg_concat missing for opt_call_args*/
+                    yyVal = support.ne
