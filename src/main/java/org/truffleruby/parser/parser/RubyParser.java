@@ -1631,4 +1631,198 @@ states[128] = (support, lexer, yyVal, yyVals, yyTop) -> {
     yyVal = new ConstDeclParseNode(position, (TruffleString) null, support.new_colon3(position, ((TruffleString)yyVals[0+yyTop])), NilImplicitParseNode.NIL);
     return yyVal;
 };
-state
+states[129] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.backrefAssignError(((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[130] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.yyerror("class/module name must be CONSTANT");
+    return yyVal;
+};
+states[131] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[132] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_colon3(lexer.tokline, ((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[133] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_colon2(lexer.tokline, null, ((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[134] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_colon2(support.getPosition(((ParseNode)yyVals[-2+yyTop])), ((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[135] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[136] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[137] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[138] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setState(EXPR_ENDFN);
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[139] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setState(EXPR_ENDFN);
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[140] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new LiteralParseNode(lexer.getPosition(), support.symbolID(((TruffleString)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[141] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new LiteralParseNode(lexer.getPosition(), support.symbolID(((TruffleString)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[142] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((LiteralParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[143] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[144] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.newUndef(((ParseNode)yyVals[0+yyTop]).getPosition(), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[145] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setState(EXPR_FNAME|EXPR_FITEM);
+    return yyVal;
+};
+states[146] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.appendToBlock(((ParseNode)yyVals[-3+yyTop]), support.newUndef(((ParseNode)yyVals[-3+yyTop]).getPosition(), ((ParseNode)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[147] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[148] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[149] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[150] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[151] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[152] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[153] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[154] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[155] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[156] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[157] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[158] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[159] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[160] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[161] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[162] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[163] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[164] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[165] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[166] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[167] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[168] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[169] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[170] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[171] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[172] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[173] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[174] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[175] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[176] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[177] = (sup
