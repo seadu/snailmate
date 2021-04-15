@@ -2018,4 +2018,109 @@ states[220] = (support, lexer, yyVal, yyVals, yyTop) -> {
 };
 states[221] = (support, lexer, yyVal, yyVals, yyTop) -> {
   /* FIXME: arg_concat missing for opt_call_args*/
-                    yyVal = support.ne
+                    yyVal = support.new_opElementAsgnNode(((ParseNode)yyVals[-5+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[-3+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[222] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    yyVal = support.newOpAsgn(support.getPosition(((ParseNode)yyVals[-4+yyTop])), ((ParseNode)yyVals[-4+yyTop]), ((TruffleString)yyVals[-3+yyTop]), ((ParseNode)yyVals[0+yyTop]), ((TruffleString)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[223] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    yyVal = support.newOpAsgn(support.getPosition(((ParseNode)yyVals[-4+yyTop])), ((ParseNode)yyVals[-4+yyTop]), ((TruffleString)yyVals[-3+yyTop]), ((ParseNode)yyVals[0+yyTop]), ((TruffleString)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[224] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    yyVal = support.newOpAsgn(support.getPosition(((ParseNode)yyVals[-4+yyTop])), ((ParseNode)yyVals[-4+yyTop]), ((TruffleString)yyVals[-3+yyTop]), ((ParseNode)yyVals[0+yyTop]), ((TruffleString)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[225] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    SourceIndexLength pos = support.getPosition(((ParseNode)yyVals[-4+yyTop]));
+    yyVal = support.newOpConstAsgn(pos, support.new_colon2(pos, ((ParseNode)yyVals[-4+yyTop]), ((TruffleString)yyVals[-2+yyTop])), ((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[226] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    SourceIndexLength pos = lexer.getPosition();
+    yyVal = support.newOpConstAsgn(pos, new Colon3ParseNode(pos, support.symbolID(((TruffleString)yyVals[-2+yyTop]))), ((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[227] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.backrefAssignError(((ParseNode)yyVals[-2+yyTop]));
+    return yyVal;
+};
+states[228] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[-2+yyTop]));
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    
+    boolean isLiteral = ((ParseNode)yyVals[-2+yyTop]) instanceof FixnumParseNode && ((ParseNode)yyVals[0+yyTop]) instanceof FixnumParseNode;
+    yyVal = new DotParseNode(support.getPosition(((ParseNode)yyVals[-2+yyTop])), support.makeNullNil(((ParseNode)yyVals[-2+yyTop])), support.makeNullNil(((ParseNode)yyVals[0+yyTop])), false, isLiteral);
+    return yyVal;
+};
+states[229] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.checkExpression(((ParseNode)yyVals[-1+yyTop]));
+
+    boolean isLiteral = ((ParseNode)yyVals[-1+yyTop]) instanceof FixnumParseNode;
+    yyVal = new DotParseNode(support.getPosition(((ParseNode)yyVals[-1+yyTop])), support.makeNullNil(((ParseNode)yyVals[-1+yyTop])), NilImplicitParseNode.NIL, false, isLiteral);
+    return yyVal;
+};
+states[230] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+
+    boolean isLiteral = ((ParseNode)yyVals[0+yyTop]) instanceof FixnumParseNode;
+    yyVal = new DotParseNode(support.getPosition(((ParseNode)yyVals[0+yyTop])), NilImplicitParseNode.NIL, support.makeNullNil(((ParseNode)yyVals[0+yyTop])), false, isLiteral);
+    return yyVal;
+};
+states[231] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[-2+yyTop]));
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+
+    boolean isLiteral = ((ParseNode)yyVals[-2+yyTop]) instanceof FixnumParseNode && ((ParseNode)yyVals[0+yyTop]) instanceof FixnumParseNode;
+    yyVal = new DotParseNode(support.getPosition(((ParseNode)yyVals[-2+yyTop])), support.makeNullNil(((ParseNode)yyVals[-2+yyTop])), support.makeNullNil(((ParseNode)yyVals[0+yyTop])), true, isLiteral);
+    return yyVal;
+};
+states[232] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.checkExpression(((ParseNode)yyVals[-1+yyTop]));
+
+    boolean isLiteral = ((ParseNode)yyVals[-1+yyTop]) instanceof FixnumParseNode;
+    yyVal = new DotParseNode(support.getPosition(((ParseNode)yyVals[-1+yyTop])), support.makeNullNil(((ParseNode)yyVals[-1+yyTop])), NilImplicitParseNode.NIL, true, isLiteral);
+    return yyVal;
+};
+states[233] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+
+    boolean isLiteral = ((ParseNode)yyVals[0+yyTop]) instanceof FixnumParseNode;
+    yyVal = new DotParseNode(support.getPosition(((ParseNode)yyVals[0+yyTop])), NilImplicitParseNode.NIL, support.makeNullNil(((ParseNode)yyVals[0+yyTop])), true, isLiteral);
+    return yyVal;
+};
+states[234] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.getOperatorCallNode(((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]), lexer.getPosition());
+    return yyVal;
+};
+states[235] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.getOperatorCallNode(((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]), lexer.getPosition());
+    return yyVal;
+};
+states[236] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.getOperatorCallNode(((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]), lexer.getPosition());
+    return yyVal;
+};
+states[237] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.getOperatorCallNode(((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]), lexer.getPosition());
+    return yyVal;
+};
+states[238] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.getOperatorCallNode(((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]), lexer.getPosition());
+    return yyVal;
+};
+states[239] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.getOperatorCallNode(((ParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]), lexer.getPosition());
+    return yyVal;
+};
+states[240] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.getOperatorCallNode(support.getOperatorCallNode(((NumericParseNode)yyVals[-2+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]), lexer.getPosition()), ((TruffleString)yyVals[-3+yyTop]));
+    return yyVal;
+};
+states[241] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = sup
