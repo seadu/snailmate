@@ -2257,3 +2257,130 @@ states[272] = (support, lexer, yyVal, yyVals, yyTop) -> {
     yyVal = support.newArrayNode(((HashParseNode)yyVals[-1+yyTop]).getPosition(), support.remove_duplicate_keys(((HashParseNode)yyVals[-1+yyTop])));
     return yyVal;
 };
+states[273] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[274] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[-2+yyTop]));
+    yyVal = support.newRescueModNode(((ParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[275] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[-1+yyTop]);
+    if (yyVal != null) ((ParseNode)yyVal).extendPosition(((SourceIndexLength)yyVals[-2+yyTop]));
+    return yyVal;
+};
+states[276] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    SourceIndexLength position = support.getPosition(null);
+    /* NOTE(norswap, 02 Jun 2021): location (0) arg is unused*/
+    SplatParseNode splat = support.newSplatNode(position, new LocalVarParseNode(position, 0, ParserSupport.FORWARD_ARGS_REST_VAR));
+    HashParseNode kwrest = new HashParseNode(position, support.createKeyValue(null, new LocalVarParseNode(position, 0, ParserSupport.FORWARD_ARGS_KWREST_VAR)));
+    kwrest.setKeywordArguments(true);
+    BlockPassParseNode block = new BlockPassParseNode(position, new LocalVarParseNode(position, 0, ParserSupport.FORWARD_ARGS_BLOCK_VAR));
+    yyVal = support.arg_concat(support.getPosition(((ParseNode)yyVals[-3+yyTop])), ((ParseNode)yyVals[-3+yyTop]), splat);
+    yyVal = support.arg_append((ParseNode) yyVal, kwrest);
+    yyVal = support.arg_blk_pass((ParseNode) yyVal, block);
+    return yyVal;
+};
+states[277] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    SourceIndexLength position = support.getPosition(null);
+    /* NOTE(norswap, 06 Nov 2020): location (0) arg is unused*/
+    SplatParseNode splat = support.newSplatNode(position, new LocalVarParseNode(position, 0, ParserSupport.FORWARD_ARGS_REST_VAR));
+    HashParseNode kwrest = new HashParseNode(position, support.createKeyValue(null, new LocalVarParseNode(position, 0, ParserSupport.FORWARD_ARGS_KWREST_VAR)));
+    kwrest.setKeywordArguments(true);
+    BlockPassParseNode block = new BlockPassParseNode(position, new LocalVarParseNode(position, 0, ParserSupport.FORWARD_ARGS_BLOCK_VAR));
+    yyVal = support.arg_append(splat, kwrest);
+    yyVal = support.arg_blk_pass((ParseNode) yyVal, block);
+    return yyVal;
+};
+states[282] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[-1+yyTop]);
+    return yyVal;
+};
+states[283] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ((HashParseNode)yyVals[-1+yyTop]).setKeywordArguments(true);
+    yyVal = support.arg_append(((ParseNode)yyVals[-3+yyTop]), support.remove_duplicate_keys(((HashParseNode)yyVals[-1+yyTop])));
+    return yyVal;
+};
+states[284] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ((HashParseNode)yyVals[-1+yyTop]).setKeywordArguments(true);
+    yyVal = support.newArrayNode(((HashParseNode)yyVals[-1+yyTop]).getPosition(), support.remove_duplicate_keys(((HashParseNode)yyVals[-1+yyTop])));
+    return yyVal;
+};
+states[285] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    yyVal = support.newArrayNode(support.getPosition(((ParseNode)yyVals[0+yyTop])), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[286] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.arg_blk_pass(((ParseNode)yyVals[-1+yyTop]), ((BlockPassParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[287] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ((HashParseNode)yyVals[-1+yyTop]).setKeywordArguments(true);
+    yyVal = support.newArrayNode(((HashParseNode)yyVals[-1+yyTop]).getPosition(), support.remove_duplicate_keys(((HashParseNode)yyVals[-1+yyTop])));
+    yyVal = support.arg_blk_pass((ParseNode)yyVal, ((BlockPassParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[288] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ((HashParseNode)yyVals[-1+yyTop]).setKeywordArguments(true);
+    yyVal = support.arg_append(((ParseNode)yyVals[-3+yyTop]), support.remove_duplicate_keys(((HashParseNode)yyVals[-1+yyTop])));
+    yyVal = support.arg_blk_pass((ParseNode)yyVal, ((BlockPassParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[289] = (support, lexer, yyVal, yyVals, yyTop) -> yyVal;
+states[290] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = lexer.getCmdArgumentState().getStack();
+    lexer.getCmdArgumentState().begin();
+    return yyVal;
+};
+states[291] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.getCmdArgumentState().reset(((Long)yyVals[-1+yyTop]).longValue());
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[292] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new BlockPassParseNode(support.getPosition(((ParseNode)yyVals[0+yyTop])), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[293] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (!support.local_id(ParserSupport.FORWARD_ARGS_BLOCK_VAR)) {
+        support.yyerror("no anonymous block parameter");
+    }
+
+    yyVal = new BlockPassParseNode(lexer.tokline, new LocalVarParseNode(support.getPosition(null), 0, ParserSupport.FORWARD_ARGS_BLOCK_VAR));
+    return yyVal;
+};
+states[294] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((BlockPassParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[296] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.newArrayNode(support.getPosition(((ParseNode)yyVals[0+yyTop])), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[297] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.newSplatNode(support.getPosition(((ParseNode)yyVals[0+yyTop])), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[298] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ParseNode node = support.splat_array(((ParseNode)yyVals[-2+yyTop]));
+
+    if (node != null) {
+        yyVal = support.list_append(node, ((ParseNode)yyVals[0+yyTop]));
+    } else {
+        yyVal = support.arg_append(((ParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    }
+    return yyVal;
+};
+states[299] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ParseNode node = null;
+
+    /* FIXME: lose syntactical elements here (and others like this)*/
+    if (((ParseNode)yyVals[0+yyTop]) instanceof ArrayParseNode &&
+        (node = support.splat_array(((ParseNode)yyVals[-3+yyTop]))) != null) {
+        yyVal = support.list_concat(node, ((ParseNode)yyVals[0+yyTop]));
+    } else {
+        yyVal = support.arg_concat(support.getPosition(((ParseNode)yyVals[-3+yyTop])), ((ParseNode)yyVals[-3+yyTop]), ((ParseNode)yyVals[0+yyTop]));
