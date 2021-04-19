@@ -2545,4 +2545,149 @@ states[339] = (support, lexer, yyVal, yyVals, yyTop) -> {
     yyVal = new IfParseNode(((SourceIndexLength)yyVals[-5+yyTop]), support.getConditionNode(((ParseNode)yyVals[-4+yyTop])), ((ParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[-1+yyTop]));
     return yyVal;
 };
-states[340] = (support, lexer, yyVal, yyVal
+states[340] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new IfParseNode(((SourceIndexLength)yyVals[-5+yyTop]), support.getConditionNode(((ParseNode)yyVals[-4+yyTop])), ((ParseNode)yyVals[-1+yyTop]), ((ParseNode)yyVals[-2+yyTop]));
+    return yyVal;
+};
+states[341] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.getConditionState().begin();
+    return yyVal;
+};
+states[342] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.getConditionState().end();
+    return yyVal;
+};
+states[343] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ParseNode body = support.makeNullNil(((ParseNode)yyVals[-1+yyTop]));
+    yyVal = new WhileParseNode(((SourceIndexLength)yyVals[-6+yyTop]), support.getConditionNode(((ParseNode)yyVals[-4+yyTop])), body);
+    return yyVal;
+};
+states[344] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.getConditionState().begin();
+    return yyVal;
+};
+states[345] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.getConditionState().end();
+    return yyVal;
+};
+states[346] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ParseNode body = support.makeNullNil(((ParseNode)yyVals[-1+yyTop]));
+    yyVal = new UntilParseNode(((SourceIndexLength)yyVals[-6+yyTop]), support.getConditionNode(((ParseNode)yyVals[-4+yyTop])), body);
+    return yyVal;
+};
+states[347] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.newCaseNode(((SourceIndexLength)yyVals[-4+yyTop]), ((ParseNode)yyVals[-3+yyTop]), ((ParseNode)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[348] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.newCaseNode(((SourceIndexLength)yyVals[-3+yyTop]), null, ((ParseNode)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[349] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.newCaseInNode(((SourceIndexLength)yyVals[-4+yyTop]), ((ParseNode)yyVals[-3+yyTop]), ((ParseNode)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[350] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.getConditionState().begin();
+    return yyVal;
+};
+states[351] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.getConditionState().end();
+    return yyVal;
+};
+states[352] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    /* ENEBO: Lots of optz in 1.9 parser here*/
+  yyVal = new ForParseNode(((SourceIndexLength)yyVals[-8+yyTop]), ((ParseNode)yyVals[-7+yyTop]), ((ParseNode)yyVals[-1+yyTop]), ((ParseNode)yyVals[-4+yyTop]), support.getCurrentScope());
+    return yyVal;
+};
+states[353] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (support.isInDef()) {
+        support.yyerror("class definition in method body");
+    }
+    support.pushLocalScope();
+    yyVal = support.isInClass(); /* MRI reuses $1 but we use the value for position.*/
+    support.setIsInClass(true);
+    return yyVal;
+};
+states[354] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ParseNode body = support.makeNullNil(((ParseNode)yyVals[-1+yyTop]));
+
+    yyVal = new ClassParseNode(support.extendedUntil(((SourceIndexLength)yyVals[-5+yyTop]), lexer.getPosition()), ((Colon3ParseNode)yyVals[-4+yyTop]), support.getCurrentScope(), body, ((ParseNode)yyVals[-3+yyTop]));
+    support.popCurrentScope();
+    support.setIsInClass(((Boolean)yyVals[-2+yyTop]).booleanValue());
+    return yyVal;
+};
+states[355] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = (support.isInClass() ? 2 : 0) | (support.isInDef() ? 1 : 0);
+    support.setInDef(false);
+    support.setIsInClass(false);
+    support.pushLocalScope();
+    return yyVal;
+};
+states[356] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ParseNode body = support.makeNullNil(((ParseNode)yyVals[-1+yyTop]));
+
+    yyVal = new SClassParseNode(support.extendedUntil(((SourceIndexLength)yyVals[-6+yyTop]), lexer.getPosition()), ((ParseNode)yyVals[-4+yyTop]), support.getCurrentScope(), body);
+    support.popCurrentScope();
+    support.setInDef(((((Integer)yyVals[-3+yyTop]).intValue()) & 1) != 0);
+    support.setIsInClass(((((Integer)yyVals[-3+yyTop]).intValue()) & 2) != 0);
+    return yyVal;
+};
+states[357] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (support.isInDef()) { 
+        support.yyerror("module definition in method body");
+    }
+    yyVal = support.isInClass();
+    support.setIsInClass(true);
+    support.pushLocalScope();
+    return yyVal;
+};
+states[358] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ParseNode body = support.makeNullNil(((ParseNode)yyVals[-1+yyTop]));
+
+    yyVal = new ModuleParseNode(support.extendedUntil(((SourceIndexLength)yyVals[-4+yyTop]), lexer.getPosition()), ((Colon3ParseNode)yyVals[-3+yyTop]), support.getCurrentScope(), body);
+    support.popCurrentScope();
+    support.setIsInClass(((Boolean)yyVals[-2+yyTop]).booleanValue());
+    return yyVal;
+};
+states[359] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.pushLocalScope();
+    yyVal = lexer.getCurrentArg();
+    lexer.setCurrentArg(null);
+    support.checkMethodName(((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[360] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.isInDef();
+    support.setInDef(true);
+    return yyVal;
+};
+states[361] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ParseNode body = support.makeNullNil(((ParseNode)yyVals[-1+yyTop]));
+
+    yyVal = new DefnParseNode(support.extendedUntil(((SourceIndexLength)yyVals[-6+yyTop]), ((SourceIndexLength)yyVals[0+yyTop])), support.symbolID(((TruffleString)yyVals[-5+yyTop])), (ArgsParseNode) yyVals[-2+yyTop], support.getCurrentScope(), body);
+    support.popCurrentScope();
+    support.setInDef(((Boolean)yyVals[-3+yyTop]).booleanValue());
+    lexer.setCurrentArg(((TruffleString)yyVals[-4+yyTop]));
+    return yyVal;
+};
+states[362] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setState(EXPR_FNAME); 
+    yyVal = support.isInDef();
+    support.setInDef(true);
+    return yyVal;
+};
+states[363] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.pushLocalScope();
+    lexer.setState(EXPR_ENDFN|EXPR_LABEL); /* force for args */
+    yyVal = lexer.getCurrentArg();
+    lexer.setCurrentArg(null);
+    support.checkMethodName(((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[364] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ParseNode body = ((ParseNode)yyVals[-1+yyTop]);
+    if (body == null) body = NilImplicitParseNode.NIL;
+
+    yyVal = new DefsParseNode(support.extendedUntil(((SourceIndexLength)yyVals[-8+yyTop]), ((SourceIndexLength)yyVals[0+yyTop])), ((ParseNode)yyVals[-7+yyTop]), support.symbolID(((TruffleString)yyVals[-4+yyTop])), (ArgsParseNode) yyVals[-2+yyTop], support.getCurrentScope(), body);
+    support.popCurrentScope();
