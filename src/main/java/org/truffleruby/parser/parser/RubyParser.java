@@ -3255,4 +3255,181 @@ states[501] = (support, lexer, yyVal, yyVals, yyTop) -> {
     return yyVal;
 };
 states[502] = (support, lexer, yyVal, yyVals, yyTop) -> {
-    yyVal = lexer.createStr(lexer.e
+    yyVal = lexer.createStr(lexer.encoding.tencoding.getEmpty(), lexer.encoding, 0);
+    return yyVal;
+};
+states[503] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.literal_concat(((ParseNode)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[504] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = null;
+    return yyVal;
+};
+states[505] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.literal_concat(((ParseNode)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[506] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = null;
+    return yyVal;
+};
+states[507] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    /* FIXME: mri is different here.*/
+                    yyVal = support.literal_concat(((ParseNode)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[508] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[509] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = lexer.getStrTerm();
+    lexer.setStrTerm(null);
+    lexer.setState(EXPR_BEG);
+    return yyVal;
+};
+states[510] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setStrTerm(((StrTerm)yyVals[-1+yyTop]));
+    yyVal = new EvStrParseNode(support.getPosition(((ParseNode)yyVals[0+yyTop])), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[511] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = lexer.getStrTerm();
+    lexer.setStrTerm(null);
+    lexer.getConditionState().stop();
+    return yyVal;
+};
+states[512] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = lexer.getCmdArgumentState().getStack();
+    lexer.getCmdArgumentState().reset();
+    return yyVal;
+};
+states[513] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = lexer.getState();
+    lexer.setState(EXPR_BEG);
+    return yyVal;
+};
+states[514] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = lexer.getBraceNest();
+    lexer.setBraceNest(0);
+    return yyVal;
+};
+states[515] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = lexer.getHeredocIndent();
+    lexer.setHeredocIndent(0);
+    return yyVal;
+};
+states[516] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.getConditionState().restart();
+    lexer.setStrTerm(((StrTerm)yyVals[-6+yyTop]));
+    lexer.getCmdArgumentState().reset(((Long)yyVals[-5+yyTop]).longValue());
+    lexer.setState(((Integer)yyVals[-4+yyTop]));
+    lexer.setBraceNest(((Integer)yyVals[-3+yyTop]));
+    lexer.setHeredocIndent(((Integer)yyVals[-2+yyTop]));
+    lexer.setHeredocLineIndent(-1);
+
+    yyVal = support.newEvStrNode(support.getPosition(((ParseNode)yyVals[-1+yyTop])), ((ParseNode)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[517] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new GlobalVarParseNode(lexer.getPosition(), support.symbolID(((TruffleString)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[518] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new InstVarParseNode(lexer.getPosition(), support.symbolID(((TruffleString)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[519] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new ClassVarParseNode(lexer.getPosition(), support.symbolID(((TruffleString)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[521] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setState(EXPR_END|EXPR_ENDARG);
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[523] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[524] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[525] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[526] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setState(EXPR_END|EXPR_ENDARG);
+
+    /* DStrNode: :"some text #{some expression}"*/
+    /* StrNode: :"some text"*/
+    /* EvStrNode :"#{some expression}"*/
+    /* Ruby 1.9 allows empty strings as symbols*/
+    if (((ParseNode)yyVals[-1+yyTop]) == null) {
+        yyVal = support.asSymbol(lexer.getPosition(), TStringConstants.EMPTY_US_ASCII);
+    } else if (((ParseNode)yyVals[-1+yyTop]) instanceof DStrParseNode) {
+        yyVal = new DSymbolParseNode(((ParseNode)yyVals[-1+yyTop]).getPosition(), ((DStrParseNode)yyVals[-1+yyTop]));
+    } else if (((ParseNode)yyVals[-1+yyTop]) instanceof StrParseNode) {
+        yyVal = support.asSymbol(((ParseNode)yyVals[-1+yyTop]).getPosition(), ((ParseNode)yyVals[-1+yyTop]));
+    } else {
+        yyVal = new DSymbolParseNode(((ParseNode)yyVals[-1+yyTop]).getPosition());
+        ((DSymbolParseNode)yyVal).add(((ParseNode)yyVals[-1+yyTop]));
+    }
+    return yyVal;
+};
+states[527] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((NumericParseNode)yyVals[0+yyTop]);  
+    return yyVal;
+};
+states[528] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.negateNumeric(((NumericParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[529] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[530] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((FloatParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[531] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((RationalParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[532] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[533] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.declareIdentifier(((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[534] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new InstVarParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[535] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new GlobalVarParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[536] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new ConstParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[537] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new ClassVarParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[538] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new NilParseNode(lexer.tokline);
+    return yyVal;
+};
+states[539] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new SelfParseNode(lexer.tokline);
+    return yyVal;
+};
+states[540] = (support, lexer, y
