@@ -3713,4 +3713,158 @@ states[600] = (support, lexer, yyVal, yyVals, yyTop) -> {
 };
 states[601] = (support, lexer, yyVal, yyVals, yyTop) -> {
     ((ListParseNode)yyVals[-2+yyTop]).add(((ParseNode)yyVals[0+yyTop]));
-    yyVal = ((ListParseNode)yyVals[-2+yyTo
+    yyVal = ((ListParseNode)yyVals[-2+yyTop]);
+    return yyVal;
+};
+states[602] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.arg_var(support.formal_argument(((TruffleString)yyVals[0+yyTop])));
+    lexer.setCurrentArg(((TruffleString)yyVals[0+yyTop]));
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[603] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setCurrentArg(null);
+    yyVal = support.keyword_arg(((ParseNode)yyVals[0+yyTop]).getPosition(), support.assignableKeyword(((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[604] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setCurrentArg(null);
+    yyVal = support.keyword_arg(lexer.getPosition(), support.assignableKeyword(((TruffleString)yyVals[0+yyTop]), RequiredKeywordArgumentValueParseNode.INSTANCE));
+    return yyVal;
+};
+states[605] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.keyword_arg(support.getPosition(((ParseNode)yyVals[0+yyTop])), support.assignableKeyword(((TruffleString)yyVals[-1+yyTop]), ((ParseNode)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[606] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.keyword_arg(lexer.getPosition(), support.assignableKeyword(((TruffleString)yyVals[0+yyTop]), RequiredKeywordArgumentValueParseNode.INSTANCE));
+    return yyVal;
+};
+states[607] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new ArrayParseNode(((ParseNode)yyVals[0+yyTop]).getPosition(), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[608] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ListParseNode)yyVals[-2+yyTop]).add(((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[609] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new ArrayParseNode(((ParseNode)yyVals[0+yyTop]).getPosition(), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[610] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ListParseNode)yyVals[-2+yyTop]).add(((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[611] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[612] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[614] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.shadowing_lvar(((TruffleString)yyVals[0+yyTop]));
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[615] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ParserSupport.INTERNAL_ID;
+    return yyVal;
+};
+states[616] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setCurrentArg(null);
+    yyVal = new OptArgParseNode(support.getPosition(((ParseNode)yyVals[0+yyTop])), support.assignableLabelOrIdentifier(((ArgumentParseNode)yyVals[-2+yyTop]).getName(), ((ParseNode)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[617] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setCurrentArg(null);
+    yyVal = new OptArgParseNode(support.getPosition(((ParseNode)yyVals[0+yyTop])), support.assignableLabelOrIdentifier(((ArgumentParseNode)yyVals[-2+yyTop]).getName(), ((ParseNode)yyVals[0+yyTop])));
+    return yyVal;
+};
+states[618] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new BlockParseNode(((ParseNode)yyVals[0+yyTop]).getPosition()).add(((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[619] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.appendToBlock(((ListParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[620] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new BlockParseNode(((ParseNode)yyVals[0+yyTop]).getPosition()).add(((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[621] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.appendToBlock(((ListParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[622] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[623] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[624] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (!support.is_local_id(((TruffleString)yyVals[0+yyTop]))) {
+        support.yyerror("rest argument must be local variable");
+    }
+                    
+    yyVal = new RestArgParseNode(support.arg_var(support.shadowing_lvar(((TruffleString)yyVals[0+yyTop]))));
+    return yyVal;
+};
+states[625] = (support, lexer, yyVal, yyVals, yyTop) -> {
+  /* FIXME: bytelist_love: somewhat silly to remake the empty bytelist over and over but this type should change (using null vs "" is a strange distinction).*/
+  yyVal = new UnnamedRestArgParseNode(lexer.getPosition(), Layouts.TEMP_PREFIX + "unnamed_rest", support.getCurrentScope().addVariable("*"), true);
+    return yyVal;
+};
+states[626] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[627] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[628] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (!support.is_local_id(((TruffleString)yyVals[0+yyTop]))) {
+        support.yyerror("block argument must be local variable");
+    }
+                    
+    yyVal = new BlockArgParseNode(support.arg_var(support.shadowing_lvar(((TruffleString)yyVals[0+yyTop]))));
+    return yyVal;
+};
+states[629] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new BlockArgParseNode(support.arg_var(support.shadowing_lvar(ParserSupport.FORWARD_ARGS_BLOCK_VAR_TSTRING)));
+    return yyVal;
+};
+states[630] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((BlockArgParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[631] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = null;
+    return yyVal;
+};
+states[632] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    value_expr(lexer, ((ParseNode)yyVals[0+yyTop]));
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[633] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setState(EXPR_BEG);
+    return yyVal;
+};
+states[634] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (((ParseNode)yyVals[-1+yyTop]) == null) {
+        support.yyerror("can't define single method for ().");
+    } else if (((ParseNode)yyVals[-1+yyTop]) instanceof ILiteralNode) {
+        support.yyerror("can't define single method for literals.");
+    }
+    value_expr(lexer, ((ParseNode)yyVals[-1+yyTop]));
+    yyVal = ((ParseNode)yyVals[-1+yyTop]);
+    return yyVal;
+};
+states[635] = (support, lexer, yyVal
