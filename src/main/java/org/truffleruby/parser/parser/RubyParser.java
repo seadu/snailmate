@@ -3432,4 +3432,285 @@ states[539] = (support, lexer, yyVal, yyVals, yyTop) -> {
     yyVal = new SelfParseNode(lexer.tokline);
     return yyVal;
 };
-states[540] = (support, lexer, y
+states[540] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new TrueParseNode((SourceIndexLength) yyVal);
+    return yyVal;
+};
+states[541] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new FalseParseNode((SourceIndexLength) yyVal);
+    return yyVal;
+};
+states[542] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    RubyEncoding encoding = support.getConfiguration().getContext() == null ? Encodings.UTF_8 : support.getConfiguration().getContext().getEncodingManager().getLocaleEncoding();
+    yyVal = new FileParseNode(lexer.tokline, TStringUtils.fromJavaString(lexer.getFile(), encoding), encoding);
+    return yyVal;
+};
+states[543] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new FixnumParseNode(lexer.tokline, lexer.tokline.toSourceSection(lexer.getSource()).getStartLine() + lexer.getLineOffset());
+    return yyVal;
+};
+states[544] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new EncodingParseNode(lexer.tokline, lexer.getEncoding());
+    return yyVal;
+};
+states[545] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.assignableLabelOrIdentifier(((TruffleString)yyVals[0+yyTop]), null);
+    return yyVal;
+};
+states[546] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new InstAsgnParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])), NilImplicitParseNode.NIL);
+    return yyVal;
+};
+states[547] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new GlobalAsgnParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])), NilImplicitParseNode.NIL);
+    return yyVal;
+};
+states[548] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (support.isInDef()) support.compile_error("dynamic constant assignment");
+
+    yyVal = new ConstDeclParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])), null, NilImplicitParseNode.NIL);
+    return yyVal;
+};
+states[549] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new ClassVarAsgnParseNode(lexer.tokline, support.symbolID(((TruffleString)yyVals[0+yyTop])), NilImplicitParseNode.NIL);
+    return yyVal;
+};
+states[550] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to nil");
+    yyVal = null;
+    return yyVal;
+};
+states[551] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't change the value of self");
+    yyVal = null;
+    return yyVal;
+};
+states[552] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to true");
+    yyVal = null;
+    return yyVal;
+};
+states[553] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to false");
+    yyVal = null;
+    return yyVal;
+};
+states[554] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to __FILE__");
+    yyVal = null;
+    return yyVal;
+};
+states[555] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to __LINE__");
+    yyVal = null;
+    return yyVal;
+};
+states[556] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.compile_error("Can't assign to __ENCODING__");
+    yyVal = null;
+    return yyVal;
+};
+states[557] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[558] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[559] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setState(EXPR_BEG);
+    lexer.commandStart = true;
+    return yyVal;
+};
+states[560] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[-1+yyTop]);
+    return yyVal;
+};
+states[561] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = null;
+    return yyVal;
+};
+states[562] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ArgsParseNode)yyVals[-1+yyTop]);
+    lexer.setState(EXPR_BEG);
+    lexer.commandStart = true;
+    return yyVal;
+};
+states[563] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = lexer.inKwarg;
+    lexer.inKwarg = true;
+    lexer.setState(lexer.getState() | EXPR_LABEL);
+    return yyVal;
+};
+states[564] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.inKwarg = ((Boolean)yyVals[-2+yyTop]);
+     yyVal = ((ArgsParseNode)yyVals[-1+yyTop]);
+     lexer.setState(EXPR_BEG);
+     lexer.commandStart = true;
+    return yyVal;
+};
+states[565] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args_tail(((ListParseNode)yyVals[-3+yyTop]).getPosition(), ((ListParseNode)yyVals[-3+yyTop]), ((TruffleString)yyVals[-1+yyTop]), ((BlockArgParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[566] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args_tail(((ListParseNode)yyVals[-1+yyTop]).getPosition(), ((ListParseNode)yyVals[-1+yyTop]), (TruffleString) null, ((BlockArgParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[567] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args_tail(lexer.getPosition(), null, ((TruffleString)yyVals[-1+yyTop]), ((BlockArgParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[568] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args_tail(lexer.getPosition(), null, RubyLexer.Keyword.NIL.bytes, ((BlockArgParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[569] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args_tail(((BlockArgParseNode)yyVals[0+yyTop]).getPosition(), null, (TruffleString) null, ((BlockArgParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[570] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ArgsTailHolder)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[571] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args_tail(lexer.getPosition(), null, (TruffleString) null, null);
+    return yyVal;
+};
+states[572] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ArgsParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[573] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(lexer.getPosition(), null, null, null, null, (ArgsTailHolder) null);
+    return yyVal;
+};
+states[574] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((ListParseNode)yyVals[-5+yyTop]).getPosition(), ((ListParseNode)yyVals[-5+yyTop]), ((ListParseNode)yyVals[-3+yyTop]), ((RestArgParseNode)yyVals[-1+yyTop]), null, ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[575] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((ListParseNode)yyVals[-7+yyTop]).getPosition(), ((ListParseNode)yyVals[-7+yyTop]), ((ListParseNode)yyVals[-5+yyTop]), ((RestArgParseNode)yyVals[-3+yyTop]), ((ListParseNode)yyVals[-1+yyTop]), ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[576] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((ListParseNode)yyVals[-3+yyTop]).getPosition(), ((ListParseNode)yyVals[-3+yyTop]), ((ListParseNode)yyVals[-1+yyTop]), null, null, ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[577] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((ListParseNode)yyVals[-5+yyTop]).getPosition(), ((ListParseNode)yyVals[-5+yyTop]), ((ListParseNode)yyVals[-3+yyTop]), null, ((ListParseNode)yyVals[-1+yyTop]), ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[578] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((ListParseNode)yyVals[-3+yyTop]).getPosition(), ((ListParseNode)yyVals[-3+yyTop]), null, ((RestArgParseNode)yyVals[-1+yyTop]), null, ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[579] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((ListParseNode)yyVals[-5+yyTop]).getPosition(), ((ListParseNode)yyVals[-5+yyTop]), null, ((RestArgParseNode)yyVals[-3+yyTop]), ((ListParseNode)yyVals[-1+yyTop]), ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[580] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((ListParseNode)yyVals[-1+yyTop]).getPosition(), ((ListParseNode)yyVals[-1+yyTop]), null, null, null, ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[581] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((ListParseNode)yyVals[-3+yyTop]).getPosition(), null, ((ListParseNode)yyVals[-3+yyTop]), ((RestArgParseNode)yyVals[-1+yyTop]), null, ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[582] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((ListParseNode)yyVals[-5+yyTop]).getPosition(), null, ((ListParseNode)yyVals[-5+yyTop]), ((RestArgParseNode)yyVals[-3+yyTop]), ((ListParseNode)yyVals[-1+yyTop]), ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[583] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((ListParseNode)yyVals[-1+yyTop]).getPosition(), null, ((ListParseNode)yyVals[-1+yyTop]), null, null, ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[584] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((ListParseNode)yyVals[-3+yyTop]).getPosition(), null, ((ListParseNode)yyVals[-3+yyTop]), null, ((ListParseNode)yyVals[-1+yyTop]), ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[585] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((RestArgParseNode)yyVals[-1+yyTop]).getPosition(), null, null, ((RestArgParseNode)yyVals[-1+yyTop]), null, ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[586] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((RestArgParseNode)yyVals[-3+yyTop]).getPosition(), null, null, ((RestArgParseNode)yyVals[-3+yyTop]), ((ListParseNode)yyVals[-1+yyTop]), ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[587] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.new_args(((ArgsTailHolder)yyVals[0+yyTop]).getPosition(), null, null, null, null, ((ArgsTailHolder)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[588] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    SourceIndexLength position = support.getPosition(null);
+    RestArgParseNode splat = new RestArgParseNode(position, ParserSupport.FORWARD_ARGS_REST_VAR, 0);
+    BlockArgParseNode block = new BlockArgParseNode(position, 1, ParserSupport.FORWARD_ARGS_BLOCK_VAR);
+    ArgsTailHolder argsTail = support.new_args_tail(position, null, ParserSupport.FORWARD_ARGS_KWREST_VAR_TSTRING, block);
+    yyVal = support.new_args(position, ((ListParseNode)yyVals[-2+yyTop]), null, splat, null, argsTail);
+    return yyVal;
+};
+states[589] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    SourceIndexLength position = support.getPosition(null);
+    RestArgParseNode splat = new RestArgParseNode(position, ParserSupport.FORWARD_ARGS_REST_VAR, 0);
+    BlockArgParseNode block = new BlockArgParseNode(position, 1, ParserSupport.FORWARD_ARGS_BLOCK_VAR);
+    ArgsTailHolder argsTail = support.new_args_tail(position, null, ParserSupport.FORWARD_ARGS_KWREST_VAR_TSTRING, block);
+    yyVal = support.new_args(position, null, null, splat, null, argsTail);
+    return yyVal;
+};
+states[591] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.yyerror("formal argument cannot be a constant");
+    return yyVal;
+};
+states[592] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.yyerror("formal argument cannot be an instance variable");
+    return yyVal;
+};
+states[593] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.yyerror("formal argument cannot be a global variable");
+    return yyVal;
+};
+states[594] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    support.yyerror("formal argument cannot be a class variable");
+    return yyVal;
+};
+states[595] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]); /* Not really reached*/
+    return yyVal;
+};
+states[596] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.formal_argument(((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[597] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setCurrentArg(((TruffleString)yyVals[0+yyTop]));
+    yyVal = support.arg_var(((TruffleString)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[598] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    lexer.setCurrentArg(null);
+    yyVal = ((ArgumentParseNode)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[599] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((ParseNode)yyVals[-1+yyTop]);
+    /*            {
+            ID tid = internal_id();
+            arg_var(tid);
+            if (dyna_in_block()) {
+$2->nd_value = NEW_DVAR(tid);
+            }
+            else {
+$2->nd_value = NEW_LVAR(tid);
+            }
+            $$ = NEW_ARGS_AUX(tid, 1);
+            $$->nd_next = $2;*/
+    return yyVal;
+};
+states[600] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new ArrayParseNode(lexer.getPosition(), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[601] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ((ListParseNode)yyVals[-2+yyTop]).add(((ParseNode)yyVals[0+yyTop]));
+    yyVal = ((ListParseNode)yyVals[-2+yyTo
