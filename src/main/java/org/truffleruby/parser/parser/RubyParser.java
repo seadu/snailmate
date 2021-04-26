@@ -3867,4 +3867,146 @@ states[634] = (support, lexer, yyVal, yyVals, yyTop) -> {
     yyVal = ((ParseNode)yyVals[-1+yyTop]);
     return yyVal;
 };
-states[635] = (support, lexer, yyVal
+states[635] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new HashParseNode(lexer.getPosition());
+    return yyVal;
+};
+states[636] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.remove_duplicate_keys(((HashParseNode)yyVals[-1+yyTop]));
+    return yyVal;
+};
+states[637] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = new HashParseNode(lexer.getPosition(), ((ParseNodeTuple)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[638] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((HashParseNode)yyVals[-2+yyTop]).add(((ParseNodeTuple)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[639] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.createKeyValue(((ParseNode)yyVals[-2+yyTop]), ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[640] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ParseNode label = support.asSymbol(support.getPosition(((ParseNode)yyVals[0+yyTop])), ((TruffleString)yyVals[-1+yyTop]));
+    yyVal = support.createKeyValue(label, ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[641] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    ParseNode val = support.declareIdentifier(((TruffleString)yyVals[0+yyTop]));
+    ParseNode label = support.asSymbol(support.getPosition(null), ((TruffleString)yyVals[0+yyTop]));
+    yyVal = support.createKeyValue(label, val);
+    return yyVal;
+};
+states[642] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    if (((ParseNode)yyVals[-2+yyTop]) instanceof StrParseNode) {
+        DStrParseNode dnode = new DStrParseNode(support.getPosition(((ParseNode)yyVals[-2+yyTop])), lexer.getEncoding());
+        dnode.add(((ParseNode)yyVals[-2+yyTop]));
+        yyVal = support.createKeyValue(new DSymbolParseNode(support.getPosition(((ParseNode)yyVals[-2+yyTop])), dnode), ((ParseNode)yyVals[0+yyTop]));
+    } else if (((ParseNode)yyVals[-2+yyTop]) instanceof DStrParseNode) {
+        yyVal = support.createKeyValue(new DSymbolParseNode(support.getPosition(((ParseNode)yyVals[-2+yyTop])), ((DStrParseNode)yyVals[-2+yyTop])), ((ParseNode)yyVals[0+yyTop]));
+    } else {
+        support.compile_error("Uknown type for assoc in strings: " + ((ParseNode)yyVals[-2+yyTop]));
+    }
+
+    return yyVal;
+};
+states[643] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = support.createKeyValue(null, ((ParseNode)yyVals[0+yyTop]));
+    return yyVal;
+};
+states[644] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[645] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[646] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[647] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[648] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[649] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[650] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[651] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[652] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[653] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[654] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[655] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[656] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[657] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[659] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[664] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[665] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = ((TruffleString)yyVals[0+yyTop]);
+    return yyVal;
+};
+states[673] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = null;
+    return yyVal;
+};
+states[674] = (support, lexer, yyVal, yyVals, yyTop) -> {
+    yyVal = null;
+    return yyVal;
+};
+}
+// line 2838 "RubyParser.y"
+
+    /** The parse method use an lexer stream and parse it to an AST node 
+     * structure
+     */
+    public RubyParserResult parse(ParserConfiguration configuration) {
+        support.reset();
+        support.setConfiguration(configuration);
+        support.setResult(new RubyParserResult());
+        
+        yyparse(lexer, null);
+        
+        return support.getResult();
+    }
+}
+// CheckStyle: stop generated
+// @formatter:on
+// line 10943 "-"
