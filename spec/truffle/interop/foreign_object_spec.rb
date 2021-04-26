@@ -17,4 +17,9 @@ describe "Foreign objects" do
   end
 
   it "can be printed with #p" do
-    foreign = Truffle::Debug.for
+    foreign = Truffle::Debug.foreign_object
+    -> {
+      p foreign
+    }.should output_to_fd("#{foreign.inspect}\n")
+  end
+end
