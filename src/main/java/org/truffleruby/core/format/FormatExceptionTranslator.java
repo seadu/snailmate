@@ -45,4 +45,14 @@ public abstract class FormatExceptionTranslator {
             final RangeException e = (RangeException) exception;
             return new RaiseException(context, coreExceptions.rangeError(e.getMessage(), currentNode));
         } else if (exception instanceof CantConvertException) {
-         
+            final CantConvertException e = (CantConvertException) exception;
+            return new RaiseException(context, coreExceptions.typeError(e.getMessage(), currentNode));
+        } else if (exception instanceof InvalidFormatException) {
+            final InvalidFormatException e = (InvalidFormatException) exception;
+            return new RaiseException(context, coreExceptions.argumentError(e.getMessage(), currentNode));
+        } else {
+            throw CompilerDirectives.shouldNotReachHere(exception);
+        }
+    }
+
+}
