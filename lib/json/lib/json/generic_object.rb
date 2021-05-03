@@ -52,4 +52,20 @@ module JSON
       __send__(name)
     end unless method_defined?(:[])
 
-    d
+    def []=(name, value)
+      __send__("#{name}=", value)
+    end unless method_defined?(:[]=)
+
+    def |(other)
+      self.class[other.to_hash.merge(to_hash)]
+    end
+
+    def as_json(*)
+      { JSON.create_id => self.class.name }.merge to_hash
+    end
+
+    def to_json(*a)
+      as_json.to_json(*a)
+    end
+  end
+end
