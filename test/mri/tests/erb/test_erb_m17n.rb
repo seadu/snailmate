@@ -55,4 +55,70 @@ class TestERBEncoding < Test::Unit::TestCase
     assert_match(/__ENCODING__ is Big5/, erb.result)
   end
 
-  def test_recognize_magic_comme
+  def test_recognize_magic_comment
+    erb = ERB.new(<<-EOS.encode("EUC-KR"))
+<%# -*- coding: EUC-KR -*- %>
+안녕하세요
+    EOS
+    assert_match(/#coding:EUC-KR/, erb.src)
+    assert_equal Encoding::EUC_KR, erb.result.encoding
+
+    erb = ERB.new(<<-EOS.encode("EUC-KR").force_encoding("ASCII-8BIT"))
+<%#-*- coding: EUC-KR -*-%>
+안녕하세요
+    EOS
+    assert_match(/#coding:EUC-KR/, erb.src)
+    assert_equal Encoding::EUC_KR, erb.result.encoding
+
+    erb = ERB.new(<<-EOS.encode("EUC-KR").force_encoding("ASCII-8BIT"))
+<%# vim: tabsize=8 encoding=EUC-KR shiftwidth=2 expandtab %>
+안녕하세요
+    EOS
+    assert_match(/#coding:EUC-KR/, erb.src)
+    assert_equal Encoding::EUC_KR, erb.result.encoding
+
+    erb = ERB.new(<<-EOS.encode("EUC-KR").force_encoding("ASCII-8BIT"))
+<%#coding:EUC-KR %>
+안녕하세요
+    EOS
+    assert_match(/#coding:EUC-KR/, erb.src)
+    assert_equal Encoding::EUC_KR, erb.result.encoding
+
+    erb = ERB.new(<<-EOS.encode("EUC-KR").force_encoding("EUC-JP"))
+<%#coding:EUC-KR %>
+안녕하세요
+    EOS
+    assert_match(/#coding:EUC-KR/, erb.src)
+    assert_equal Encoding::EUC_KR, erb.result.encoding
+  end
+
+  module M; end
+  def test_method_with_encoding
+    obj = Object.new
+    obj.extend(M)
+
+    erb = ERB.new(<<-EOS.encode("EUC-JP").force_encoding("ASCII-8BIT"))
+<%#coding:EUC-JP %>
+literal encoding is <%= 'こんにちは'.encoding %>
+__ENCODING__ is <%= __ENCODING__ %>
+    EOS
+    erb.def_method(M, :m_from_magic_comment)
+
+    result = obj.m_from_magic_comment
+    assert_equal Encoding::EUC_JP, result.encoding
+    assert_match(/literal encoding is EUC-JP/, result)
+    assert_match(/__ENCODING__ is EUC-JP/, result)
+
+    erb = ERB.new(<<-EOS.encode("EUC-KR"))
+literal encoding is <%= '안녕하세요'.encoding %>
+__ENCODING__ is <%= __ENCODING__ %>
+EOS
+    erb.def_method(M, :m_from_eval_encoding)
+    result = obj.m_from_eval_encoding
+    assert_equal Encoding::EUC_KR, result.encoding
+    assert_match(/literal encoding is EUC-KR/, result)
+    assert_match(/__ENCODING__ is EUC-KR/, result)
+  end
+end
+
+# vim:fileencoding=UTF-8
