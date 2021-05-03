@@ -183,4 +183,89 @@ rb_num_negative_int_p(VALUE num)
 {
     const ID mid = '<';
 
-    if (FI
+    if (FIXNUM_P(num)) {
+        if (rb_method_basic_definition_p(rb_cInteger, mid))
+            return FIXNUM_NEGATIVE_P(num);
+    }
+    else if (RB_TYPE_P(num, T_BIGNUM)) {
+        if (rb_method_basic_definition_p(rb_cInteger, mid))
+            return BIGNUM_NEGATIVE_P(num);
+    }
+    return RTEST(rb_num_compare_with_zero(num, mid));
+}
+
+static inline double
+rb_float_flonum_value(VALUE v)
+{
+#if USE_FLONUM
+    if (v != (VALUE)0x8000000000000002) { /* LIKELY */
+        union {
+            double d;
+            VALUE v;
+        } t;
+
+        VALUE b63 = (v >> 63);
+        /* e: xx1... -> 011... */
+        /*    xx0... -> 100... */
+        /*      ^b63           */
+        t.v = RUBY_BIT_ROTR((2 - b63) | (v & ~(VALUE)0x03), 3);
+        return t.d;
+    }
+#endif
+    return 0.0;
+}
+
+static inline double
+rb_float_noflonum_value(VALUE v)
+{
+#if SIZEOF_DOUBLE <= SIZEOF_VALUE
+    return RFLOAT(v)->float_value;
+#else
+    union {
+        rb_float_value_type v;
+        double d;
+    } u = {RFLOAT(v)->float_value};
+    return u.d;
+#endif
+}
+
+static inline double
+rb_float_value_inline(VALUE v)
+{
+    if (FLONUM_P(v)) {
+        return rb_float_flonum_value(v);
+    }
+    return rb_float_noflonum_value(v);
+}
+
+static inline VALUE
+rb_float_new_inline(double d)
+{
+#if USE_FLONUM
+    union {
+        double d;
+        VALUE v;
+    } t;
+    int bits;
+
+    t.d = d;
+    bits = (int)((VALUE)(t.v >> 60) & 0x7);
+    /* bits contains 3 bits of b62..b60. */
+    /* bits - 3 = */
+    /*   b011 -> b000 */
+    /*   b100 -> b001 */
+
+    if (t.v != 0x3000000000000000 /* 1.72723e-77 */ &&
+        !((bits-3) & ~0x01)) {
+        return (RUBY_BIT_ROTL(t.v, 3) & ~(VALUE)0x01) | 0x02;
+    }
+    else if (t.v == (VALUE)0) {
+        /* +0.0 */
+        return 0x8000000000000002;
+    }
+    /* out of range */
+#endif
+    return rb_float_new_in_heap(d);
+}
+
+#endif /* INTERNAL_NUMERIC_H */
