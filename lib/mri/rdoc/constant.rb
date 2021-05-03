@@ -177,4 +177,11 @@ class RDoc::Constant < RDoc::CodeObject
   def to_s # :nodoc:
     parent_name = parent ? parent.full_name : '(unknown)'
     if is_alias_for
-      "constant #{pa
+      "constant #{parent_name}::#@name -> #{is_alias_for}"
+    else
+      "constant #{parent_name}::#@name"
+    end
+  end
+
+end
+
