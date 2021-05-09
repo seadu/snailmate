@@ -6867,3 +6867,645 @@ VpDtoV(Real *m, double d)
 
     VpInternalRound(m, 0, (m->Prec > 0) ? m->frac[m->Prec-1] : 0,
                     (DECDIG)(val*(double)BASE));
+
+Exit:
+#ifdef BIGDECIMAL_DEBUG
+    if (gfDebug) {
+	printf("VpDtoV d=%30.30e\n", d);
+	VPrint(stdout, "  m=%\n", m);
+    }
+#endif /* BIGDECIMAL_DEBUG */
+    return;
+}
+
+/*
+ *  m <- ival
+ */
+#if 0  /* unused */
+VP_EXPORT void
+VpItoV(Real *m, SIGNED_VALUE ival)
+{
+    size_t mm, ind_m;
+    size_t val, v1, v2, v;
+    int isign;
+    SIGNED_VALUE ne;
+
+    if (ival == 0) {
+	VpSetZero(m, 1);
+	goto Exit;
+    }
+    isign = 1;
+    val = ival;
+    if (ival < 0) {
+	isign = -1;
+	val  =(size_t)(-ival);
+    }
+    ne = 0;
+    ind_m = 0;
+    mm = m->MaxPrec;
+    while (ind_m < mm) {
+	m->frac[ind_m] = 0;
+	++ind_m;
+    }
+    ind_m = 0;
+    while (val > 0) {
+	if (val) {
+	    v1 = val;
+	    v2 = 1;
+	    while (v1 >= BASE) {
+		v1 /= BASE;
+		v2 *= BASE;
+	    }
+	    val = val - v2 * v1;
+	    v = v1;
+	}
+	else {
+	    v = 0;
+	}
+	m->frac[ind_m] = v;
+	++ind_m;
+	++ne;
+    }
+    m->Prec = ind_m - 1;
+    m->exponent = ne;
+    VpSetSign(m, isign);
+    VpNmlz(m);
+
+Exit:
+#ifdef BIGDECIMAL_DEBUG
+    if (gfDebug) {
+	printf(" VpItoV i=%d\n", ival);
+	VPrint(stdout, "  m=%\n", m);
+    }
+#endif /* BIGDECIMAL_DEBUG */
+    return;
+}
+#endif
+
+/*
+ * y = SQRT(x),  y*y - x =>0
+ */
+VP_EXPORT int
+VpSqrt(Real *y, Real *x)
+{
+    Real *f = NULL;
+    Real *r = NULL;
+    size_t y_prec;
+    SIGNED_VALUE n, e;
+    SIGNED_VALUE prec;
+    ssize_t nr;
+    double val;
+
+    /* Zero or +Infinity ? */
+    if (VpIsZero(x) || VpIsPosInf(x)) {
+	VpAsgn(y,x,1);
+	goto Exit;
+    }
+
+    /* Negative ? */
+    if (BIGDECIMAL_NEGATIVE_P(x)) {
+	VpSetNaN(y);
+	return VpException(VP_EXCEPTION_OP, "sqrt of negative value", 0);
+    }
+
+    /* NaN ? */
+    if (VpIsNaN(x)) {
+	VpSetNaN(y);
+	return VpException(VP_EXCEPTION_OP, "sqrt of 'NaN'(Not a Number)", 0);
+    }
+
+    /* One ? */
+    if (VpIsOne(x)) {
+	VpSetOne(y);
+	goto Exit;
+    }
+
+    n = (SIGNED_VALUE)y->MaxPrec;
+    if (x->MaxPrec > (size_t)n) n = (ssize_t)x->MaxPrec;
+
+    /* allocate temporally variables  */
+    f = VpAlloc(y->MaxPrec * (BASE_FIG + 2), "#1", 1, 1);
+    r = VpAlloc((n + n) * (BASE_FIG + 2), "#1", 1, 1);
+
+    nr = 0;
+    y_prec = y->MaxPrec;
+
+    prec = x->exponent - (ssize_t)y_prec;
+    if (x->exponent > 0)
+	++prec;
+    else
+	--prec;
+
+    VpVtoD(&val, &e, x);    /* val <- x  */
+    e /= (SIGNED_VALUE)BASE_FIG;
+    n = e / 2;
+    if (e - n * 2 != 0) {
+	val /= BASE;
+	n = (e + 1) / 2;
+    }
+    VpDtoV(y, sqrt(val));    /* y <- sqrt(val) */
+    y->exponent += n;
+    n = (SIGNED_VALUE)roomof(BIGDECIMAL_DOUBLE_FIGURES, BASE_FIG);
+    y->MaxPrec = Min((size_t)n , y_prec);
+    f->MaxPrec = y->MaxPrec + 1;
+    n = (SIGNED_VALUE)(y_prec * BASE_FIG);
+    if (n < (SIGNED_VALUE)maxnr) n = (SIGNED_VALUE)maxnr;
+    do {
+	y->MaxPrec *= 2;
+	if (y->MaxPrec > y_prec) y->MaxPrec = y_prec;
+	f->MaxPrec = y->MaxPrec;
+	VpDivd(f, r, x, y);      /* f = x/y    */
+	VpAddSub(r, f, y, -1);   /* r = f - y  */
+	VpMult(f, VpPt5, r);     /* f = 0.5*r  */
+	if (VpIsZero(f))         goto converge;
+	VpAddSub(r, f, y, 1);    /* r = y + f  */
+	VpAsgn(y, r, 1);         /* y = r      */
+    } while (++nr < n);
+
+#ifdef BIGDECIMAL_DEBUG
+    if (gfDebug) {
+	printf("ERROR(VpSqrt): did not converge within %ld iterations.\n", nr);
+    }
+#endif /* BIGDECIMAL_DEBUG */
+    y->MaxPrec = y_prec;
+
+converge:
+    VpChangeSign(y, 1);
+#ifdef BIGDECIMAL_DEBUG
+    if (gfDebug) {
+	VpMult(r, y, y);
+	VpAddSub(f, x, r, -1);
+	printf("VpSqrt: iterations = %"PRIdSIZE"\n", nr);
+	VPrint(stdout, "  y =% \n", y);
+	VPrint(stdout, "  x =% \n", x);
+	VPrint(stdout, "  x-y*y = % \n", f);
+    }
+#endif /* BIGDECIMAL_DEBUG */
+    y->MaxPrec = y_prec;
+
+Exit:
+    VpFree(f);
+    VpFree(r);
+    return 1;
+}
+
+/*
+ * Round relatively from the decimal point.
+ *    f: rounding mode
+ *   nf: digit location to round from the decimal point.
+ */
+VP_EXPORT int
+VpMidRound(Real *y, unsigned short f, ssize_t nf)
+{
+    /* fracf: any positive digit under rounding position? */
+    /* fracf_1further: any positive digits under one further than the rounding position? */
+    /* exptoadd: number of digits needed to compensate negative nf */
+    int fracf, fracf_1further;
+    ssize_t n,i,ix,ioffset, exptoadd;
+    DECDIG v, shifter;
+    DECDIG div;
+
+    nf += y->exponent * (ssize_t)BASE_FIG;
+    exptoadd=0;
+    if (nf < 0) {
+	/* rounding position too left(large). */
+	if (f != VP_ROUND_CEIL && f != VP_ROUND_FLOOR) {
+	    VpSetZero(y, VpGetSign(y)); /* truncate everything */
+	    return 0;
+	}
+	exptoadd = -nf;
+	nf = 0;
+    }
+
+    ix = nf / (ssize_t)BASE_FIG;
+    if ((size_t)ix >= y->Prec) return 0;  /* rounding position too right(small). */
+    v = y->frac[ix];
+
+    ioffset = nf - ix*(ssize_t)BASE_FIG;
+    n = (ssize_t)BASE_FIG - ioffset - 1;
+    for (shifter = 1, i = 0; i < n; ++i) shifter *= 10;
+
+    /* so the representation used (in y->frac) is an array of DECDIG, where
+       each DECDIG contains a value between 0 and BASE-1, consisting of BASE_FIG
+       decimal places.
+
+       (that numbers of decimal places are typed as ssize_t is somewhat confusing)
+
+       nf is now position (in decimal places) of the digit from the start of
+       the array.
+
+       ix is the position (in DECDIGs) of the DECDIG containing the decimal digit,
+       from the start of the array.
+
+       v is the value of this DECDIG
+
+       ioffset is the number of extra decimal places along of this decimal digit
+       within v.
+
+       n is the number of decimal digits remaining within v after this decimal digit
+       shifter is 10**n,
+
+       v % shifter are the remaining digits within v
+       v % (shifter * 10) are the digit together with the remaining digits within v
+       v / shifter are the digit's predecessors together with the digit
+       div = v / shifter / 10 is just the digit's precessors
+       (v / shifter) - div*10 is just the digit, which is what v ends up being reassigned to.
+       */
+
+    fracf = (v % (shifter * 10) > 0);
+    fracf_1further = ((v % shifter) > 0);
+
+    v /= shifter;
+    div = v / 10;
+    v = v - div*10;
+    /* now v is just the digit required.
+       now fracf is whether the digit or any of the remaining digits within v are non-zero
+       now fracf_1further is whether any of the remaining digits within v are non-zero
+       */
+
+    /* now check all the remaining DECDIGs for zero-ness a whole DECDIG at a time.
+       if we spot any non-zeroness, that means that we found a positive digit under
+       rounding position, and we also found a positive digit under one further than
+       the rounding position, so both searches (to see if any such non-zero digit exists)
+       can stop */
+
+    for (i = ix + 1; (size_t)i < y->Prec; i++) {
+	if (y->frac[i] % BASE) {
+	    fracf = fracf_1further = 1;
+	    break;
+	}
+    }
+
+    /* now fracf = does any positive digit exist under the rounding position?
+       now fracf_1further = does any positive digit exist under one further than the
+       rounding position?
+       now v = the first digit under the rounding position */
+
+    /* drop digits after pointed digit */
+    memset(y->frac + ix + 1, 0, (y->Prec - (ix + 1)) * sizeof(DECDIG));
+
+    switch (f) {
+      case VP_ROUND_DOWN: /* Truncate */
+	break;
+      case VP_ROUND_UP:   /* Roundup */
+	if (fracf) ++div;
+	break;
+      case VP_ROUND_HALF_UP:
+	if (v>=5) ++div;
+	break;
+      case VP_ROUND_HALF_DOWN:
+	if (v > 5 || (v == 5 && fracf_1further)) ++div;
+	break;
+      case VP_ROUND_CEIL:
+	if (fracf && BIGDECIMAL_POSITIVE_P(y)) ++div;
+	break;
+      case VP_ROUND_FLOOR:
+	if (fracf && BIGDECIMAL_NEGATIVE_P(y)) ++div;
+	break;
+      case VP_ROUND_HALF_EVEN: /* Banker's rounding */
+	if (v > 5) ++div;
+	else if (v == 5) {
+	    if (fracf_1further) {
+		++div;
+	    }
+	    else {
+		if (ioffset == 0) {
+                    /* v is the first decimal digit of its DECDIG;
+                       need to grab the previous DECDIG if present
+                       to check for evenness of the previous decimal
+                       digit (which is same as that of the DECDIG since
+                       base 10 has a factor of 2) */
+		    if (ix && (y->frac[ix-1] % 2)) ++div;
+		}
+		else {
+		    if (div % 2) ++div;
+		}
+	    }
+	}
+	break;
+    }
+    for (i = 0; i <= n; ++i) div *= 10;
+    if (div >= BASE) {
+	if (ix) {
+	    y->frac[ix] = 0;
+	    VpRdup(y, ix);
+	}
+	else {
+	    short s = VpGetSign(y);
+	    SIGNED_VALUE e = y->exponent;
+	    VpSetOne(y);
+	    VpSetSign(y, s);
+	    y->exponent = e + 1;
+	}
+    }
+    else {
+	y->frac[ix] = div;
+	VpNmlz(y);
+    }
+    if (exptoadd > 0) {
+	y->exponent += (SIGNED_VALUE)(exptoadd / BASE_FIG);
+	exptoadd %= (ssize_t)BASE_FIG;
+	for (i = 0; i < exptoadd; i++) {
+	    y->frac[0] *= 10;
+	    if (y->frac[0] >= BASE) {
+		y->frac[0] /= BASE;
+		y->exponent++;
+	    }
+	}
+    }
+    return 1;
+}
+
+VP_EXPORT int
+VpLeftRound(Real *y, unsigned short f, ssize_t nf)
+/*
+ * Round from the left hand side of the digits.
+ */
+{
+    DECDIG v;
+    if (!VpHasVal(y)) return 0; /* Unable to round */
+    v = y->frac[0];
+    nf -= VpExponent(y) * (ssize_t)BASE_FIG;
+    while ((v /= 10) != 0) nf--;
+    nf += (ssize_t)BASE_FIG-1;
+    return VpMidRound(y, f, nf);
+}
+
+VP_EXPORT int
+VpActiveRound(Real *y, Real *x, unsigned short f, ssize_t nf)
+{
+    /* First,assign whole value in truncation mode */
+    if (VpAsgn(y, x, 10) <= 1) return 0; /* Zero,NaN,or Infinity */
+    return VpMidRound(y, f, nf);
+}
+
+static int
+VpLimitRound(Real *c, size_t ixDigit)
+{
+    size_t ix = VpGetPrecLimit();
+    if (!VpNmlz(c)) return -1;
+    if (!ix)        return  0;
+    if (!ixDigit) ixDigit = c->Prec-1;
+    if ((ix + BASE_FIG - 1) / BASE_FIG > ixDigit + 1) return 0;
+    return VpLeftRound(c, VpGetRoundMode(), (ssize_t)ix);
+}
+
+/* If I understand correctly, this is only ever used to round off the final decimal
+   digit of precision */
+static void
+VpInternalRound(Real *c, size_t ixDigit, DECDIG vPrev, DECDIG v)
+{
+    int f = 0;
+
+    unsigned short const rounding_mode = VpGetRoundMode();
+
+    if (VpLimitRound(c, ixDigit)) return;
+    if (!v) return;
+
+    v /= BASE1;
+    switch (rounding_mode) {
+      case VP_ROUND_DOWN:
+	break;
+      case VP_ROUND_UP:
+	if (v) f = 1;
+	break;
+      case VP_ROUND_HALF_UP:
+	if (v >= 5) f = 1;
+	break;
+      case VP_ROUND_HALF_DOWN:
+	/* this is ok - because this is the last digit of precision,
+	   the case where v == 5 and some further digits are nonzero
+	   will never occur */
+	if (v >= 6) f = 1;
+	break;
+      case VP_ROUND_CEIL:
+	if (v && BIGDECIMAL_POSITIVE_P(c)) f = 1;
+	break;
+      case VP_ROUND_FLOOR:
+	if (v && BIGDECIMAL_NEGATIVE_P(c)) f = 1;
+	break;
+      case VP_ROUND_HALF_EVEN:  /* Banker's rounding */
+	/* as per VP_ROUND_HALF_DOWN, because this is the last digit of precision,
+	   there is no case to worry about where v == 5 and some further digits are nonzero */
+	if (v > 5) f = 1;
+	else if (v == 5 && vPrev % 2) f = 1;
+	break;
+    }
+    if (f) {
+	VpRdup(c, ixDigit);
+	VpNmlz(c);
+    }
+}
+
+/*
+ *  Rounds up m(plus one to final digit of m).
+ */
+static int
+VpRdup(Real *m, size_t ind_m)
+{
+    DECDIG carry;
+
+    if (!ind_m) ind_m = m->Prec;
+
+    carry = 1;
+    while (carry > 0 && ind_m--) {
+	m->frac[ind_m] += carry;
+	if (m->frac[ind_m] >= BASE) m->frac[ind_m] -= BASE;
+	else                        carry = 0;
+    }
+    if (carry > 0) { /* Overflow,count exponent and set fraction part be 1  */
+	if (!AddExponent(m, 1)) return 0;
+	m->Prec = m->frac[0] = 1;
+    }
+    else {
+	VpNmlz(m);
+    }
+    return 1;
+}
+
+/*
+ *  y = x - fix(x)
+ */
+VP_EXPORT void
+VpFrac(Real *y, Real *x)
+{
+    size_t my, ind_y, ind_x;
+
+    if (!VpHasVal(x)) {
+	VpAsgn(y, x, 1);
+	goto Exit;
+    }
+
+    if (x->exponent > 0 && (size_t)x->exponent >= x->Prec) {
+	VpSetZero(y, VpGetSign(x));
+	goto Exit;
+    }
+    else if (x->exponent <= 0) {
+	VpAsgn(y, x, 1);
+	goto Exit;
+    }
+
+    /* satisfy: x->exponent > 0 */
+
+    y->Prec = x->Prec - (size_t)x->exponent;
+    y->Prec = Min(y->Prec, y->MaxPrec);
+    y->exponent = 0;
+    VpSetSign(y, VpGetSign(x));
+    ind_y = 0;
+    my = y->Prec;
+    ind_x = x->exponent;
+    while (ind_y < my) {
+	y->frac[ind_y] = x->frac[ind_x];
+	++ind_y;
+	++ind_x;
+    }
+    VpNmlz(y);
+
+Exit:
+#ifdef BIGDECIMAL_DEBUG
+    if (gfDebug) {
+	VPrint(stdout, "VpFrac y=%\n", y);
+	VPrint(stdout, "    x=%\n", x);
+    }
+#endif /* BIGDECIMAL_DEBUG */
+    return;
+}
+
+/*
+ *   y = x ** n
+ */
+VP_EXPORT int
+VpPowerByInt(Real *y, Real *x, SIGNED_VALUE n)
+{
+    size_t s, ss;
+    ssize_t sign;
+    Real *w1 = NULL;
+    Real *w2 = NULL;
+
+    if (VpIsZero(x)) {
+	if (n == 0) {
+	    VpSetOne(y);
+	    goto Exit;
+	}
+	sign = VpGetSign(x);
+	if (n < 0) {
+	    n = -n;
+	    if (sign < 0) sign = (n % 2) ? -1 : 1;
+	    VpSetInf(y, sign);
+	}
+	else {
+	    if (sign < 0) sign = (n % 2) ? -1 : 1;
+	    VpSetZero(y,sign);
+	}
+	goto Exit;
+    }
+    if (VpIsNaN(x)) {
+	VpSetNaN(y);
+	goto Exit;
+    }
+    if (VpIsInf(x)) {
+	if (n == 0) {
+	    VpSetOne(y);
+	    goto Exit;
+	}
+	if (n > 0) {
+	    VpSetInf(y, (n % 2 == 0 || VpIsPosInf(x)) ? 1 : -1);
+	    goto Exit;
+	}
+	VpSetZero(y, (n % 2 == 0 || VpIsPosInf(x)) ? 1 : -1);
+	goto Exit;
+    }
+
+    if (x->exponent == 1 && x->Prec == 1 && x->frac[0] == 1) {
+	/* abs(x) = 1 */
+	VpSetOne(y);
+	if (BIGDECIMAL_POSITIVE_P(x)) goto Exit;
+	if ((n % 2) == 0) goto Exit;
+	VpSetSign(y, -1);
+	goto Exit;
+    }
+
+    if (n > 0) sign = 1;
+    else if (n < 0) {
+	sign = -1;
+	n = -n;
+    }
+    else {
+	VpSetOne(y);
+	goto Exit;
+    }
+
+    /* Allocate working variables  */
+
+    w1 = VpAlloc((y->MaxPrec + 2) * BASE_FIG, "#0", 1, 1);
+    w2 = VpAlloc((w1->MaxPrec * 2 + 1) * BASE_FIG, "#0", 1, 1);
+    /* calculation start */
+
+    VpAsgn(y, x, 1);
+    --n;
+    while (n > 0) {
+	VpAsgn(w1, x, 1);
+	s = 1;
+	while (ss = s, (s += s) <= (size_t)n) {
+	    VpMult(w2, w1, w1);
+	    VpAsgn(w1, w2, 1);
+	}
+	n -= (SIGNED_VALUE)ss;
+	VpMult(w2, y, w1);
+	VpAsgn(y, w2, 1);
+    }
+    if (sign < 0) {
+	VpDivd(w1, w2, VpConstOne, y);
+	VpAsgn(y, w1, 1);
+    }
+
+Exit:
+#ifdef BIGDECIMAL_DEBUG
+    if (gfDebug) {
+	VPrint(stdout, "VpPowerByInt y=%\n", y);
+	VPrint(stdout, "VpPowerByInt x=%\n", x);
+	printf("  n=%"PRIdVALUE"\n", n);
+    }
+#endif /* BIGDECIMAL_DEBUG */
+    VpFree(w2);
+    VpFree(w1);
+    return 1;
+}
+
+#ifdef BIGDECIMAL_DEBUG
+int
+VpVarCheck(Real * v)
+/*
+ * Checks the validity of the Real variable v.
+ * [Input]
+ *   v ... Real *, variable to be checked.
+ * [Returns]
+ *   0  ... correct v.
+ *   other ... error
+ */
+{
+    size_t i;
+
+    if (v->MaxPrec == 0) {
+	printf("ERROR(VpVarCheck): Illegal Max. Precision(=%"PRIuSIZE")\n",
+	       v->MaxPrec);
+	return 1;
+    }
+    if (v->Prec == 0 || v->Prec > v->MaxPrec) {
+	printf("ERROR(VpVarCheck): Illegal Precision(=%"PRIuSIZE")\n", v->Prec);
+	printf("       Max. Prec.=%"PRIuSIZE"\n", v->MaxPrec);
+	return 2;
+    }
+    for (i = 0; i < v->Prec; ++i) {
+	if (v->frac[i] >= BASE) {
+            printf("ERROR(VpVarCheck): Illegal fraction\n");
+            printf("       Frac[%"PRIuSIZE"]=%"PRIuDECDIG"\n", i, v->frac[i]);
+            printf("       Prec.   =%"PRIuSIZE"\n", v->Prec);
+            printf("       Exp. =%"PRIdVALUE"\n", v->exponent);
+            printf("       BASE =%"PRIuDECDIG"\n", BASE);
+            return 3;
+	}
+    }
+    return 0;
+}
+#endif /* BIGDECIMAL_DEBUG */
