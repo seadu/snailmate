@@ -1,0 +1,2 @@
+
+fails:Regexps with encoding modifiers uses BINARY when is not initialized

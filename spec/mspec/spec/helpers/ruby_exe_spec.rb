@@ -172,3 +172,86 @@ RSpec.describe Object, "#ruby_exe" do
     expect(IO).to receive(:popen).with("ruby_cmd")
     @script.ruby_exe(code, options)
   end
+
+  it "raises exception when command exit status is not successful" do
+    code = "code"
+    options = {}
+
+    status_failed = double(Process::Status, exited?: true, exitstatus: 4)
+    allow(Process).to receive(:last_status).and_return(status_failed)
+
+    expect {
+      @script.ruby_exe(code, options)
+    }.to raise_error(%r{Expected exit status is 0 but actual is 4 for command ruby_exe\(.+\)})
+  end
+
+  it "shows in the exception message if a signal killed the process" do
+    code = "code"
+    options = {}
+
+    status_failed = double(Process::Status, exited?: false, signaled?: true, termsig: Signal.list.fetch('TERM'))
+    allow(Process).to receive(:last_status).and_return(status_failed)
+
+    expect {
+      @script.ruby_exe(code, options)
+    }.to raise_error(%r{Expected exit status is 0 but actual is :SIGTERM for command ruby_exe\(.+\)})
+  end
+
+  describe "with :dir option" do
+    it "is deprecated" do
+      expect {
+        @script.ruby_exe nil, :dir => "tmp"
+      }.to raise_error(/no longer supported, use Dir\.chdir/)
+    end
+  end
+
+  describe "with :env option" do
+    it "preserves the values of existing ENV keys" do
+      ENV["ABC"] = "123"
+      allow(ENV).to receive(:[])
+      expect(ENV).to receive(:[]).with("ABC")
+      @script.ruby_exe nil, :env => { :ABC => "xyz" }
+    end
+
+    it "adds the :env entries to ENV" do
+      expect(ENV).to receive(:[]=).with("ABC", "xyz")
+      @script.ruby_exe nil, :env => { :ABC => "xyz" }
+    end
+
+    it "deletes the :env entries in ENV when an exception is raised" do
+      expect(ENV).to receive(:delete).with("XYZ")
+      @script.ruby_exe nil, :env => { :XYZ => "xyz" }
+    end
+
+    it "resets the values of existing ENV keys when an exception is raised" do
+      ENV["ABC"] = "123"
+      expect(ENV).to receive(:[]=).with("ABC", "xyz")
+      expect(ENV).to receive(:[]=).with("ABC", "123")
+
+      expect(IO).to receive(:popen).and_raise(Exception)
+      expect do
+        @script.ruby_exe nil, :env => { :ABC => "xyz" }
+      end.to raise_error(Exception)
+    end
+  end
+
+  describe "with :exit_status option" do
+    before do
+      status_failed = double(Process::Status, exited?: true, exitstatus: 4)
+      allow(Process).to receive(:last_status).and_return(status_failed)
+    end
+
+    it "raises exception when command ends with not expected status" do
+      expect {
+        @script.ruby_exe("path", exit_status: 1)
+      }.to raise_error(%r{Expected exit status is 1 but actual is 4 for command ruby_exe\(.+\)})
+    end
+
+    it "does not raise exception when command ends with expected status" do
+      output = "output"
+      expect(IO).to receive(:popen).and_return(output)
+
+      expect(@script.ruby_exe("path", exit_status: 4)).to eq output
+    end
+  end
+end
