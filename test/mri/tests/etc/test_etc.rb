@@ -125,4 +125,72 @@ class TestEtc < Test::Unit::TestCase
       return
     end
     assert_kind_of(Hash, uname)
-    [:sys
+    [:sysname, :nodename, :release, :version, :machine].each {|sym|
+      assert_operator(uname, :has_key?, sym)
+      assert_kind_of(String, uname[sym])
+    }
+  end
+
+  def test_sysconf
+    begin
+      Etc.sysconf
+    rescue NotImplementedError
+      return
+    rescue ArgumentError
+    end
+    assert_kind_of(Integer, Etc.sysconf(Etc::SC_CLK_TCK))
+  end if defined?(Etc::SC_CLK_TCK)
+
+  def test_confstr
+    begin
+      Etc.confstr
+    rescue NotImplementedError
+      return
+    rescue ArgumentError
+    end
+    assert_kind_of(String, Etc.confstr(Etc::CS_PATH))
+  end if defined?(Etc::CS_PATH)
+
+  def test_pathconf
+    begin
+      Etc.confstr
+    rescue NotImplementedError
+      return
+    rescue ArgumentError
+    end
+    IO.pipe {|r, w|
+      val = w.pathconf(Etc::PC_PIPE_BUF)
+      assert(val.nil? || val.kind_of?(Integer))
+    }
+  end if defined?(Etc::PC_PIPE_BUF)
+
+  def test_nprocessors
+    n = Etc.nprocessors
+    assert_operator(1, :<=, n)
+  end
+
+  def test_ractor
+    return unless Etc.passwd # => skip test if no platform support
+    Etc.endpwent
+
+    assert_ractor(<<~RUBY, require: 'etc')
+      ractor = Ractor.new do
+        Etc.passwd do |s|
+          Ractor.yield :sync
+          Ractor.yield s.name
+          break :done
+        end
+      end
+      ractor.take # => :sync
+      assert_raise RuntimeError, /parallel/ do
+        Etc.passwd {}
+      end
+      name = ractor.take # => first name
+      ractor.take # => :done
+      name2 = Etc.passwd do |s|
+        break s.name
+      end
+      assert_equal(name2, name)
+    RUBY
+  end
+end
