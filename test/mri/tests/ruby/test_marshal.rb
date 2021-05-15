@@ -302,4 +302,262 @@ class TestMarshal < Test::Unit::TestCase
     end
 
     def dump_each(&block)
-      
+      @@block = block
+      Marshal.dump(self)
+    end
+  end
+
+  class LoadTest
+    def marshal_dump
+      nil
+    end
+    def marshal_load(obj)
+      @@block.call(:marshal_load)
+    end
+    def self.load_each(m, &block)
+      @@block = block
+      Marshal.load(m)
+    end
+  end
+
+  def test_context_switch
+    o = DumpTest.new
+    e = o.enum_for(:dump_each)
+    assert_equal(:marshal_dump, e.next)
+    GC.start
+    assert(true, '[ruby-dev:39425]')
+    assert_raise(StopIteration) {e.next}
+
+    o = LoadTest.new
+    m = Marshal.dump(o)
+    e = LoadTest.enum_for(:load_each, m)
+    assert_equal(:marshal_load, e.next)
+    GC.start
+    assert(true, '[ruby-dev:39425]')
+    assert_raise(StopIteration) {e.next}
+  end
+
+  def test_dump_buffer
+    bug2390 = '[ruby-dev:39744]'
+    w = ""
+    def w.write(str)
+      self << str.to_s
+    end
+    Marshal.dump(Object.new, w)
+    assert_not_empty(w, bug2390)
+  end
+
+  class C5
+    def marshal_dump
+      "foo"
+    end
+    def marshal_load(foo)
+      @foo = foo
+    end
+    def initialize(x)
+      @x = x
+    end
+  end
+  def test_marshal_dump
+    c = C5.new("bar")
+    s = Marshal.dump(c)
+    d = Marshal.load(s)
+    assert_equal("foo", d.instance_variable_get(:@foo))
+    assert_equal(false, d.instance_variable_defined?(:@x))
+  end
+
+  class C6
+    def initialize
+      @stdin = STDIN
+    end
+    attr_reader :stdin
+    def marshal_dump
+      1
+    end
+    def marshal_load(x)
+      @stdin = STDIN
+    end
+  end
+  def test_marshal_dump_extra_iv
+    o = C6.new
+    m = nil
+    assert_nothing_raised("[ruby-dev:21475] [ruby-dev:39845]") {
+      m = Marshal.dump(o)
+    }
+    o2 = Marshal.load(m)
+    assert_equal(STDIN, o2.stdin)
+  end
+
+  def test_marshal_string_encoding
+    o1 = ["foo".force_encoding("EUC-JP")] + [ "bar" ] * 2
+    m = Marshal.dump(o1)
+    o2 = Marshal.load(m)
+    assert_equal(o1, o2, "[ruby-dev:40388]")
+  end
+
+  def test_marshal_regexp_encoding
+    o1 = [Regexp.new("r1".force_encoding("EUC-JP"))] + ["r2"] * 2
+    m = Marshal.dump(o1)
+    o2 = Marshal.load(m)
+    assert_equal(o1, o2, "[ruby-dev:40416]")
+  end
+
+  def test_marshal_encoding_encoding
+    o1 = [Encoding.find("EUC-JP")] + ["r2"] * 2
+    m = Marshal.dump(o1)
+    o2 = Marshal.load(m)
+    assert_equal(o1, o2)
+  end
+
+  def test_marshal_symbol_ascii8bit
+    bug6209 = '[ruby-core:43762]'
+    o1 = "\xff".force_encoding("ASCII-8BIT").intern
+    m = Marshal.dump(o1)
+    o2 = nil
+    assert_nothing_raised(EncodingError, bug6209) {o2 = Marshal.load(m)}
+    assert_equal(o1, o2, bug6209)
+  end
+
+  class PrivateClass
+    def initialize(foo)
+      @foo = foo
+    end
+    attr_reader :foo
+  end
+  private_constant :PrivateClass
+
+  def test_marshal_private_class
+    o1 = PrivateClass.new("test")
+    o2 = Marshal.load(Marshal.dump(o1))
+    assert_equal(o1.class, o2.class)
+    assert_equal(o1.foo, o2.foo)
+  end
+
+  def test_marshal_complex
+    assert_raise(ArgumentError){Marshal.load("\x04\bU:\fComplex[\x05")}
+    assert_raise(ArgumentError){Marshal.load("\x04\bU:\fComplex[\x06i\x00")}
+    assert_equal(Complex(1, 2), Marshal.load("\x04\bU:\fComplex[\ai\x06i\a"))
+    assert_raise(ArgumentError){Marshal.load("\x04\bU:\fComplex[\bi\x00i\x00i\x00")}
+  end
+
+  def test_marshal_rational
+    assert_raise(ArgumentError){Marshal.load("\x04\bU:\rRational[\x05")}
+    assert_raise(ArgumentError){Marshal.load("\x04\bU:\rRational[\x06i\x00")}
+    assert_equal(Rational(1, 2), Marshal.load("\x04\bU:\rRational[\ai\x06i\a"))
+    assert_raise(ArgumentError){Marshal.load("\x04\bU:\rRational[\bi\x00i\x00i\x00")}
+  end
+
+  def test_marshal_flonum_reference
+    bug7348 = '[ruby-core:49323]'
+    e = []
+    ary = [ [2.0, e], [e] ]
+    assert_equal(ary, Marshal.load(Marshal.dump(ary)), bug7348)
+  end
+
+  class TestClass
+  end
+
+  module TestModule
+  end
+
+  class Bug7627 < Struct.new(:bar)
+    attr_accessor :foo
+
+    def marshal_dump; 'dump'; end  # fake dump data
+    def marshal_load(*); end       # do nothing
+  end
+
+  def test_marshal_dump_struct_ivar
+    bug7627 = '[ruby-core:51163]'
+    obj = Bug7627.new
+    obj.foo = '[Bug #7627]'
+
+    dump   = Marshal.dump(obj)
+    loaded = Marshal.load(dump)
+
+    assert_equal(obj, loaded, bug7627)
+    assert_nil(loaded.foo, bug7627)
+  end
+
+  class LoadData
+    attr_reader :data
+    def initialize(data)
+      @data = data
+    end
+    alias marshal_dump data
+    alias marshal_load initialize
+  end
+
+  class Bug8276 < LoadData
+    def initialize(*)
+      super
+      freeze
+    end
+    alias marshal_load initialize
+  end
+
+  class FrozenData < LoadData
+    def marshal_load(data)
+      super
+      data.instance_variables.each do |iv|
+        instance_variable_set(iv, data.instance_variable_get(iv))
+      end
+      freeze
+    end
+  end
+
+  def test_marshal_dump_excess_encoding
+    bug8276 = '[ruby-core:54334] [Bug #8276]'
+    t = Bug8276.new(bug8276)
+    s = Marshal.dump(t)
+    assert_nothing_raised(RuntimeError, bug8276) {s = Marshal.load(s)}
+    assert_equal(t.data, s.data, bug8276)
+  end
+
+  def test_marshal_dump_ivar
+    s = "data with ivar"
+    s.instance_variable_set(:@t, 42)
+    t = Bug8276.new(s)
+    s = Marshal.dump(t)
+    assert_raise(FrozenError) {Marshal.load(s)}
+  end
+
+  def test_marshal_load_ivar
+    s = "data with ivar"
+    s.instance_variable_set(:@t, 42)
+    hook = ->(v) {
+      if LoadData === v
+        assert_send([v, :instance_variable_defined?, :@t], v.class.name)
+        assert_equal(42, v.instance_variable_get(:@t), v.class.name)
+      end
+      v
+    }
+    [LoadData, FrozenData].each do |klass|
+      t = klass.new(s)
+      d = Marshal.dump(t)
+      v = assert_nothing_raised(RuntimeError) {break Marshal.load(d, hook)}
+      assert_send([v, :instance_variable_defined?, :@t], klass.name)
+      assert_equal(42, v.instance_variable_get(:@t), klass.name)
+    end
+  end
+
+  def test_class_ivar
+    assert_raise(TypeError) {Marshal.load("\x04\x08Ic\x1bTestMarshal::TestClass\x06:\x0e@ivar_bug\"\x08bug")}
+    assert_raise(TypeError) {Marshal.load("\x04\x08IM\x1bTestMarshal::TestClass\x06:\x0e@ivar_bug\"\x08bug")}
+    assert_not_operator(TestClass, :instance_variable_defined?, :@bug)
+  end
+
+  def test_module_ivar
+    assert_raise(TypeError) {Marshal.load("\x04\x08Im\x1cTestMarshal::TestModule\x06:\x0e@ivar_bug\"\x08bug")}
+    assert_raise(TypeError) {Marshal.load("\x04\x08IM\x1cTestMarshal::TestModule\x06:\x0e@ivar_bug\"\x08bug")}
+    assert_not_operator(TestModule, :instance_variable_defined?, :@bug)
+  end
+
+  class TestForRespondToFalse
+    def respond_to?(a, priv = false)
+      false
+    end
+  end
+
+  def test_marshal_respond_to_arity
+    asser
