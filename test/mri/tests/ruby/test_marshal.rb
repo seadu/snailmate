@@ -560,4 +560,264 @@ class TestMarshal < Test::Unit::TestCase
   end
 
   def test_marshal_respond_to_arity
-    asser
+    assert_nothing_raised(ArgumentError, '[Bug #7722]') do
+      Marshal.dump(TestForRespondToFalse.new)
+    end
+  end
+
+  def test_packed_string
+    packed = ["foo"].pack("p")
+    bare = "".force_encoding(Encoding::ASCII_8BIT) << packed
+    assert_equal(Marshal.dump(bare), Marshal.dump(packed))
+  end
+
+  class Bug9523
+    attr_reader :cc
+    def marshal_dump
+      callcc {|c| @cc = c }
+      nil
+    end
+    def marshal_load(v)
+    end
+  end
+
+  def test_continuation
+    EnvUtil.suppress_warning {require "continuation"}
+    c = Bug9523.new
+    assert_raise_with_message(RuntimeError, /Marshal\.dump reentered at marshal_dump/) do
+      Marshal.dump(c)
+      GC.start
+      1000.times {"x"*1000}
+      GC.start
+      c.cc.call
+    end
+  end
+
+  def test_undumpable_message
+    c = Module.new {break module_eval("class IO\u{26a1} < IO;self;end")}
+    assert_raise_with_message(TypeError, /IO\u{26a1}/) {
+      Marshal.dump(c.new(0, autoclose: false))
+    }
+  end
+
+  def test_undumpable_data
+    c = Module.new {break module_eval("class T\u{23F0 23F3}<Time;undef _dump;self;end")}
+    assert_raise_with_message(TypeError, /T\u{23F0 23F3}/) {
+      Marshal.dump(c.new)
+    }
+  end
+
+  def test_unloadable_data
+    name = "Unloadable\u{23F0 23F3}"
+    c = eval("class #{name} < Time;;self;end")
+    c.class_eval {
+      alias _dump_data _dump
+      undef _dump
+    }
+    d = Marshal.dump(c.new)
+    assert_raise_with_message(TypeError, /Unloadable\u{23F0 23F3}/) {
+      Marshal.load(d)
+    }
+
+    # cleanup
+    self.class.class_eval do
+      remove_const name
+    end
+  end
+
+  def test_unloadable_userdef
+    name = "Userdef\u{23F0 23F3}"
+    c = eval("class #{name} < Time;self;end")
+    class << c
+      undef _load
+    end
+    d = Marshal.dump(c.new)
+    assert_raise_with_message(TypeError, /Userdef\u{23F0 23F3}/) {
+      Marshal.load(d)
+    }
+
+    # cleanup
+    self.class.class_eval do
+      remove_const name
+    end
+  end
+
+  def test_unloadable_usrmarshal
+    c = eval("class UsrMarshal\u{23F0 23F3}<Time;self;end")
+    c.class_eval {
+      alias marshal_dump _dump
+    }
+    d = Marshal.dump(c.new)
+    assert_raise_with_message(TypeError, /UsrMarshal\u{23F0 23F3}/) {
+      Marshal.load(d)
+    }
+  end
+
+  def test_no_internal_ids
+    opt = %w[--disable=gems]
+    args = [opt, 'Marshal.dump("",STDOUT)', true, true]
+    kw = {encoding: Encoding::ASCII_8BIT}
+    out, err, status = EnvUtil.invoke_ruby(*args, **kw)
+    assert_empty(err)
+    assert_predicate(status, :success?)
+    expected = out
+
+    opt << "--enable=frozen-string-literal"
+    opt << "--debug=frozen-string-literal"
+    out, err, status = EnvUtil.invoke_ruby(*args, **kw)
+    assert_empty(err)
+    assert_predicate(status, :success?)
+    assert_equal(expected, out)
+  end
+
+  def test_marshal_honor_post_proc_value_for_link
+    str = 'x' # for link
+    obj = [str, str]
+    assert_equal(['X', 'X'], Marshal.load(Marshal.dump(obj), ->(v) { v == str ? v.upcase : v }))
+  end
+
+  def test_marshal_proc_string_encoding
+    string = "foo"
+    payload = Marshal.dump(string)
+    Marshal.load(payload, ->(v) {
+      if v.is_a?(String)
+        assert_equal(string, v)
+        assert_equal(string.encoding, v.encoding)
+      end
+      v
+    })
+  end
+
+  def test_marshal_proc_freeze
+    object = { foo: [42, "bar"] }
+    assert_equal object, Marshal.load(Marshal.dump(object), :freeze.to_proc)
+  end
+
+  def test_marshal_load_extended_class_crash
+    assert_separately([], "#{<<-"begin;"}\n#{<<-"end;"}")
+    begin;
+      assert_raise_with_message(ArgumentError, /undefined/) do
+        Marshal.load("\x04\be:\x0F\x00omparableo:\vObject\x00")
+      end
+    end;
+  end
+
+  def test_marshal_load_r_prepare_reference_crash
+    crash = "\x04\bI/\x05\x00\x06:\x06E{\x06@\x05T"
+
+    opt = %w[--disable=gems]
+    assert_separately(opt, <<-RUBY)
+      assert_raise_with_message(ArgumentError, /bad link/) do
+        Marshal.load(#{crash.dump})
+      end
+    RUBY
+  end
+
+  MethodMissingWithoutRespondTo = Struct.new(:wrapped_object) do
+    undef respond_to?
+    def method_missing(*args, &block)
+      wrapped_object.public_send(*args, &block)
+    end
+    def respond_to_missing?(name, private = false)
+      wrapped_object.respond_to?(name, false)
+    end
+  end
+
+  def test_method_missing_without_respond_to
+    bug12353 = "[ruby-core:75377] [Bug #12353]: try method_missing if" \
+               " respond_to? is undefined"
+    obj = MethodMissingWithoutRespondTo.new("foo")
+    dump = assert_nothing_raised(NoMethodError, bug12353) do
+      Marshal.dump(obj)
+    end
+    assert_equal(obj, Marshal.load(dump))
+  end
+
+  class Bug12974
+    def marshal_dump
+      dup
+    end
+  end
+
+  def test_marshal_dump_recursion
+    assert_raise_with_message(RuntimeError, /same class instance/) do
+      Marshal.dump(Bug12974.new)
+    end
+  end
+
+  Bug14314 = Struct.new(:foo, keyword_init: true)
+
+  def test_marshal_keyword_init_struct
+    obj = Bug14314.new(foo: 42)
+    assert_equal obj, Marshal.load(Marshal.dump(obj))
+  end
+
+  class Bug15968
+    attr_accessor :bar, :baz
+
+    def initialize
+      self.bar = Bar.new(self)
+    end
+
+    class Bar
+      attr_accessor :foo
+
+      def initialize(foo)
+        self.foo = foo
+      end
+
+      def marshal_dump
+        if self.foo.baz
+          self.foo.remove_instance_variable(:@baz)
+        else
+          self.foo.baz = :problem
+        end
+        {foo: self.foo}
+      end
+
+      def marshal_load(data)
+        self.foo = data[:foo]
+      end
+    end
+  end
+
+  def test_marshal_dump_adding_instance_variable
+    obj = Bug15968.new
+    assert_raise_with_message(RuntimeError, /instance variable added/) do
+      Marshal.dump(obj)
+    end
+  end
+
+  def test_marshal_dump_removing_instance_variable
+    obj = Bug15968.new
+    obj.baz = :Bug15968
+    assert_raise_with_message(RuntimeError, /instance variable removed/) do
+      Marshal.dump(obj)
+    end
+  end
+
+  ruby2_keywords def ruby2_keywords_hash(*a)
+    a.last
+  end
+
+  def ruby2_keywords_test(key: 1)
+    key
+  end
+
+  def test_marshal_with_ruby2_keywords_hash
+    flagged_hash = ruby2_keywords_hash(key: 42)
+    data = Marshal.dump(flagged_hash)
+    hash = Marshal.load(data)
+    assert_equal(42, ruby2_keywords_test(*[hash]))
+
+    hash2 = Marshal.load(data.sub(/\x06K(?=T\z)/, "\x08KEY"))
+    assert_raise(ArgumentError, /\(given 1, expected 0\)/) {
+      ruby2_keywords_test(*[hash2])
+    }
+    hash2 = Marshal.load(data.sub(/:\x06K(?=T\z)/, "I\\&\x06:\x0dencoding\"\x0aUTF-7"))
+    assert_raise(ArgumentError, /\(given 1, expected 0\)/) {
+      ruby2_keywords_test(*[hash2])
+    }
+  end
+
+  def test_invalid_byte_sequen
