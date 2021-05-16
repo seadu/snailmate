@@ -33,4 +33,32 @@ public abstract class MethodFilter {
         }
     };
 
-    public static final MethodFilter PROTECTED = new MethodFilter()
+    public static final MethodFilter PROTECTED = new MethodFilter() {
+        @Override
+        public boolean filter(InternalMethod method) {
+            return method.getVisibility() == Visibility.PROTECTED;
+        }
+    };
+
+    public static final MethodFilter PRIVATE = new MethodFilter() {
+        @Override
+        public boolean filter(InternalMethod method) {
+            return method.getVisibility() == Visibility.PRIVATE;
+        }
+    };
+
+    public abstract boolean filter(InternalMethod method);
+
+    public static MethodFilter by(Visibility visibility) {
+        switch (visibility) {
+            case PUBLIC:
+                return PUBLIC;
+            case PROTECTED:
+                return PROTECTED;
+            case PRIVATE:
+                return PRIVATE;
+            default:
+                throw CompilerDirectives.shouldNotReachHere("unsupported visibility: " + visibility);
+        }
+    }
+}
