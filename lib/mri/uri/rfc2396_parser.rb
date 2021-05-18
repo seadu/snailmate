@@ -497,4 +497,43 @@ module URI
       ret = {}
 
       # for URI::split
-      ret[:ABS_URI] = Regexp.new('\A\s*' + pattern[:X_
+      ret[:ABS_URI] = Regexp.new('\A\s*' + pattern[:X_ABS_URI] + '\s*\z', Regexp::EXTENDED)
+      ret[:REL_URI] = Regexp.new('\A\s*' + pattern[:X_REL_URI] + '\s*\z', Regexp::EXTENDED)
+
+      # for URI::extract
+      ret[:URI_REF]     = Regexp.new(pattern[:URI_REF])
+      ret[:ABS_URI_REF] = Regexp.new(pattern[:X_ABS_URI], Regexp::EXTENDED)
+      ret[:REL_URI_REF] = Regexp.new(pattern[:X_REL_URI], Regexp::EXTENDED)
+
+      # for URI::escape/unescape
+      ret[:ESCAPED] = Regexp.new(pattern[:ESCAPED])
+      ret[:UNSAFE]  = Regexp.new("[^#{pattern[:UNRESERVED]}#{pattern[:RESERVED]}]")
+
+      # for Generic#initialize
+      ret[:SCHEME]   = Regexp.new("\\A#{pattern[:SCHEME]}\\z")
+      ret[:USERINFO] = Regexp.new("\\A#{pattern[:USERINFO]}\\z")
+      ret[:HOST]     = Regexp.new("\\A#{pattern[:HOST]}\\z")
+      ret[:PORT]     = Regexp.new("\\A#{pattern[:PORT]}\\z")
+      ret[:OPAQUE]   = Regexp.new("\\A#{pattern[:OPAQUE_PART]}\\z")
+      ret[:REGISTRY] = Regexp.new("\\A#{pattern[:REG_NAME]}\\z")
+      ret[:ABS_PATH] = Regexp.new("\\A#{pattern[:ABS_PATH]}\\z")
+      ret[:REL_PATH] = Regexp.new("\\A#{pattern[:REL_PATH]}\\z")
+      ret[:QUERY]    = Regexp.new("\\A#{pattern[:QUERY]}\\z")
+      ret[:FRAGMENT] = Regexp.new("\\A#{pattern[:FRAGMENT]}\\z")
+
+      ret
+    end
+
+    def convert_to_uri(uri)
+      if uri.is_a?(URI::Generic)
+        uri
+      elsif uri = String.try_convert(uri)
+        parse(uri)
+      else
+        raise ArgumentError,
+          "bad argument (expected URI object or URI string)"
+      end
+    end
+
+  end # class Parser
+end # module URI
