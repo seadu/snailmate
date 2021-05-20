@@ -131,4 +131,159 @@ public abstract class ArrayBuilderNode extends RubyBaseNode {
 
             if (newStrategy != oldStrategy) {
                 if (appendArrayNode != null) {
-                
+                    appendArrayNode.replace(AppendArrayNode.create());
+                }
+                if (appendOneNode != null) {
+                    appendOneNode.replace(AppendOneNode.create());
+                }
+            }
+
+            return updatedAllocator;
+        }
+
+    }
+
+    public abstract static class ArrayBuilderBaseNode extends RubyBaseNode {
+
+        protected ArrayAllocator replaceNodes(ArrayStoreLibrary.ArrayAllocator strategy, int size) {
+            final ArrayBuilderProxyNode parent = (ArrayBuilderProxyNode) getParent();
+            return parent.updateStrategy(strategy, size);
+        }
+    }
+
+    public static class StartNode extends ArrayBuilderBaseNode {
+
+        private final ArrayStoreLibrary.ArrayAllocator allocator;
+        private final int expectedLength;
+
+        public StartNode(ArrayStoreLibrary.ArrayAllocator allocator, int expectedLength) {
+            this.allocator = allocator;
+            this.expectedLength = expectedLength;
+        }
+
+        public BuilderState start() {
+            if (allocator == ArrayStoreLibrary.initialAllocator(false)) {
+                return new BuilderState(allocator.allocate(0), expectedLength);
+            } else {
+                return new BuilderState(allocator.allocate(expectedLength), expectedLength);
+            }
+        }
+
+        public BuilderState start(int length) {
+            if (length > expectedLength) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                replaceNodes(allocator, length);
+            }
+            if (allocator == ArrayStoreLibrary.initialAllocator(false)) {
+                return new BuilderState(allocator.allocate(0), length);
+            } else {
+                return new BuilderState(allocator.allocate(length), length);
+            }
+        }
+    }
+
+    @ImportStatic(ArrayGuards.class)
+    public abstract static class AppendOneNode extends ArrayBuilderBaseNode {
+
+        public static AppendOneNode create() {
+            return AppendOneNodeGen.create();
+        }
+
+        public abstract void executeAppend(BuilderState array, int index, Object value);
+
+        @Specialization(
+                guards = "arrays.acceptsValue(state.store, value)",
+                limit = "1")
+        protected void appendCompatibleType(BuilderState state, int index, Object value,
+                @Bind("state.store") Object store,
+                @CachedLibrary("store") ArrayStoreLibrary arrays) {
+            assert state.nextIndex == index;
+            final int length = arrays.capacity(state.store);
+            if (index >= length) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                final int capacity = ArrayUtils.capacityForOneMore(getLanguage(), length);
+                state.store = arrays.expand(state.store, capacity);
+                state.capacity = capacity;
+                replaceNodes(arrays.unsharedAllocator(state.store), capacity);
+            }
+            arrays.write(state.store, index, value);
+            state.nextIndex++;
+        }
+
+        @Specialization(
+                guards = "!arrays.acceptsValue(state.store, value)",
+                limit = "1")
+        protected void appendNewStrategy(BuilderState state, int index, Object value,
+                @Bind("state.store") Object store,
+                @CachedLibrary("store") ArrayStoreLibrary arrays) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            assert state.nextIndex == index;
+            final ArrayStoreLibrary stores = ArrayStoreLibrary.getUncached();
+            ArrayStoreLibrary.ArrayAllocator newAllocator = stores.generalizeForValue(state.store, value);
+
+            final int currentCapacity = state.capacity;
+            final int neededCapacity;
+            if (index >= currentCapacity) {
+                neededCapacity = ArrayUtils.capacityForOneMore(getLanguage(), currentCapacity);
+            } else {
+                neededCapacity = currentCapacity;
+            }
+
+            newAllocator = replaceNodes(newAllocator, neededCapacity);
+
+            final Object newStore = newAllocator.allocate(neededCapacity);
+            stores.copyContents(state.store, 0, newStore, 0, index);
+            stores.write(newStore, index, value);
+            state.store = newStore;
+            state.capacity = neededCapacity;
+            state.nextIndex++;
+        }
+
+    }
+
+    @ImportStatic(ArrayGuards.class)
+    public abstract static class AppendArrayNode extends ArrayBuilderBaseNode {
+
+        public static AppendArrayNode create() {
+            return AppendArrayNodeGen.create();
+        }
+
+
+        public abstract void executeAppend(BuilderState state, int index, RubyArray value);
+
+        @Specialization(
+                guards = { "arrays.acceptsAllValues(state.store, other.getStore())" },
+                limit = "storageStrategyLimit()")
+        protected void appendCompatibleStrategy(BuilderState state, int index, RubyArray other,
+                @Bind("state.store") Object store,
+                @Bind("other.getStore()") Object otherStore,
+                @CachedLibrary("store") ArrayStoreLibrary arrays,
+                @CachedLibrary("otherStore") ArrayStoreLibrary others) {
+            assert state.nextIndex == index;
+            final int otherSize = other.size;
+            final int neededSize = index + otherSize;
+
+            int length = arrays.capacity(state.store);
+            if (neededSize > length) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                replaceNodes(arrays.unsharedAllocator(state.store), neededSize);
+                final int capacity = ArrayUtils.capacity(getLanguage(), length, neededSize);
+                state.store = arrays.expand(state.store, capacity);
+                state.capacity = capacity;
+            }
+
+            others.copyContents(otherStore, 0, state.store, index, otherSize);
+            state.nextIndex = state.nextIndex + otherSize;
+        }
+
+        @Specialization(
+                guards = { "!arrayLibrary.acceptsAllValues(state.store, other.getStore())" },
+                limit = "1")
+        protected void appendNewStrategy(BuilderState state, int index, RubyArray other,
+                @Bind("state.store") Object store,
+                @CachedLibrary("store") ArrayStoreLibrary arrayLibrary) {
+            assert state.nextIndex == index;
+            final int otherSize = other.size;
+            if (otherSize != 0) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                final ArrayStoreL
