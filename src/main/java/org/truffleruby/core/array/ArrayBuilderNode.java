@@ -286,4 +286,34 @@ public abstract class ArrayBuilderNode extends RubyBaseNode {
             final int otherSize = other.size;
             if (otherSize != 0) {
                 CompilerDirectives.transferToInterpreterAndInvalidate();
-                final ArrayStoreL
+                final ArrayStoreLibrary newArrayLibrary = ArrayStoreLibrary.getUncached();
+                final int neededSize = index + otherSize;
+
+                final Object newStore;
+
+                final int currentCapacity = state.capacity;
+                final int neededCapacity;
+                if (neededSize > currentCapacity) {
+                    neededCapacity = ArrayUtils.capacity(getLanguage(), currentCapacity, neededSize);
+                } else {
+                    neededCapacity = currentCapacity;
+                }
+
+                ArrayAllocator allocator = replaceNodes(
+                        newArrayLibrary.generalizeForStore(state.store, other.getStore()),
+                        neededCapacity);
+                newStore = allocator.allocate(neededCapacity);
+
+                newArrayLibrary.copyContents(state.store, 0, newStore, 0, index);
+
+                final Object otherStore = other.getStore();
+                newArrayLibrary.copyContents(otherStore, 0, newStore, index, otherSize);
+
+                state.store = newStore;
+                state.capacity = neededCapacity;
+                state.nextIndex = state.nextIndex + otherSize;
+            }
+        }
+    }
+
+}
