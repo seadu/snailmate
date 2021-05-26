@@ -435,4 +435,229 @@ class RDoc::Generator::Darkfish
         else
           next unless fileinfo_file.exist?
           template_file = fileinfo_file
-        
+          @title = "File: #{file.base_name}"
+        end
+      end
+
+      @title += " - #{@options.title}"
+      template_file ||= filepage_file
+
+      render_template template_file, out_file do |io|
+        here = binding
+        # suppress 1.9.3 warning
+        here.local_variable_set(:asset_rel_prefix, asset_rel_prefix)
+        here.local_variable_set(:current, current)
+        here
+      end
+    end
+  rescue => e
+    error =
+      RDoc::Error.new "error generating #{out_file}: #{e.message} (#{e.class})"
+    error.set_backtrace e.backtrace
+
+    raise error
+  end
+
+  ##
+  # Generate a page file for +file+
+
+  def generate_page file
+    setup
+
+    template_file = @template_dir + 'page.rhtml'
+
+    out_file = @outputdir + file.path
+    debug_msg "  working on %s (%s)" % [file.full_name, out_file]
+    rel_prefix = @outputdir.relative_path_from out_file.dirname
+    search_index_rel_prefix = rel_prefix
+    search_index_rel_prefix += @asset_rel_path if @file_output
+
+    current          = file
+    asset_rel_prefix = rel_prefix + @asset_rel_path
+
+    @title = "#{file.page_name} - #{@options.title}"
+
+    debug_msg "  rendering #{out_file}"
+    render_template template_file, out_file do |io|
+      here = binding
+      # suppress 1.9.3 warning
+      here.local_variable_set(:current, current)
+      here.local_variable_set(:asset_rel_prefix, asset_rel_prefix)
+      here
+    end
+  end
+
+  ##
+  # Generates the 404 page for the RDoc servlet
+
+  def generate_servlet_not_found message
+    setup
+
+    template_file = @template_dir + 'servlet_not_found.rhtml'
+    return unless template_file.exist?
+
+    debug_msg "Rendering the servlet 404 Not Found page..."
+
+    rel_prefix = rel_prefix = ''
+    search_index_rel_prefix = rel_prefix
+    search_index_rel_prefix += @asset_rel_path if @file_output
+
+    asset_rel_prefix = ''
+
+    @title = 'Not Found'
+
+    render_template template_file do |io|
+      here = binding
+      # suppress 1.9.3 warning
+      here.local_variable_set(:asset_rel_prefix, asset_rel_prefix)
+      here
+    end
+  rescue => e
+    error = RDoc::Error.new \
+      "error generating servlet_not_found: #{e.message} (#{e.class})"
+    error.set_backtrace e.backtrace
+
+    raise error
+  end
+
+  ##
+  # Generates the servlet root page for the RDoc servlet
+
+  def generate_servlet_root installed
+    setup
+
+    template_file = @template_dir + 'servlet_root.rhtml'
+    return unless template_file.exist?
+
+    debug_msg 'Rendering the servlet root page...'
+
+    rel_prefix = '.'
+    asset_rel_prefix = rel_prefix
+    search_index_rel_prefix = asset_rel_prefix
+    search_index_rel_prefix += @asset_rel_path if @file_output
+
+    @title = 'Local RDoc Documentation'
+
+    render_template template_file do |io| binding end
+  rescue => e
+    error = RDoc::Error.new \
+      "error generating servlet_root: #{e.message} (#{e.class})"
+    error.set_backtrace e.backtrace
+
+    raise error
+  end
+
+  ##
+  # Generate an index page which lists all the classes which are documented.
+
+  def generate_table_of_contents
+    setup
+
+    template_file = @template_dir + 'table_of_contents.rhtml'
+    return unless template_file.exist?
+
+    debug_msg "Rendering the Table of Contents..."
+
+    out_file = @outputdir + 'table_of_contents.html'
+    rel_prefix = @outputdir.relative_path_from out_file.dirname
+    search_index_rel_prefix = rel_prefix
+    search_index_rel_prefix += @asset_rel_path if @file_output
+
+    asset_rel_prefix = rel_prefix + @asset_rel_path
+
+    @title = "Table of Contents - #{@options.title}"
+
+    render_template template_file, out_file do |io|
+      here = binding
+      # suppress 1.9.3 warning
+      here.local_variable_set(:asset_rel_prefix, asset_rel_prefix)
+      here
+    end
+  rescue => e
+    error = RDoc::Error.new \
+      "error generating table_of_contents.html: #{e.message} (#{e.class})"
+    error.set_backtrace e.backtrace
+
+    raise error
+  end
+
+  def install_rdoc_static_file source, destination, options # :nodoc:
+    return unless source.exist?
+
+    begin
+      FileUtils.mkdir_p File.dirname(destination), **options
+
+      begin
+        FileUtils.ln source, destination, **options
+      rescue Errno::EEXIST
+        FileUtils.rm destination
+        retry
+      end
+    rescue
+      FileUtils.cp source, destination, **options
+    end
+  end
+
+  ##
+  # Prepares for generation of output from the current directory
+
+  def setup
+    return if instance_variable_defined? :@outputdir
+
+    @outputdir = Pathname.new(@options.op_dir).expand_path @base_dir
+
+    return unless @store
+
+    @classes = @store.all_classes_and_modules.sort
+    @files   = @store.all_files.sort
+    @methods = @classes.map { |m| m.method_list }.flatten.sort
+    @modsort = get_sorted_module_list @classes
+  end
+
+  ##
+  # Return a string describing the amount of time in the given number of
+  # seconds in terms a human can understand easily.
+
+  def time_delta_string seconds
+    return 'less than a minute'          if seconds < 60
+    return "#{seconds / 60} minute#{seconds / 60 == 1 ? '' : 's'}" if
+                                            seconds < 3000     # 50 minutes
+    return 'about one hour'              if seconds < 5400     # 90 minutes
+    return "#{seconds / 3600} hours"     if seconds < 64800    # 18 hours
+    return 'one day'                     if seconds < 86400    #  1 day
+    return 'about one day'               if seconds < 172800   #  2 days
+    return "#{seconds / 86400} days"     if seconds < 604800   #  1 week
+    return 'about one week'              if seconds < 1209600  #  2 week
+    return "#{seconds / 604800} weeks"   if seconds < 7257600  #  3 months
+    return "#{seconds / 2419200} months" if seconds < 31536000 #  1 year
+    return "#{seconds / 31536000} years"
+  end
+
+  # %q$Id: darkfish.rb 52 2009-01-07 02:08:11Z deveiant $"
+  SVNID_PATTERN = /
+    \$Id:\s
+    (\S+)\s                # filename
+    (\d+)\s                # rev
+    (\d{4}-\d{2}-\d{2})\s  # Date (YYYY-MM-DD)
+    (\d{2}:\d{2}:\d{2}Z)\s # Time (HH:MM:SSZ)
+    (\w+)\s                # committer
+    \$$
+  /x
+
+  ##
+  # Try to extract Subversion information out of the first constant whose
+  # value looks like a subversion Id tag. If no matching constant is found,
+  # and empty hash is returned.
+
+  def get_svninfo klass
+    constants = klass.constants or return {}
+
+    constants.find { |c| c.value =~ SVNID_PATTERN } or return {}
+
+    filename, rev, date, time, committer = $~.captures
+    commitdate = Time.parse "#{date} #{time}"
+
+    return {
+      :filename    => filename,
+      :rev         => Integer(rev),
+      :c
