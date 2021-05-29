@@ -660,4 +660,131 @@ class RDoc::Generator::Darkfish
     return {
       :filename    => filename,
       :rev         => Integer(rev),
-      :c
+      :commitdate  => commitdate,
+      :commitdelta => time_delta_string(Time.now - commitdate),
+      :committer   => committer,
+    }
+  end
+
+  ##
+  # Creates a template from its components and the +body_file+.
+  #
+  # For backwards compatibility, if +body_file+ contains "<html" the body is
+  # used directly.
+
+  def assemble_template body_file
+    body = body_file.read
+    return body if body =~ /<html/
+
+    head_file = @template_dir + '_head.rhtml'
+    footer_file = @template_dir + '_footer.rhtml'
+
+    <<-TEMPLATE
+<!DOCTYPE html>
+
+<html>
+<head>
+#{head_file.read}
+
+#{body}
+
+#{footer_file.read}
+    TEMPLATE
+  end
+
+  ##
+  # Renders the ERb contained in +file_name+ relative to the template
+  # directory and returns the result based on the current context.
+
+  def render file_name
+    template_file = @template_dir + file_name
+
+    template = template_for template_file, false, RDoc::ERBPartial
+
+    template.filename = template_file.to_s
+
+    template.result @context
+  end
+
+  ##
+  # Load and render the erb template in the given +template_file+ and write
+  # it out to +out_file+.
+  #
+  # Both +template_file+ and +out_file+ should be Pathname-like objects.
+  #
+  # An io will be yielded which must be captured by binding in the caller.
+
+  def render_template template_file, out_file = nil # :yield: io
+    io_output = out_file && !@dry_run && @file_output
+    erb_klass = io_output ? RDoc::ERBIO : ERB
+
+    template = template_for template_file, true, erb_klass
+
+    if io_output then
+      debug_msg "Outputting to %s" % [out_file.expand_path]
+
+      out_file.dirname.mkpath
+      out_file.open 'w', 0644 do |io|
+        io.set_encoding @options.encoding
+
+        @context = yield io
+
+        template_result template, @context, template_file
+      end
+    else
+      @context = yield nil
+
+      output = template_result template, @context, template_file
+
+      debug_msg "  would have written %d characters to %s" % [
+        output.length, out_file.expand_path
+      ] if @dry_run
+
+      output
+    end
+  end
+
+  ##
+  # Creates the result for +template+ with +context+.  If an error is raised a
+  # Pathname +template_file+ will indicate the file where the error occurred.
+
+  def template_result template, context, template_file
+    template.filename = template_file.to_s
+    template.result context
+  rescue NoMethodError => e
+    raise RDoc::Error, "Error while evaluating %s: %s" % [
+      template_file.expand_path,
+      e.message,
+    ], e.backtrace
+  end
+
+  ##
+  # Retrieves a cache template for +file+, if present, or fills the cache.
+
+  def template_for file, page = true, klass = ERB
+    template = @template_cache[file]
+
+    return template if template
+
+    if page then
+      template = assemble_template file
+      erbout = 'io'
+    else
+      template = file.read
+      template = template.encode @options.encoding
+
+      file_var = File.basename(file).sub(/\..*/, '')
+
+      erbout = "_erbout_#{file_var}"
+    end
+
+    if RUBY_VERSION >= '2.6'
+      template = klass.new template, trim_mode: '-', eoutvar: erbout
+    else
+      template = klass.new template, nil, '-', erbout
+    end
+    @template_cache[file] = template
+    template
+  end
+
+end
