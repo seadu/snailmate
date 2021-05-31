@@ -442,4 +442,322 @@ class StringIO
 
       if length
         length = Truffle::Type.coerce_to length, Integer, :to_int
-        raise Argu
+        raise ArgumentError if length < 0
+
+        buffer = StringValue(buffer) if buffer
+
+        if eof?
+          buffer.clear if buffer
+          if length == 0
+            return ''.force_encoding(Encoding::ASCII_8BIT)
+          else
+            return nil
+          end
+        end
+
+        str = string.byteslice(pos, length)
+        str.force_encoding Encoding::ASCII_8BIT
+
+        str = buffer.replace(str) if buffer
+      else
+        if eof?
+          buffer.clear if buffer
+          return ''.force_encoding(Encoding::ASCII_8BIT)
+        end
+
+        str = string.byteslice(pos..-1)
+        buffer.replace str if buffer
+      end
+
+      d.pos += str.bytesize
+      str
+    end
+  end
+
+  def readlines(sep=$/, limit=Undefined, chomp: false)
+    check_readable
+
+    ary = []
+    while line = getline(true, sep, limit, chomp)
+      ary << line
+    end
+
+    ary
+  end
+
+  def reopen(string=nil, mode=Undefined)
+    if string and not string.kind_of? String and mode.equal? Undefined
+      stringio = Truffle::Type.coerce_to(string, StringIO, :to_strio)
+
+      initialize_copy stringio
+    else
+      mode = nil if mode.equal? Undefined
+      string = '' unless string
+
+      initialize string, mode
+    end
+
+    self
+  end
+
+  def rewind
+    d = @__data__
+    TruffleRuby.synchronized(d) do
+      d.pos = d.lineno = 0
+    end
+  end
+
+  def seek(to, whence = IO::SEEK_SET)
+    raise IOError, 'closed stream' if self.closed?
+    to = Truffle::Type.coerce_to to, Integer, :to_int
+
+    d = @__data__
+    TruffleRuby.synchronized(d) do
+      case whence
+      when IO::SEEK_CUR
+        to += d.pos
+      when IO::SEEK_END
+        to += d.string.bytesize
+      when IO::SEEK_SET, nil
+      else
+        raise Errno::EINVAL, 'invalid whence'
+      end
+
+      raise Errno::EINVAL if to < 0
+
+      d.pos = to
+    end
+
+    0
+  end
+
+  def size
+    @__data__.string.bytesize
+  end
+  alias_method :length, :size
+
+  def string
+    @__data__.string
+  end
+
+  def string=(string)
+    d = @__data__
+    TruffleRuby.synchronized(d) do
+      d.string = StringValue(string)
+      d.pos = 0
+      d.lineno = 0
+    end
+  end
+
+  def sync
+    true
+  end
+
+  def sync=(val)
+    val
+  end
+
+  def tell
+    @__data__.pos
+  end
+
+  def truncate(length)
+    check_writable
+    len = Truffle::Type.coerce_to length, Integer, :to_int
+    raise Errno::EINVAL, 'negative length' if len < 0
+
+    d = @__data__
+    TruffleRuby.synchronized(d) do
+      string = d.string
+      bytesize = string.bytesize
+
+      if len < bytesize
+        string[len..bytesize] = ''
+      else
+        string << "\000" * (len - bytesize)
+      end
+    end
+
+    length
+  end
+
+  def ungetc(char)
+    check_readable
+
+    if char.kind_of? Integer
+      char = Truffle::Type.coerce_to char, String, :chr
+    else
+      char = Truffle::Type.coerce_to char, String, :to_str
+    end
+
+    d = @__data__
+    TruffleRuby.synchronized(d) do
+      pos = d.pos
+      string = d.string
+      bytesize = string.bytesize
+
+      if pos > bytesize
+        string[bytesize..pos] = "\000" * (pos - bytesize)
+        d.pos -= 1
+        string[d.pos] = char
+      elsif pos > 0
+        d.pos -= 1
+        string[d.pos] = char
+      end
+    end
+
+    nil
+  end
+
+  def ungetbyte(bytes)
+    check_readable
+
+    return unless bytes
+
+    if bytes.kind_of? Integer
+      bytes = ''.b << (bytes & 0xff)
+    else
+      bytes = StringValue(bytes).b
+      return if bytes.bytesize == 0
+    end
+
+    d = @__data__
+    TruffleRuby.synchronized(d) do
+      pos = d.pos
+      string = d.string.b
+
+      enc = d.string.encoding
+
+      if d.pos == 0
+        d.string = bytes << string
+      else
+        size = bytes.bytesize
+        a = string.byteslice(0, pos - size) if size < pos
+        b = string.byteslice(pos..-1)
+        d.string = "#{a}#{bytes}#{b}"
+        d.pos = pos > size ? pos - size : 0
+      end
+
+      d.string.force_encoding enc
+    end
+
+    nil
+  end
+
+  def encode_with(coder)
+  end
+
+  def init_with(coder)
+    @__data__ = Data.new('')
+  end
+
+  def to_yaml_properties
+    []
+  end
+
+  def yaml_initialize(type, val)
+    @__data__ = Data.new('')
+  end
+
+  private def mode_from_string(mode)
+    @append = truncate = false
+
+    if mode[0] == ?r
+      @readable = true
+      @writable = mode[-1] == ?+ ? true : false
+    end
+
+    if mode[0] == ?w
+      @writable = truncate = true
+      @readable = mode[-1] == ?+ ? true : false
+    end
+
+    if mode[0] == ?a
+      @append = @writable = true
+      @readable = mode[-1] == ?+ ? true : false
+    end
+
+    d = @__data__ # no sync, only called from initialize
+    raise Errno::EACCES, 'Permission denied' if @writable && d.string.frozen?
+    d.string.replace('') if truncate
+  end
+
+  private def mode_from_integer(mode)
+    @readable = @writable = @append = false
+    d = @__data__ # no sync, only called from initialize
+
+    if mode == 0 or mode & IO::RDWR != 0
+      @readable = true
+    end
+
+    if mode & (IO::WRONLY | IO::RDWR) != 0
+      raise Errno::EACCES, 'Permission denied' if d.string.frozen?
+      @writable = true
+    end
+
+    @append = true if (mode & IO::APPEND) != 0
+    d.string.replace('') if (mode & IO::TRUNC) != 0
+  end
+
+  private def getline(arg_error, sep, limit, chomp=false)
+    if limit != Undefined
+      limit = Primitive.rb_to_int limit if limit
+      sep = Truffle::Type.coerce_to sep, String, :to_str if sep
+    else
+      limit = nil
+
+      unless sep == $/ or sep.nil?
+        osep = sep
+        sep = Truffle::Type.rb_check_convert_type sep, String, :to_str
+        unless sep
+          limit = Primitive.rb_to_int osep
+          sep = $/
+        end
+      end
+    end
+
+    raise ArgumentError if arg_error and limit == 0
+
+    limit = nil if limit && limit < 0
+
+    return nil if eof?
+
+    line = nil
+    d = @__data__
+    TruffleRuby.synchronized(d) do
+      pos = d.pos
+      string = d.string
+      bytesize = string.bytesize
+
+      if sep.nil?
+        if limit
+          line = string.byteslice(pos, limit)
+        else
+          line = string.byteslice(pos, bytesize - pos)
+        end
+        d.pos += line.bytesize
+      elsif sep.empty?
+        if stop = Primitive.find_string(string, "\n\n", pos)
+          stop += 2
+          line = string.byteslice(pos, stop - pos)
+          while string.getbyte(stop) == 10
+            stop += 1
+          end
+          d.pos = stop
+        else
+          line = string.byteslice(pos, bytesize - pos)
+          d.pos = bytesize
+        end
+      else
+        if stop = Primitive.find_string(string, sep, pos)
+          if limit && stop - pos >= limit
+            stop = pos + limit
+          else
+            stop += sep.bytesize
+          end
+          line = string.byteslice(pos, stop - pos)
+          d.pos = stop
+        else
+          if limit
+            line = string.byteslice(pos, limit)
+       
