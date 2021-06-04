@@ -760,4 +760,24 @@ class StringIO
         else
           if limit
             line = string.byteslice(pos, limit)
-       
+          else
+            line = string.byteslice(pos, bytesize - pos)
+          end
+          d.pos += line.bytesize
+        end
+      end
+
+      d.lineno += 1
+    end
+
+    if chomp
+      line.chomp!(sep || DEFAULT_RECORD_SEPARATOR)
+    end
+
+    line
+  end
+
+  def marshal_dump
+    raise TypeError, "can't dump #{self.class}"
+  end
+end
