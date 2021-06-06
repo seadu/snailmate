@@ -314,4 +314,82 @@ module ChunkyPNG
       end
 
       # Rotates the image 180 degrees in place.
-    
+      #
+      # @return [ChunkyPNG::Canvas] Itself, but rotated 180 degrees.
+      # @see #rotate_180
+      def rotate_180!
+        pixels.reverse!
+        self
+      end
+
+      # Trims the border around the image, presumed to be the color of the
+      # first pixel.
+      #
+      # @param [Integer] border The color to attempt to trim.
+      # @return [ChunkyPNG::Canvas] The trimmed image.
+      # @see #trim!
+      def trim(border = pixels.first)
+        dup.trim!
+      end
+
+      # Trims the border around the image in place.
+      #
+      # @param [Integer] border The color to attempt to trim.
+      # @return [ChunkyPNG::Canvas] Returns itself, but with the border
+      #  trimmed.
+      # @see #trim
+      def trim!(border = pixels.first)
+        x1 = [*0...width].index   { |c| column(c).uniq != [border] }
+        x2 = [*0...width].rindex  { |c| column(c).uniq != [border] }
+        y1 = [*0...height].index  { |r|    row(r).uniq != [border] }
+        y2 = [*0...height].rindex { |r|    row(r).uniq != [border] }
+
+        crop! x1, y1, x2 - x1 + 1, y2 - y1 + 1
+      end
+
+      # Draws a border around the image.
+      #
+      # @param [Integer] size The size of the border.
+      # @param [Integer] color The color of the border.
+      # @return [ChunkyPNG::Canvas] Returns a bordered version of the image.
+      # @see #border!
+      def border(size, color = ChunkyPNG::Color::BLACK)
+        dup.border!(size, color)
+      end
+
+      # Draws a border around the image in place.
+      #
+      # @param [Integer] size The size of the border.
+      # @param [Integer] color The color of the border.
+      # @return [ChunkyPNG::Canvas] Returns itself with the border added.
+      # @see #border
+      def border!(size, color = ChunkyPNG::Color::BLACK)
+        new_width  = width  + size * 2
+        new_height = height + size * 2
+
+        bg = Canvas.new(new_width, new_height, color).replace(self, size, size)
+        replace_canvas!(new_width, new_height, bg.pixels)
+      end
+
+      protected
+
+      # Checks whether another image has the correct dimension to be used for
+      # an operation on the current image, given an offset coordinate to work
+      # with.
+      # @param [ChunkyPNG::Canvas] other The other canvas
+      # @param [Integer] offset_x The x offset on which the other image will be
+      #   applied.
+      # @param [Integer] offset_y The y offset on which the other image will be
+      #   applied.
+      # @raise [ChunkyPNG::OutOfBounds] when the other image doesn't fit.
+      def check_size_constraints!(other, offset_x, offset_y)
+        if width  < other.width  + offset_x
+          raise ChunkyPNG::OutOfBounds, 'Background image width is too small!'
+        end
+        if height < other.height + offset_y
+          raise ChunkyPNG::OutOfBounds, 'Background image height is too small!'
+        end
+      end
+    end
+  end
+end
