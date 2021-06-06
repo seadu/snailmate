@@ -136,4 +136,182 @@ module ChunkyPNG
 
       # Crops an image, given the coordinates and size of the image that needs
       # to be cut out. This will leave the original image intact and return a
-      # new, cropped image with pixels copied from the original
+      # new, cropped image with pixels copied from the original image.
+      #
+      # @param [Integer] x The x-coordinate of the top left corner of the image
+      #   to be cropped.
+      # @param [Integer] y The y-coordinate of the top left corner of the image
+      #   to be cropped.
+      # @param [Integer] crop_width The width of the image to be cropped.
+      # @param [Integer] crop_height The height of the image to be cropped.
+      # @return [ChunkyPNG::Canvas] Returns the newly created cropped image.
+      # @raise [ChunkyPNG::OutOfBounds] when the crop dimensions plus the given
+      #   coordinates are bigger then the original image.
+      def crop(x, y, crop_width, crop_height)
+        dup.crop!(x, y, crop_width, crop_height)
+      end
+
+      # Crops an image, given the coordinates and size of the image that needs
+      # to be cut out.
+      #
+      # This will change the size and content of the current canvas. Use
+      # {#crop} if you want to have a new canvas returned instead, leaving the
+      # current canvas intact.
+      #
+      # @param [Integer] x The x-coordinate of the top left corner of the image
+      #   to be cropped.
+      # @param [Integer] y The y-coordinate of the top left corner of the image
+      #   to be cropped.
+      # @param [Integer] crop_width The width of the image to be cropped.
+      # @param [Integer] crop_height The height of the image to be cropped.
+      # @return [ChunkyPNG::Canvas] Returns itself, but cropped.
+      # @raise [ChunkyPNG::OutOfBounds] when the crop dimensions plus the given
+      #   coordinates are bigger then the original image.
+      def crop!(x, y, crop_width, crop_height)
+        if crop_width + x > width
+          raise ChunkyPNG::OutOfBounds, 'Original image width is too small!'
+        end
+        if crop_height + y > height
+          raise ChunkyPNG::OutOfBounds, 'Original image height is too small!'
+        end
+
+        new_pixels = []
+        for cy in 0...crop_height do
+          new_pixels += pixels.slice((cy + y) * width + x, crop_width)
+        end
+        replace_canvas!(crop_width, crop_height, new_pixels)
+      end
+
+      # Flips the image horizontally, leaving the original intact.
+      #
+      # This will flip the image on its horizontal axis, e.g. pixels on the top
+      # will now be pixels on the bottom. Chaining this method twice will
+      # return the original canvas. This method will leave the original object
+      # intact and return a new canvas.
+      #
+      # @return [ChunkyPNG::Canvas] The flipped image
+      # @see #flip_horizontally!
+      def flip_horizontally
+        dup.flip_horizontally!
+      end
+
+      # Flips the image horizontally in place.
+      #
+      # This will flip the image on its horizontal axis, e.g. pixels on the top
+      # will now be pixels on the bottom. Chaining this method twice will
+      # return the original canvas. This method will leave the original object
+      # intact and return a new canvas.
+      #
+      # @return [ChunkyPNG::Canvas] Itself, but flipped
+      # @see #flip_horizontally
+      def flip_horizontally!
+        for y in 0..((height - 1) >> 1) do
+          other_y   = height - (y + 1)
+          other_row = row(other_y)
+          replace_row!(other_y, row(y))
+          replace_row!(y, other_row)
+        end
+        self
+      end
+
+      alias_method :flip!, :flip_horizontally!
+      alias_method :flip,  :flip_horizontally
+
+      # Flips the image vertically, leaving the original intact.
+      #
+      # This will flip the image on its vertical axis, e.g. pixels on the left
+      # will now be pixels on the right. Chaining this method twice will return
+      # the original canvas. This method will leave the original object intact
+      # and return a new canvas.
+      #
+      # @return [ChunkyPNG::Canvas] The flipped image
+      # @see #flip_vertically!
+      def flip_vertically
+        dup.flip_vertically!
+      end
+
+      # Flips the image vertically in place.
+      #
+      # This will flip the image on its vertical axis, e.g. pixels on the left
+      # will now be pixels on the right. Chaining this method twice will return
+      # the original canvas. This method will leave the original object intact
+      # and return a new canvas.
+      #
+      # @return [ChunkyPNG::Canvas] Itself, but flipped
+      # @see #flip_vertically
+      def flip_vertically!
+        for y in 0...height do
+          replace_row!(y, row(y).reverse)
+        end
+        self
+      end
+
+      alias_method :mirror!, :flip_vertically!
+      alias_method :mirror,  :flip_vertically
+
+      # Returns a new canvas instance that is rotated 90 degrees clockwise.
+      #
+      # This method will return a new canvas and leaves the original intact.
+      #
+      # @return [ChunkyPNG::Canvas] A clockwise-rotated copy.
+      # @see #rotate_right! for the in place version.
+      def rotate_right
+        dup.rotate_right!
+      end
+
+      # Rotates the image 90 degrees clockwise in place.
+      #
+      # This method will change the current canvas.
+      #
+      # @return [ChunkyPNG::Canvas] Itself, but rotated clockwise.
+      # @see #rotate_right for a version that leaves the current canvas intact
+      def rotate_right!
+        rotated = self.class.new(height, width)
+        new_pixels = []
+        0.upto(width - 1) { |i| new_pixels += column(i).reverse }
+        replace_canvas!(height, width, new_pixels)
+      end
+
+      alias_method :rotate_clockwise,  :rotate_right
+      alias_method :rotate_clockwise!, :rotate_right!
+
+      # Returns an image that is rotated 90 degrees counter-clockwise.
+      #
+      # This method will leave the original object intact and return a new
+      # canvas.
+      #
+      # @return [ChunkyPNG::Canvas] A rotated copy of itself.
+      # @see #rotate_left! for the in-place version.
+      def rotate_left
+        dup.rotate_left!
+      end
+
+      # Rotates the image 90 degrees counter-clockwise in place.
+      #
+      # This method will change the original canvas. See {#rotate_left} for a
+      # version that leaves the canvas intact and returns a new rotated canvas
+      # instead.
+      #
+      # @return [ChunkyPNG::Canvas] Itself, but rotated.
+      def rotate_left!
+        new_pixels = []
+        (width - 1).downto(0) { |i| new_pixels += column(i) }
+        replace_canvas!(height, width, new_pixels)
+      end
+
+      alias_method :rotate_counter_clockwise,  :rotate_left
+      alias_method :rotate_counter_clockwise!, :rotate_left!
+
+      # Rotates the image 180 degrees.
+      #
+      # This method will leave the original object intact and return a new
+      # canvas.
+      #
+      # @return [ChunkyPNG::Canvas] The rotated image.
+      # @see #rotate_180!
+      def rotate_180
+        dup.rotate_180!
+      end
+
+      # Rotates the image 180 degrees in place.
+    
