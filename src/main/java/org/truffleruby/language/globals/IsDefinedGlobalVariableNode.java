@@ -57,4 +57,18 @@ public abstract class IsDefinedGlobalVariableNode extends RubyBaseNode {
     @Specialization(guards = { "storage.hasHooks()", "arity == 1" })
     protected Object hooksWithBinding(VirtualFrame frame,
             @Bind("getStorage(frame)") GlobalVariableStorage storage,
-            @Cached("isDefinedArity(storag
+            @Cached("isDefinedArity(storage)") int arity,
+            @Cached @Exclusive CallBlockNode yieldNode,
+            @Cached GetSpecialVariableStorage readStorage) {
+        return yieldNode.yield(storage.getIsDefined(), readStorage.execute(frame));
+    }
+
+    protected int isDefinedArity(GlobalVariableStorage storage) {
+        return storage.getIsDefined().getArityNumber();
+    }
+
+    protected GlobalVariableStorage getStorage(VirtualFrame dynamicArgument) {
+        return lookupGlobalVariableStorageNode.execute(dynamicArgument);
+    }
+
+}
