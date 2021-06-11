@@ -427,4 +427,34 @@ Init_ossl_config(void)
      *
      * See also http://www.openssl.org/docs/apps/config.html
      */
-    cConfig = rb_define_class_under(mOSSL, "C
+    cConfig = rb_define_class_under(mOSSL, "Config", rb_cObject);
+
+    /* Document-class: OpenSSL::ConfigError
+     *
+     * General error for openssl library configuration files. Including formatting,
+     * parsing errors, etc.
+     */
+    eConfigError = rb_define_class_under(mOSSL, "ConfigError", eOSSLError);
+
+    rb_include_module(cConfig, rb_mEnumerable);
+    rb_define_singleton_method(cConfig, "parse", config_s_parse, 1);
+    rb_define_singleton_method(cConfig, "parse_config", config_s_parse_config, 1);
+    rb_define_alias(CLASS_OF(cConfig), "load", "new");
+    rb_define_alloc_func(cConfig, config_s_alloc);
+    rb_define_method(cConfig, "initialize", config_initialize, -1);
+    rb_define_method(cConfig, "initialize_copy", config_initialize_copy, 1);
+    rb_define_method(cConfig, "get_value", config_get_value, 2);
+    rb_define_method(cConfig, "[]", config_get_section, 1);
+    rb_define_method(cConfig, "sections", config_get_sections, 0);
+    rb_define_method(cConfig, "to_s", config_to_s, 0);
+    rb_define_method(cConfig, "each", config_each, 0);
+    rb_define_method(cConfig, "inspect", config_inspect, 0);
+
+    /* Document-const: DEFAULT_CONFIG_FILE
+     *
+     * The default system configuration file for OpenSSL.
+     */
+    path = CONF_get1_default_config_file();
+    path_str = ossl_buf2str(path, rb_long2int(strlen(path)));
+    rb_define_const(cConfig, "DEFAULT_CONFIG_FILE", path_str);
+}
