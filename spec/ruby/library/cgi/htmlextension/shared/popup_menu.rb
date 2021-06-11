@@ -54,4 +54,41 @@ describe :cgi_htmlextension_popup_menu, shared: true do
 
     it "ignores a passed block" do
       content = @html.option("VALUE" => "foo") { "foo" }
-   
+      content << @html.option("VALUE" => "bar") { "bar" }
+      content << @html.option("VALUE" => "baz") { "baz" }
+
+      output = @html.send(@method, "test", "foo", "bar", "baz") { "woot" }
+      output.should equal_element("SELECT", {"NAME" => "test"}, content)
+    end
+  end
+
+  describe "when passed a Hash" do
+    it "uses the passed Hash to generate the 'select'-element and the 'option'-elements" do
+      attributes = {
+        "NAME"   => "test", "SIZE" => 2, "MULTIPLE" => true,
+        "VALUES" => [["1", "Foo"], ["2", "Bar", true], "Baz"]
+      }
+
+      content = @html.option("VALUE" => "1") { "Foo" }
+      content << @html.option("VALUE" => "2", "SELECTED" => true) { "Bar" }
+      content << @html.option("VALUE" => "Baz") { "Baz" }
+
+      output = @html.send(@method, attributes)
+      output.should equal_element("SELECT", {"NAME" => "test", "SIZE" => 2, "MULTIPLE" => true}, content)
+    end
+
+    it "ignores a passed block" do
+      attributes = {
+        "NAME"   => "test", "SIZE" => 2, "MULTIPLE" => true,
+        "VALUES" => [["1", "Foo"], ["2", "Bar", true], "Baz"]
+      }
+
+      content = @html.option("VALUE" => "1") { "Foo" }
+      content << @html.option("VALUE" => "2", "SELECTED" => true) { "Bar" }
+      content << @html.option("VALUE" => "Baz") { "Baz" }
+
+      output = @html.send(@method, attributes) { "testing" }
+      output.should equal_element("SELECT", {"NAME" => "test", "SIZE" => 2, "MULTIPLE" => true}, content)
+    end
+  end
+end
