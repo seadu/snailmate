@@ -167,4 +167,264 @@ config_initialize_copy(VALUE self, VALUE other)
  *
  * Gets the value of _key_ from the given _section_.
  *
- * Given the following configurating file
+ * Given the following configurating file being loaded:
+ *
+ *   config = OpenSSL::Config.load('foo.cnf')
+ *     #=> #<OpenSSL::Config sections=["default"]>
+ *   puts config.to_s
+ *     #=> [ default ]
+ *     #   foo=bar
+ *
+ * You can get a specific value from the config if you know the _section_
+ * and _key_ like so:
+ *
+ *   config.get_value('default','foo')
+ *     #=> "bar"
+ */
+static VALUE
+config_get_value(VALUE self, VALUE section, VALUE key)
+{
+    CONF *conf = GetConfig(self);
+    const char *str, *sectionp;
+
+    StringValueCStr(section);
+    StringValueCStr(key);
+    /* For compatibility; NULL means "default". */
+    sectionp = RSTRING_LEN(section) ? RSTRING_PTR(section) : NULL;
+    str = NCONF_get_string(conf, sectionp, RSTRING_PTR(key));
+    if (!str) {
+        ossl_clear_error();
+        return Qnil;
+    }
+    return rb_str_new_cstr(str);
+}
+
+/*
+ * call-seq:
+ *    config[section] -> hash
+ *
+ * Gets all key-value pairs in a specific _section_ from the current
+ * configuration.
+ *
+ * Given the following configurating file being loaded:
+ *
+ *   config = OpenSSL::Config.load('foo.cnf')
+ *     #=> #<OpenSSL::Config sections=["default"]>
+ *   puts config.to_s
+ *     #=> [ default ]
+ *     #   foo=bar
+ *
+ * You can get a hash of the specific section like so:
+ *
+ *   config['default']
+ *     #=> {"foo"=>"bar"}
+ *
+ */
+static VALUE
+config_get_section(VALUE self, VALUE section)
+{
+    CONF *conf = GetConfig(self);
+    STACK_OF(CONF_VALUE) *sk;
+    int i, entries;
+    VALUE hash;
+
+    hash = rb_hash_new();
+    StringValueCStr(section);
+    if (!(sk = NCONF_get_section(conf, RSTRING_PTR(section)))) {
+        ossl_clear_error();
+        return hash;
+    }
+    entries = sk_CONF_VALUE_num(sk);
+    for (i = 0; i < entries; i++) {
+        CONF_VALUE *entry = sk_CONF_VALUE_value(sk, i);
+        rb_hash_aset(hash, rb_str_new_cstr(entry->name),
+                     rb_str_new_cstr(entry->value));
+    }
+    return hash;
+}
+
+static void
+get_conf_section_doall_arg(CONF_VALUE *cv, VALUE *aryp)
+{
+    if (cv->name)
+        return;
+    rb_ary_push(*aryp, rb_str_new_cstr(cv->section));
+}
+
+/* IMPLEMENT_LHASH_DOALL_ARG_CONST() requires >= OpenSSL 1.1.0 */
+static IMPLEMENT_LHASH_DOALL_ARG_FN(get_conf_section, CONF_VALUE, VALUE)
+
+/*
+ * call-seq:
+ *    config.sections -> array of string
+ *
+ * Get the names of all sections in the current configuration.
+ */
+static VALUE
+config_get_sections(VALUE self)
+{
+    CONF *conf = GetConfig(self);
+    VALUE ary;
+
+    ary = rb_ary_new();
+    lh_doall_arg((_LHASH *)conf->data, LHASH_DOALL_ARG_FN(get_conf_section),
+                 &ary);
+    return ary;
+}
+
+static void
+dump_conf_value_doall_arg(CONF_VALUE *cv, VALUE *strp)
+{
+    VALUE str = *strp;
+    STACK_OF(CONF_VALUE) *sk;
+    int i, num;
+
+    if (cv->name)
+        return;
+    sk = (STACK_OF(CONF_VALUE) *)cv->value;
+    num = sk_CONF_VALUE_num(sk);
+    rb_str_cat_cstr(str, "[ ");
+    rb_str_cat_cstr(str, cv->section);
+    rb_str_cat_cstr(str, " ]\n");
+    for (i = 0; i < num; i++){
+        CONF_VALUE *v = sk_CONF_VALUE_value(sk, i);
+        rb_str_cat_cstr(str, v->name ? v->name : "None");
+        rb_str_cat_cstr(str, "=");
+        rb_str_cat_cstr(str, v->value ? v->value : "None");
+        rb_str_cat_cstr(str, "\n");
+    }
+    rb_str_cat_cstr(str, "\n");
+}
+
+static IMPLEMENT_LHASH_DOALL_ARG_FN(dump_conf_value, CONF_VALUE, VALUE)
+
+/*
+ * call-seq:
+ *    config.to_s -> string
+ *
+ *
+ * Gets the parsable form of the current configuration.
+ *
+ * Given the following configuration being created:
+ *
+ *   config = OpenSSL::Config.new
+ *     #=> #<OpenSSL::Config sections=[]>
+ *   config['default'] = {"foo"=>"bar","baz"=>"buz"}
+ *     #=> {"foo"=>"bar", "baz"=>"buz"}
+ *   puts config.to_s
+ *     #=> [ default ]
+ *     #   foo=bar
+ *     #   baz=buz
+ *
+ * You can parse get the serialized configuration using #to_s and then parse
+ * it later:
+ *
+ *   serialized_config = config.to_s
+ *   # much later...
+ *   new_config = OpenSSL::Config.parse(serialized_config)
+ *     #=> #<OpenSSL::Config sections=["default"]>
+ *   puts new_config
+ *     #=> [ default ]
+ *         foo=bar
+ *         baz=buz
+ */
+static VALUE
+config_to_s(VALUE self)
+{
+    CONF *conf = GetConfig(self);
+    VALUE str;
+
+    str = rb_str_new(NULL, 0);
+    lh_doall_arg((_LHASH *)conf->data, LHASH_DOALL_ARG_FN(dump_conf_value),
+                 &str);
+    return str;
+}
+
+static void
+each_conf_value_doall_arg(CONF_VALUE *cv, void *unused)
+{
+    STACK_OF(CONF_VALUE) *sk;
+    VALUE section;
+    int i, num;
+
+    if (cv->name)
+        return;
+    sk = (STACK_OF(CONF_VALUE) *)cv->value;
+    num = sk_CONF_VALUE_num(sk);
+    section = rb_str_new_cstr(cv->section);
+    for (i = 0; i < num; i++){
+        CONF_VALUE *v = sk_CONF_VALUE_value(sk, i);
+        VALUE name = v->name ? rb_str_new_cstr(v->name) : Qnil;
+        VALUE value = v->value ? rb_str_new_cstr(v->value) : Qnil;
+        rb_yield(rb_ary_new3(3, section, name, value));
+    }
+}
+
+static IMPLEMENT_LHASH_DOALL_ARG_FN(each_conf_value, CONF_VALUE, void)
+
+/*
+ * call-seq:
+ *    config.each { |section, key, value| }
+ *
+ * Retrieves the section and its pairs for the current configuration.
+ *
+ *    config.each do |section, key, value|
+ *      # ...
+ *    end
+ */
+static VALUE
+config_each(VALUE self)
+{
+    CONF *conf = GetConfig(self);
+
+    RETURN_ENUMERATOR(self, 0, 0);
+
+    lh_doall_arg((_LHASH *)conf->data, LHASH_DOALL_ARG_FN(each_conf_value),
+                 NULL);
+    return self;
+}
+
+/*
+ * call-seq:
+ *    config.inspect -> string
+ *
+ * String representation of this configuration object, including the class
+ * name and its sections.
+ */
+static VALUE
+config_inspect(VALUE self)
+{
+    VALUE str, ary = config_get_sections(self);
+    const char *cname = rb_class2name(rb_obj_class(self));
+
+    str = rb_str_new_cstr("#<");
+    rb_str_cat_cstr(str, cname);
+    rb_str_cat_cstr(str, " sections=");
+    rb_str_append(str, rb_inspect(ary));
+    rb_str_cat_cstr(str, ">");
+
+    return str;
+}
+
+void
+Init_ossl_config(void)
+{
+    char *path;
+    VALUE path_str;
+
+#if 0
+    mOSSL = rb_define_module("OpenSSL");
+    eOSSLError = rb_define_class_under(mOSSL, "OpenSSLError", rb_eStandardError);
+#endif
+
+    /* Document-class: OpenSSL::Config
+     *
+     * Configuration for the openssl library.
+     *
+     * Many system's installation of openssl library will depend on your system
+     * configuration. See the value of OpenSSL::Config::DEFAULT_CONFIG_FILE for
+     * the location of the file for your host.
+     *
+     * See also http://www.openssl.org/docs/apps/config.html
+     */
+    cConfig = rb_define_class_under(mOSSL, "C
