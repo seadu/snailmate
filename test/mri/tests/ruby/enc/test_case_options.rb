@@ -75,4 +75,7 @@ class TestCaseOptions < Test::Unit::TestCase
     assert_raise(ArgumentError) { 'a'.swapcase! :fold }
     assert_nothing_raised { :a.downcase :fold }
     assert_raise(ArgumentError) { :a.upcase :fold }
-    assert_raise(Argume
+    assert_raise(ArgumentError) { :a.capitalize :fold }
+    assert_raise(ArgumentError) { :a.swapcase :fold }
+  end
+end
