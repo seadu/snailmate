@@ -54,4 +54,190 @@ class PrettyPrint
   def self.format: (?untyped output, ?Integer maxwidth, ?String newline, ?^(Integer) -> Integer genspace) { (PrettyPrint) -> untyped } -> _Output
 
   # <!--
-  #   
+  #   rdoc-file=lib/prettyprint.rb
+  #   - singleline_format(output=''.dup, maxwidth=nil, newline=nil, genspace=nil) { |q| ... }
+  # -->
+  # This is similar to PrettyPrint::format but the result has no breaks.
+  #
+  # `maxwidth`, `newline` and `genspace` are ignored.
+  #
+  # The invocation of `breakable` in the block doesn't break a line and is treated
+  # as just an invocation of `text`.
+  #
+  def self.singleline_format: (?untyped output, ?Integer? maxwidth, ?String? newline, ?^(Integer) -> Integer? genspace) { (PrettyPrint::SingleLine) -> untyped } -> _Output
+
+  # <!--
+  #   rdoc-file=lib/prettyprint.rb
+  #   - new(output=''.dup, maxwidth=79, newline="\n", &genspace)
+  # -->
+  # Creates a buffer for pretty printing.
+  #
+  # `output` is an output target. If it is not specified, '' is assumed. It should
+  # have a << method which accepts the first argument `obj` of PrettyPrint#text,
+  # the first argument `sep` of PrettyPrint#breakable, the first argument
+  # `newline` of PrettyPrint.new, and the result of a given block for
+  # PrettyPrint.new.
+  #
+  # `maxwidth` specifies maximum line length. If it is not specified, 79 is
+  # assumed. However actual outputs may overflow `maxwidth` if long non-breakable
+  # texts are provided.
+  #
+  # `newline` is used for line breaks. "n" is used if it is not specified.
+  #
+  # The block is used to generate spaces. {|width| ' ' * width} is used if it is
+  # not given.
+  #
+  def initialize: (?untyped output, ?Integer maxwidth, ?String newline, ?^(Integer) -> Integer genspace) -> void
+
+  # <!-- rdoc-file=lib/prettyprint.rb -->
+  # The output object.
+  #
+  # This defaults to '', and should accept the << method
+  #
+  attr_reader output: _Output
+
+  # <!-- rdoc-file=lib/prettyprint.rb -->
+  # The maximum width of a line, before it is separated in to a newline
+  #
+  # This defaults to 79, and should be an Integer
+  #
+  attr_reader maxwidth: Integer
+
+  # <!-- rdoc-file=lib/prettyprint.rb -->
+  # The value that is appended to `output` to add a new line.
+  #
+  # This defaults to "n", and should be String
+  #
+  attr_reader newline: String
+
+  # <!-- rdoc-file=lib/prettyprint.rb -->
+  # A lambda or Proc, that takes one argument, of an Integer, and returns the
+  # corresponding number of spaces.
+  #
+  # By default this is:
+  #     lambda {|n| ' ' * n}
+  #
+  attr_reader genspace: Proc
+
+  # <!-- rdoc-file=lib/prettyprint.rb -->
+  # The number of spaces to be indented
+  #
+  attr_reader indent: Integer
+
+  # <!-- rdoc-file=lib/prettyprint.rb -->
+  # The PrettyPrint::GroupQueue of groups in stack to be pretty printed
+  #
+  attr_reader group_queue: PrettyPrint::GroupQueue
+
+  # <!--
+  #   rdoc-file=lib/prettyprint.rb
+  #   - current_group()
+  # -->
+  # Returns the group most recently added to the stack.
+  #
+  # Contrived example:
+  #     out = ""
+  #     => ""
+  #     q = PrettyPrint.new(out)
+  #     => #<PrettyPrint:0x82f85c0 @output="", @maxwidth=79, @newline="\n", @genspace=#<Proc:0x82f8368@/home/vbatts/.rvm/rubies/ruby-head/lib/ruby/2.0.0/prettyprint.rb:82 (lambda)>, @output_width=0, @buffer_width=0, @buffer=[], @group_stack=[#<PrettyPrint::Group:0x82f8138 @depth=0, @breakables=[], @break=false>], @group_queue=#<PrettyPrint::GroupQueue:0x82fb7c0 @queue=[[#<PrettyPrint::Group:0x82f8138 @depth=0, @breakables=[], @break=false>]]>, @indent=0>
+  #     q.group {
+  #       q.text q.current_group.inspect
+  #       q.text q.newline
+  #       q.group(q.current_group.depth + 1) {
+  #         q.text q.current_group.inspect
+  #         q.text q.newline
+  #         q.group(q.current_group.depth + 1) {
+  #           q.text q.current_group.inspect
+  #           q.text q.newline
+  #           q.group(q.current_group.depth + 1) {
+  #             q.text q.current_group.inspect
+  #             q.text q.newline
+  #           }
+  #         }
+  #       }
+  #     }
+  #     => 284
+  #      puts out
+  #     #<PrettyPrint::Group:0x8354758 @depth=1, @breakables=[], @break=false>
+  #     #<PrettyPrint::Group:0x8354550 @depth=2, @breakables=[], @break=false>
+  #     #<PrettyPrint::Group:0x83541cc @depth=3, @breakables=[], @break=false>
+  #     #<PrettyPrint::Group:0x8347e54 @depth=4, @breakables=[], @break=false>
+  #
+  def current_group: () -> PrettyPrint::Group
+
+  # <!--
+  #   rdoc-file=lib/prettyprint.rb
+  #   - break_outmost_groups()
+  # -->
+  # Breaks the buffer into lines that are shorter than #maxwidth
+  #
+  def break_outmost_groups: () -> untyped
+
+  # <!--
+  #   rdoc-file=lib/prettyprint.rb
+  #   - text(obj, width=obj.length)
+  # -->
+  # This adds `obj` as a text of `width` columns in width.
+  #
+  # If `width` is not specified, obj.length is used.
+  #
+  def text: (String obj, ?Integer width) -> void
+
+  # <!--
+  #   rdoc-file=lib/prettyprint.rb
+  #   - fill_breakable(sep=' ', width=sep.length)
+  # -->
+  # This is similar to #breakable except the decision to break or not is
+  # determined individually.
+  #
+  # Two #fill_breakable under a group may cause 4 results: (break,break),
+  # (break,non-break), (non-break,break), (non-break,non-break). This is different
+  # to #breakable because two #breakable under a group may cause 2 results:
+  # (break,break), (non-break,non-break).
+  #
+  # The text `sep` is inserted if a line is not broken at this point.
+  #
+  # If `sep` is not specified, " " is used.
+  #
+  # If `width` is not specified, `sep.length` is used. You will have to specify
+  # this when `sep` is a multibyte character, for example.
+  #
+  def fill_breakable: (?String sep, ?Integer width) -> void
+
+  # <!--
+  #   rdoc-file=lib/prettyprint.rb
+  #   - breakable(sep=' ', width=sep.length)
+  # -->
+  # This says "you can break a line here if necessary", and a `width`-column text
+  # `sep` is inserted if a line is not broken at the point.
+  #
+  # If `sep` is not specified, " " is used.
+  #
+  # If `width` is not specified, `sep.length` is used. You will have to specify
+  # this when `sep` is a multibyte character, for example.
+  #
+  def breakable: (?String sep, ?Integer width) -> void
+
+  # <!--
+  #   rdoc-file=lib/prettyprint.rb
+  #   - group(indent=0, open_obj='', close_obj='', open_width=open_obj.length, close_width=close_obj.length) { || ... }
+  # -->
+  # Groups line break hints added in the block. The line break hints are all to be
+  # used or not.
+  #
+  # If `indent` is specified, the method call is regarded as nested by
+  # nest(indent) { ... }.
+  #
+  # If `open_obj` is specified, `text open_obj, open_width` is called before
+  # grouping. If `close_obj` is specified, `text close_obj, close_width` is called
+  # after grouping.
+  #
+  def group: (?::Integer indent, ?::String open_obj, ?::String close_obj, ?Integer open_width, ?Integer close_width) { () -> untyped } -> Integer
+
+  # <!--
+  #   rdoc-file=lib/prettyprint.rb
+  #   - group_sub() { || ... }
+  # -->
+  # Takes a block and queues a new group that is indented 1 level further.
+  #
+  def group_su
