@@ -575,4 +575,124 @@ class OpenSSL::TestSSL < OpenSSL::SSLTestCase
         assert(ssl.post_connection_check("localhost.localdomain"))
         assert(ssl.post_connection_check("127.0.0.1"))
         assert_raise(sslerr){ssl.post_connection_check("localhost")}
-        assert_raise(s
+        assert_raise(sslerr){ssl.post_connection_check("foo.example.com")}
+
+        cert = ssl.peer_cert
+        assert(OpenSSL::SSL.verify_certificate_identity(cert, "localhost.localdomain"))
+        assert(OpenSSL::SSL.verify_certificate_identity(cert, "127.0.0.1"))
+        assert(!OpenSSL::SSL.verify_certificate_identity(cert, "localhost"))
+        assert(!OpenSSL::SSL.verify_certificate_identity(cert, "foo.example.com"))
+      }
+    }
+
+    exts = [
+      ["keyUsage","keyEncipherment,digitalSignature",true],
+      ["subjectAltName","DNS:*.localdomain",false],
+    ]
+    @svr_cert = issue_cert(@svr, @svr_key, 5, exts, @ca_cert, @ca_key)
+    start_server { |port|
+      server_connect(port) { |ssl|
+        ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+
+        assert(ssl.post_connection_check("localhost.localdomain"))
+        assert_raise(sslerr){ssl.post_connection_check("127.0.0.1")}
+        assert_raise(sslerr){ssl.post_connection_check("localhost")}
+        assert_raise(sslerr){ssl.post_connection_check("foo.example.com")}
+        cert = ssl.peer_cert
+        assert(OpenSSL::SSL.verify_certificate_identity(cert, "localhost.localdomain"))
+        assert(!OpenSSL::SSL.verify_certificate_identity(cert, "127.0.0.1"))
+        assert(!OpenSSL::SSL.verify_certificate_identity(cert, "localhost"))
+        assert(!OpenSSL::SSL.verify_certificate_identity(cert, "foo.example.com"))
+      }
+    }
+  end
+
+  def test_verify_certificate_identity
+    [true, false].each do |criticality|
+      cert = create_null_byte_SAN_certificate(criticality)
+      assert_equal(false, OpenSSL::SSL.verify_certificate_identity(cert, 'www.example.com'))
+      assert_equal(true,  OpenSSL::SSL.verify_certificate_identity(cert, "www.example.com\0.evil.com"))
+      assert_equal(false, OpenSSL::SSL.verify_certificate_identity(cert, '192.168.7.255'))
+      assert_equal(true,  OpenSSL::SSL.verify_certificate_identity(cert, '192.168.7.1'))
+      assert_equal(true,  OpenSSL::SSL.verify_certificate_identity(cert, '13::17'))
+      assert_equal(false,  OpenSSL::SSL.verify_certificate_identity(cert, '13::18'))
+      assert_equal(true,  OpenSSL::SSL.verify_certificate_identity(cert, '13:0:0:0:0:0:0:17'))
+      assert_equal(false,  OpenSSL::SSL.verify_certificate_identity(cert, '44:0:0:0:0:0:0:17'))
+      assert_equal(true,  OpenSSL::SSL.verify_certificate_identity(cert, '0013:0000:0000:0000:0000:0000:0000:0017'))
+      assert_equal(false,  OpenSSL::SSL.verify_certificate_identity(cert, '1313:0000:0000:0000:0000:0000:0000:0017'))
+    end
+  end
+
+  def test_verify_hostname
+    assert_equal(true,  OpenSSL::SSL.verify_hostname("www.example.com", "*.example.com"))
+    assert_equal(false, OpenSSL::SSL.verify_hostname("www.subdomain.example.com", "*.example.com"))
+  end
+
+  def test_verify_wildcard
+    assert_equal(false, OpenSSL::SSL.verify_wildcard("foo", "x*"))
+    assert_equal(true,  OpenSSL::SSL.verify_wildcard("foo", "foo"))
+    assert_equal(true,  OpenSSL::SSL.verify_wildcard("foo", "f*"))
+    assert_equal(true,  OpenSSL::SSL.verify_wildcard("foo", "*"))
+    assert_equal(false, OpenSSL::SSL.verify_wildcard("abc*bcd", "abcd"))
+    assert_equal(false, OpenSSL::SSL.verify_wildcard("xn--qdk4b9b", "x*"))
+    assert_equal(false, OpenSSL::SSL.verify_wildcard("xn--qdk4b9b", "*--qdk4b9b"))
+    assert_equal(true,  OpenSSL::SSL.verify_wildcard("xn--qdk4b9b", "xn--qdk4b9b"))
+  end
+
+  # Comments in this test is excerpted from http://tools.ietf.org/html/rfc6125#page-27
+  def test_post_connection_check_wildcard_san
+    # case-insensitive ASCII comparison
+    # RFC 6125, section 6.4.1
+    #
+    # "..matching of the reference identifier against the presented identifier
+    # is performed by comparing the set of domain name labels using a
+    # case-insensitive ASCII comparison, as clarified by [DNS-CASE] (e.g.,
+    # "WWW.Example.Com" would be lower-cased to "www.example.com" for
+    # comparison purposes)
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:*.example.com'), 'www.example.com'))
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:*.Example.COM'), 'www.example.com'))
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:*.example.com'), 'WWW.Example.COM'))
+    # 1.  The client SHOULD NOT attempt to match a presented identifier in
+    #     which the wildcard character comprises a label other than the
+    #     left-most label (e.g., do not match bar.*.example.net).
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:www.*.com'), 'www.example.com'))
+    # 2.  If the wildcard character is the only character of the left-most
+    #     label in the presented identifier, the client SHOULD NOT compare
+    #     against anything but the left-most label of the reference
+    #     identifier (e.g., *.example.com would match foo.example.com but
+    #     not bar.foo.example.com or example.com).
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:*.example.com'), 'foo.example.com'))
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:*.example.com'), 'bar.foo.example.com'))
+    # 3.  The client MAY match a presented identifier in which the wildcard
+    #     character is not the only character of the label (e.g.,
+    #     baz*.example.net and *baz.example.net and b*z.example.net would
+    #     be taken to match baz1.example.net and foobaz.example.net and
+    #     buzz.example.net, respectively).  ...
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:baz*.example.com'), 'baz1.example.com'))
+
+    # LibreSSL 3.5.0+ doesn't support other wildcard certificates
+    # (it isn't required to, as RFC states MAY, not MUST)
+    return if libressl?(3, 5, 0)
+
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:*baz.example.com'), 'foobaz.example.com'))
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:b*z.example.com'), 'buzz.example.com'))
+
+    # Section 6.4.3 of RFC6125 states that client should NOT match identifier
+    # where wildcard is other than left-most label.
+    #
+    # Also implicitly mentions the wildcard character only in singular form,
+    # and discourages matching against more than one wildcard.
+    #
+    # See RFC 6125, section 7.2, subitem 2.
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:*b*.example.com'), 'abc.example.com'))
+  
