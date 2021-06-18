@@ -443,3 +443,43 @@ describe :dir_glob_recursive, shared: true do
       a/x/b/y/e
       a/x/b/y/b/z/e
     ].each do |path|
+      file = File.join @mock_dir, path
+      mkdir_p File.dirname(file)
+      touch file
+    end
+
+    Dir.chdir @mock_dir
+  end
+
+  after :each do
+    Dir.chdir @cwd
+    rm_r @mock_dir
+  end
+
+  it "matches multiple recursives" do
+    expected = %w[
+      a/x/b/y/b/z/e
+      a/x/b/y/e
+    ]
+
+    Dir.send(@method, 'a/**/b/**/e').uniq.sort.should == expected
+  end
+
+  platform_is_not :windows do
+    it "ignores symlinks" do
+      file = File.join @mock_dir, 'b/z/e'
+      link = File.join @mock_dir, 'a/y'
+
+      mkdir_p File.dirname(file)
+      touch file
+      File.symlink(File.dirname(file), link)
+
+      expected = %w[
+        a/x/b/y/b/z/e
+        a/x/b/y/e
+      ]
+
+      Dir.send(@method, 'a/**/e').uniq.sort.should == expected
+    end
+  end
+end
