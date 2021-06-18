@@ -1432,4 +1432,250 @@ module_eval(<<'.,.,', 'huia.y', 155)
 
 module_eval(<<'.,.,', 'huia.y', 156)
   def _reduce_96(val, _values, result)
-   
+     return binary val[0], val[2], 'divideBy:'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 157)
+  def _reduce_97(val, _values, result)
+     return binary val[0], val[2], 'toThePowerOf:'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 158)
+  def _reduce_98(val, _values, result)
+     return binary val[0], val[2], 'moduloOf:'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 159)
+  def _reduce_99(val, _values, result)
+     return binary val[0], val[2], 'isEqualTo:'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 160)
+  def _reduce_100(val, _values, result)
+     return binary val[0], val[2], 'isNotEqualTo:'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 161)
+  def _reduce_101(val, _values, result)
+     return binary val[0], val[2], 'logicalOr:'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 162)
+  def _reduce_102(val, _values, result)
+     return binary val[0], val[2], 'logicalAnd:'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 163)
+  def _reduce_103(val, _values, result)
+     return binary val[0], val[2], 'isGreaterThan:'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 164)
+  def _reduce_104(val, _values, result)
+     return binary val[0], val[2], 'isLessThan:'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 165)
+  def _reduce_105(val, _values, result)
+     return binary val[0], val[2], 'isGreaterOrEqualTo:'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 166)
+  def _reduce_106(val, _values, result)
+     return binary val[0], val[2], 'isLessOrEqualTo:'
+    result
+  end
+.,.,
+
+# reduce 107 omitted
+
+# reduce 108 omitted
+
+# reduce 109 omitted
+
+# reduce 110 omitted
+
+module_eval(<<'.,.,', 'huia.y', 173)
+  def _reduce_111(val, _values, result)
+     return unary val[1], 'unaryNot'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 174)
+  def _reduce_112(val, _values, result)
+     return unary val[1], 'unaryPlus'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 175)
+  def _reduce_113(val, _values, result)
+     return unary val[1], 'unaryMinus'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 176)
+  def _reduce_114(val, _values, result)
+     return unary val[1], 'unaryComplement'
+    result
+  end
+.,.,
+
+# reduce 115 omitted
+
+# reduce 116 omitted
+
+# reduce 117 omitted
+
+# reduce 118 omitted
+
+# reduce 119 omitted
+
+# reduce 120 omitted
+
+# reduce 121 omitted
+
+module_eval(<<'.,.,', 'huia.y', 186)
+  def _reduce_122(val, _values, result)
+     return n :Float,   val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 187)
+  def _reduce_123(val, _values, result)
+     return n :Integer, val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 188)
+  def _reduce_124(val, _values, result)
+     return n :Nil
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 189)
+  def _reduce_125(val, _values, result)
+     return n :True
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 190)
+  def _reduce_126(val, _values, result)
+     return n :False
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 191)
+  def _reduce_127(val, _values, result)
+     return n :Self
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 193)
+  def _reduce_128(val, _values, result)
+     return n :String,  val[0]
+    result
+  end
+.,.,
+
+# reduce 129 omitted
+
+# reduce 130 omitted
+
+module_eval(<<'.,.,', 'huia.y', 197)
+  def _reduce_131(val, _values, result)
+     return val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 198)
+  def _reduce_132(val, _values, result)
+     return val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 199)
+  def _reduce_133(val, _values, result)
+     return n :InterpolatedString, val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 200)
+  def _reduce_134(val, _values, result)
+     val[0].append(val[1]); return val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 201)
+  def _reduce_135(val, _values, result)
+     return val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 202)
+  def _reduce_136(val, _values, result)
+     return to_string(val[0])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 203)
+  def _reduce_137(val, _values, result)
+     return n :String, ''
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 205)
+  def _reduce_138(val, _values, result)
+     return n :String, val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 206)
+  def _reduce_139(val, _values, result)
+     val[0].append(val[1]); return val[0]
+    result
+  end
+.,.,
+
+def _reduce_none(val, _values, result)
+  val[0]
+end
+
+  end   # class Parser
+end   # module Huia
