@@ -1029,4 +1029,407 @@ Racc_token_to_s_table = [
   "interpolated_string_chunk",
   "chars" ]
 
-Racc_debug_pa
+Racc_debug_parser = false
+
+##### State transition tables end #####
+
+# reduce 0 omitted
+
+# reduce 1 omitted
+
+module_eval(<<'.,.,', 'huia.y', 44)
+  def _reduce_2(val, _values, result)
+     return scope
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 46)
+  def _reduce_3(val, _values, result)
+     return scope.append val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 47)
+  def _reduce_4(val, _values, result)
+     return scope.append val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 48)
+  def _reduce_5(val, _values, result)
+     return scope
+    result
+  end
+.,.,
+
+# reduce 6 omitted
+
+# reduce 7 omitted
+
+# reduce 8 omitted
+
+# reduce 9 omitted
+
+# reduce 10 omitted
+
+# reduce 11 omitted
+
+# reduce 12 omitted
+
+# reduce 13 omitted
+
+# reduce 14 omitted
+
+# reduce 15 omitted
+
+# reduce 16 omitted
+
+# reduce 17 omitted
+
+# reduce 18 omitted
+
+# reduce 19 omitted
+
+# reduce 20 omitted
+
+# reduce 21 omitted
+
+module_eval(<<'.,.,', 'huia.y', 66)
+  def _reduce_22(val, _values, result)
+     return n(:Return, val[1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 67)
+  def _reduce_23(val, _values, result)
+     return n(:Return, n(:Nil))
+    result
+  end
+.,.,
+
+# reduce 24 omitted
+
+# reduce 25 omitted
+
+module_eval(<<'.,.,', 'huia.y', 72)
+  def _reduce_26(val, _values, result)
+     return n :Array
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 74)
+  def _reduce_27(val, _values, result)
+     return val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 75)
+  def _reduce_28(val, _values, result)
+     return n :Array, [val[0]]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 76)
+  def _reduce_29(val, _values, result)
+     val[0].append(val[2]); return val[0]
+    result
+  end
+.,.,
+
+# reduce 30 omitted
+
+# reduce 31 omitted
+
+module_eval(<<'.,.,', 'huia.y', 80)
+  def _reduce_32(val, _values, result)
+     return n :Hash
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 81)
+  def _reduce_33(val, _values, result)
+     return val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 82)
+  def _reduce_34(val, _values, result)
+     return n :Hash, val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 83)
+  def _reduce_35(val, _values, result)
+     val[0].append(val[2]); return val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 84)
+  def _reduce_36(val, _values, result)
+     return n :HashItem, val[0], val[2]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 86)
+  def _reduce_37(val, _values, result)
+     return constant val[0]
+    result
+  end
+.,.,
+
+# reduce 38 omitted
+
+# reduce 39 omitted
+
+# reduce 40 omitted
+
+module_eval(<<'.,.,', 'huia.y', 91)
+  def _reduce_41(val, _values, result)
+     return val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 92)
+  def _reduce_42(val, _values, result)
+     return val[0].append(val[1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 93)
+  def _reduce_43(val, _values, result)
+     return val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 94)
+  def _reduce_44(val, _values, result)
+     return pop_scope
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 97)
+  def _reduce_45(val, _values, result)
+     return val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 98)
+  def _reduce_46(val, _values, result)
+     return push_scope
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 99)
+  def _reduce_47(val, _values, result)
+     return push_scope
+    result
+  end
+.,.,
+
+# reduce 48 omitted
+
+# reduce 49 omitted
+
+# reduce 50 omitted
+
+# reduce 51 omitted
+
+module_eval(<<'.,.,', 'huia.y', 105)
+  def _reduce_52(val, _values, result)
+     return scope.add_argument val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 106)
+  def _reduce_53(val, _values, result)
+     return n :Assignment, val[0], val[2]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 107)
+  def _reduce_54(val, _values, result)
+     return n :Variable, val[0]
+    result
+  end
+.,.,
+
+# reduce 55 omitted
+
+# reduce 56 omitted
+
+# reduce 57 omitted
+
+module_eval(<<'.,.,', 'huia.y', 112)
+  def _reduce_58(val, _values, result)
+     return n :MethodCall, val[0], val[2]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 113)
+  def _reduce_59(val, _values, result)
+     return n :MethodCall, val[0], n(:CallSignature, val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 114)
+  def _reduce_60(val, _values, result)
+     return n :MethodCall, scope_instance, val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 116)
+  def _reduce_61(val, _values, result)
+     return n :MethodCall, this_closure, val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 117)
+  def _reduce_62(val, _values, result)
+     return n :MethodCall, this_closure, n(:CallSignature, val[1])
+    result
+  end
+.,.,
+
+# reduce 63 omitted
+
+# reduce 64 omitted
+
+module_eval(<<'.,.,', 'huia.y', 121)
+  def _reduce_65(val, _values, result)
+     return n :CallSignature, val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 122)
+  def _reduce_66(val, _values, result)
+     return n :CallSignature, val[0], [val[1]]
+    result
+  end
+.,.,
+
+# reduce 67 omitted
+
+# reduce 68 omitted
+
+# reduce 69 omitted
+
+# reduce 70 omitted
+
+# reduce 71 omitted
+
+# reduce 72 omitted
+
+module_eval(<<'.,.,', 'huia.y', 129)
+  def _reduce_73(val, _values, result)
+     return val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 130)
+  def _reduce_74(val, _values, result)
+     return val[0].concat_signature val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 132)
+  def _reduce_75(val, _values, result)
+     return n :Expression, val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 134)
+  def _reduce_76(val, _values, result)
+     return allocate_local val[0]
+    result
+  end
+.,.,
+
+# reduce 77 omitted
+
+# reduce 78 omitted
+
+# reduce 79 omitted
+
+# reduce 80 omitted
+
+# reduce 81 omitted
+
+# reduce 82 omitted
+
+# reduce 83 omitted
+
+# reduce 84 omitted
+
+# reduce 85 omitted
+
+# reduce 86 omitted
+
+# reduce 87 omitted
+
+# reduce 88 omitted
+
+# reduce 89 omitted
+
+# reduce 90 omitted
+
+# reduce 91 omitted
+
+module_eval(<<'.,.,', 'huia.y', 152)
+  def _reduce_92(val, _values, result)
+     return allocate_local_assignment val[0], val[2]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 153)
+  def _reduce_93(val, _values, result)
+     return binary val[0], val[2], 'plus:'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 154)
+  def _reduce_94(val, _values, result)
+     return binary val[0], val[2], 'minus:'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 155)
+  def _reduce_95(val, _values, result)
+     return binary val[0], val[2], 'multiplyBy:'
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'huia.y', 156)
+  def _reduce_96(val, _values, result)
+   
