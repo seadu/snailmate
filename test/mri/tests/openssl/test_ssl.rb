@@ -695,4 +695,163 @@ class OpenSSL::TestSSL < OpenSSL::SSLTestCase
     # See RFC 6125, section 7.2, subitem 2.
     assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
       create_cert_with_san('DNS:*b*.example.com'), 'abc.example.com'))
-  
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:*b*.example.com'), 'ab.example.com'))
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:*b*.example.com'), 'bc.example.com'))
+    #                                ...  However, the client SHOULD NOT
+    #   attempt to match a presented identifier where the wildcard
+    #   character is embedded within an A-label or U-label [IDNA-DEFS] of
+    #   an internationalized domain name [IDNA-PROTO].
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:xn*.example.com'), 'xn1ca.example.com'))
+    # part of A-label
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:xn--*.example.com'), 'xn--1ca.example.com'))
+    # part of U-label
+    # dNSName in RFC5280 is an IA5String so U-label should NOT be allowed
+    # regardless of wildcard.
+    #
+    # See Section 7.2 of RFC 5280:
+    #   IA5String is limited to the set of ASCII characters.
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_san('DNS:á*.example.com'), 'á1.example.com'))
+  end
+
+  def test_post_connection_check_wildcard_cn
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('*.example.com'), 'www.example.com'))
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('*.Example.COM'), 'www.example.com'))
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('*.example.com'), 'WWW.Example.COM'))
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('www.*.com'), 'www.example.com'))
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('*.example.com'), 'foo.example.com'))
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('*.example.com'), 'bar.foo.example.com'))
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('baz*.example.com'), 'baz1.example.com'))
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('*baz.example.com'), 'foobaz.example.com'))
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('b*z.example.com'), 'buzz.example.com'))
+    # Section 6.4.3 of RFC6125 states that client should NOT match identifier
+    # where wildcard is other than left-most label.
+    #
+    # Also implicitly mentions the wildcard character only in singular form,
+    # and discourages matching against more than one wildcard.
+    #
+    # See RFC 6125, section 7.2, subitem 2.
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('*b*.example.com'), 'abc.example.com'))
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('*b*.example.com'), 'ab.example.com'))
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('*b*.example.com'), 'bc.example.com'))
+    assert_equal(true, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('xn*.example.com'), 'xn1ca.example.com'))
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('xn--*.example.com'), 'xn--1ca.example.com'))
+    # part of U-label
+    # Subject in RFC5280 states case-insensitive ASCII comparison.
+    #
+    # See Section 7.2 of RFC 5280:
+    #   IA5String is limited to the set of ASCII characters.
+    assert_equal(false, OpenSSL::SSL.verify_certificate_identity(
+      create_cert_with_name('á*.example.com'), 'á1.example.com'))
+  end
+
+  def create_cert_with_san(san)
+    ef = OpenSSL::X509::ExtensionFactory.new
+    cert = OpenSSL::X509::Certificate.new
+    cert.subject = OpenSSL::X509::Name.parse("/DC=some/DC=site/CN=Some Site")
+    ext = ef.create_ext('subjectAltName', san)
+    cert.add_extension(ext)
+    cert
+  end
+
+  def create_cert_with_name(name)
+    cert = OpenSSL::X509::Certificate.new
+    cert.subject = OpenSSL::X509::Name.new([['DC', 'some'], ['DC', 'site'], ['CN', name]])
+    cert
+  end
+
+
+  # Create NULL byte SAN certificate
+  def create_null_byte_SAN_certificate(critical = false)
+    ef = OpenSSL::X509::ExtensionFactory.new
+    cert = OpenSSL::X509::Certificate.new
+    cert.subject = OpenSSL::X509::Name.parse "/DC=some/DC=site/CN=Some Site"
+    ext = ef.create_ext('subjectAltName', 'DNS:placeholder,IP:192.168.7.1,IP:13::17', critical)
+    ext_asn1 = OpenSSL::ASN1.decode(ext.to_der)
+    san_list_der = ext_asn1.value.reduce(nil) { |memo,val| val.tag == 4 ? val.value : memo }
+    san_list_asn1 = OpenSSL::ASN1.decode(san_list_der)
+    san_list_asn1.value[0].value = "www.example.com\0.evil.com"
+    pos = critical ? 2 : 1
+    ext_asn1.value[pos].value = san_list_asn1.to_der
+    real_ext = OpenSSL::X509::Extension.new ext_asn1
+    cert.add_extension(real_ext)
+    cert
+  end
+
+  def socketpair
+    if defined? UNIXSocket
+      UNIXSocket.pair
+    else
+      Socket.pair(Socket::AF_INET, Socket::SOCK_STREAM, 0)
+    end
+  end
+
+  def test_tlsext_hostname
+    fooctx = OpenSSL::SSL::SSLContext.new
+    fooctx.cert = @cli_cert
+    fooctx.key = @cli_key
+
+    ctx_proc = proc { |ctx|
+      ctx.servername_cb = proc { |ssl, servername|
+        case servername
+        when "foo.example.com"
+          fooctx
+        when "bar.example.com"
+          nil
+        else
+          raise "unreachable"
+        end
+      }
+    }
+    start_server(ctx_proc: ctx_proc) do |port|
+      sock = TCPSocket.new("127.0.0.1", port)
+      begin
+        ssl = OpenSSL::SSL::SSLSocket.new(sock)
+        ssl.hostname = "foo.example.com"
+        ssl.connect
+        assert_equal @cli_cert.serial, ssl.peer_cert.serial
+        assert_predicate fooctx, :frozen?
+
+        ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+      ensure
+        ssl&.close
+        sock.close
+      end
+
+      sock = TCPSocket.new("127.0.0.1", port)
+      begin
+        ssl = OpenSSL::SSL::SSLSocket.new(sock)
+        ssl.hostname = "bar.example.com"
+        ssl.connect
+        assert_equal @svr_cert.serial, ssl.peer_cert.serial
+
+        ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+      ensure
+        ssl&.close
+        sock.close
+      end
+    end
+  end
+
+  def test_servername_cb_raises_an_exception_on_unknown_objects
+    hostname = 'example.org'
+
+    ctx2 = OpenSSL::SSL::SSLContext
