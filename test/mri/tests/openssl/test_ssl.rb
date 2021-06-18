@@ -374,4 +374,205 @@ class OpenSSL::TestSSL < OpenSSL::SSLTestCase
   end
 
   def test_unstarted_session
-    start_se
+    start_server do |port|
+      sock = TCPSocket.new("127.0.0.1", port)
+      ssl = OpenSSL::SSL::SSLSocket.new(sock)
+
+      assert_raise(OpenSSL::SSL::SSLError) { ssl.syswrite("data") }
+      assert_raise(OpenSSL::SSL::SSLError) { ssl.sysread(1) }
+
+      ssl.connect
+      ssl.puts "abc"
+      assert_equal "abc\n", ssl.gets
+    ensure
+      ssl&.close
+      sock&.close
+    end
+  end
+
+  def test_parallel
+    start_server { |port|
+      ssls = []
+      10.times{
+        sock = TCPSocket.new("127.0.0.1", port)
+        ssl = OpenSSL::SSL::SSLSocket.new(sock)
+        ssl.connect
+        ssl.sync_close = true
+        ssls << ssl
+      }
+      str = "x" * 1000 + "\n"
+      ITERATIONS.times{
+        ssls.each{|ssl|
+          ssl.puts(str)
+          assert_equal(str, ssl.gets)
+        }
+      }
+      ssls.each{|ssl| ssl.close }
+    }
+  end
+
+  def test_verify_result
+    start_server(ignore_listener_error: true) { |port|
+      sock = TCPSocket.new("127.0.0.1", port)
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      ssl = OpenSSL::SSL::SSLSocket.new(sock, ctx)
+      ssl.sync_close = true
+      begin
+        assert_raise(OpenSSL::SSL::SSLError){ ssl.connect }
+        assert_equal(OpenSSL::X509::V_ERR_SELF_SIGNED_CERT_IN_CHAIN, ssl.verify_result)
+      ensure
+        ssl.close
+      end
+    }
+
+    start_server { |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      ctx.verify_callback = Proc.new do |preverify_ok, store_ctx|
+        store_ctx.error = OpenSSL::X509::V_OK
+        true
+      end
+      server_connect(port, ctx) { |ssl|
+        assert_equal(OpenSSL::X509::V_OK, ssl.verify_result)
+        ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+      }
+    }
+
+    start_server(ignore_listener_error: true) { |port|
+      sock = TCPSocket.new("127.0.0.1", port)
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      ctx.verify_callback = Proc.new do |preverify_ok, store_ctx|
+        store_ctx.error = OpenSSL::X509::V_ERR_APPLICATION_VERIFICATION
+        false
+      end
+      ssl = OpenSSL::SSL::SSLSocket.new(sock, ctx)
+      ssl.sync_close = true
+      begin
+        assert_raise(OpenSSL::SSL::SSLError){ ssl.connect }
+        assert_equal(OpenSSL::X509::V_ERR_APPLICATION_VERIFICATION, ssl.verify_result)
+      ensure
+        ssl.close
+      end
+    }
+  end
+
+  def test_exception_in_verify_callback_is_ignored
+    start_server(ignore_listener_error: true) { |port|
+      sock = TCPSocket.new("127.0.0.1", port)
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      ctx.verify_callback = Proc.new do |preverify_ok, store_ctx|
+        store_ctx.error = OpenSSL::X509::V_OK
+        raise RuntimeError
+      end
+      ssl = OpenSSL::SSL::SSLSocket.new(sock, ctx)
+      ssl.sync_close = true
+      begin
+        EnvUtil.suppress_warning do
+          # SSLError, not RuntimeError
+          assert_raise(OpenSSL::SSL::SSLError) { ssl.connect }
+        end
+        assert_equal(OpenSSL::X509::V_ERR_CERT_REJECTED, ssl.verify_result)
+      ensure
+        ssl.close
+      end
+    }
+  end
+
+  def test_finished_messages
+    server_finished = nil
+    server_peer_finished = nil
+    client_finished = nil
+    client_peer_finished = nil
+
+    start_server(accept_proc: proc { |server|
+      server_finished = server.finished_message
+      server_peer_finished = server.peer_finished_message
+    }, ctx_proc: proc { |ctx|
+      ctx.max_version = OpenSSL::SSL::TLS1_2_VERSION if libressl?(3, 2, 0)
+    }) { |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.verify_mode = OpenSSL::SSL::VERIFY_NONE
+      ctx.max_version = :TLS1_2 if libressl?(3, 2, 0) && !libressl?(3, 3, 0)
+      server_connect(port, ctx) { |ssl|
+        ssl.puts "abc"; ssl.gets
+
+        client_finished = ssl.finished_message
+        client_peer_finished = ssl.peer_finished_message
+      }
+    }
+    assert_not_nil(server_finished)
+    assert_not_nil(client_finished)
+    assert_equal(server_finished, client_peer_finished)
+    assert_equal(server_peer_finished, client_finished)
+  end
+
+  def test_sslctx_set_params
+    ctx = OpenSSL::SSL::SSLContext.new
+    ctx.set_params
+
+    assert_equal OpenSSL::SSL::VERIFY_PEER, ctx.verify_mode
+    ciphers_names = ctx.ciphers.collect{|v, _, _, _| v }
+    assert ciphers_names.all?{|v| /A(EC)?DH/ !~ v }, "anon ciphers are disabled"
+    assert ciphers_names.all?{|v| /(RC4|MD5|EXP|DES(?!-EDE|-CBC3))/ !~ v }, "weak ciphers are disabled"
+    assert_equal 0, ctx.options & OpenSSL::SSL::OP_DONT_INSERT_EMPTY_FRAGMENTS
+    assert_equal OpenSSL::SSL::OP_NO_COMPRESSION,
+                 ctx.options & OpenSSL::SSL::OP_NO_COMPRESSION
+  end
+
+  def test_post_connect_check_with_anon_ciphers
+    ctx_proc = -> ctx {
+      ctx.ssl_version = :TLSv1_2
+      ctx.ciphers = "aNULL"
+      ctx.tmp_dh = Fixtures.pkey("dh-1")
+      ctx.security_level = 0
+    }
+
+    start_server(ctx_proc: ctx_proc) { |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.ssl_version = :TLSv1_2
+      ctx.ciphers = "aNULL"
+      ctx.security_level = 0
+      server_connect(port, ctx) { |ssl|
+        assert_raise_with_message(OpenSSL::SSL::SSLError, /anonymous cipher suite/i) {
+          ssl.post_connection_check("localhost.localdomain")
+        }
+      }
+    }
+  end
+
+  def test_post_connection_check
+    sslerr = OpenSSL::SSL::SSLError
+
+    start_server { |port|
+      server_connect(port) { |ssl|
+        ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+
+        assert_raise(sslerr){ssl.post_connection_check("localhost.localdomain")}
+        assert_raise(sslerr){ssl.post_connection_check("127.0.0.1")}
+        assert(ssl.post_connection_check("localhost"))
+        assert_raise(sslerr){ssl.post_connection_check("foo.example.com")}
+
+        cert = ssl.peer_cert
+        assert(!OpenSSL::SSL.verify_certificate_identity(cert, "localhost.localdomain"))
+        assert(!OpenSSL::SSL.verify_certificate_identity(cert, "127.0.0.1"))
+        assert(OpenSSL::SSL.verify_certificate_identity(cert, "localhost"))
+        assert(!OpenSSL::SSL.verify_certificate_identity(cert, "foo.example.com"))
+      }
+    }
+
+    exts = [
+      ["keyUsage","keyEncipherment,digitalSignature",true],
+      ["subjectAltName","DNS:localhost.localdomain,IP:127.0.0.1",false],
+    ]
+    @svr_cert = issue_cert(@svr, @svr_key, 4, exts, @ca_cert, @ca_key)
+    start_server { |port|
+      server_connect(port) { |ssl|
+        ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+
+        assert(ssl.post_connection_check("localhost.localdomain"))
+        assert(ssl.post_connection_check("127.0.0.1"))
+        assert_raise(sslerr){ssl.post_connection_check("localhost")}
+        assert_raise(s
