@@ -854,4 +854,230 @@ class OpenSSL::TestSSL < OpenSSL::SSLTestCase
   def test_servername_cb_raises_an_exception_on_unknown_objects
     hostname = 'example.org'
 
-    ctx2 = OpenSSL::SSL::SSLContext
+    ctx2 = OpenSSL::SSL::SSLContext.new
+    ctx2.cert = @svr_cert
+    ctx2.key = @svr_key
+    ctx2.servername_cb = lambda { |args| Object.new }
+
+    sock1, sock2 = socketpair
+
+    s2 = OpenSSL::SSL::SSLSocket.new(sock2, ctx2)
+
+    ctx1 = OpenSSL::SSL::SSLContext.new
+
+    s1 = OpenSSL::SSL::SSLSocket.new(sock1, ctx1)
+    s1.hostname = hostname
+    t = Thread.new {
+      assert_raise(OpenSSL::SSL::SSLError) do
+        s1.connect
+      end
+    }
+
+    assert_raise(ArgumentError) do
+      s2.accept
+    end
+
+    assert t.join
+  ensure
+    sock1.close if sock1
+    sock2.close if sock2
+  end
+
+  def test_accept_errors_include_peeraddr
+    context = OpenSSL::SSL::SSLContext.new
+    context.cert = @svr_cert
+    context.key = @svr_key
+
+    server = TCPServer.new("127.0.0.1", 0)
+    port = server.connect_address.ip_port
+
+    ssl_server = OpenSSL::SSL::SSLServer.new(server, context)
+
+    t = Thread.new do
+      assert_raise_with_message(OpenSSL::SSL::SSLError, /peeraddr=127\.0\.0\.1/) do
+        ssl_server.accept
+      end
+    end
+
+    sock = TCPSocket.new("127.0.0.1", port)
+    sock << "\x00" * 1024
+
+    assert t.join
+  ensure
+    sock&.close
+    server.close
+  end
+
+  def test_verify_hostname_on_connect
+    ctx_proc = proc { |ctx|
+      san = "DNS:a.example.com,DNS:*.b.example.com"
+      san += ",DNS:c*.example.com,DNS:d.*.example.com" unless libressl?(3, 2, 2)
+      exts = [
+        ["keyUsage", "keyEncipherment,digitalSignature", true],
+        ["subjectAltName", san],
+      ]
+
+      ctx.cert = issue_cert(@svr, @svr_key, 4, exts, @ca_cert, @ca_key)
+      ctx.key = @svr_key
+    }
+
+    start_server(ctx_proc: ctx_proc, ignore_listener_error: true) do |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      assert_equal false, ctx.verify_hostname
+      ctx.verify_hostname = true
+      ctx.cert_store = OpenSSL::X509::Store.new
+      ctx.cert_store.add_cert(@ca_cert)
+      ctx.verify_mode = OpenSSL::SSL::VERIFY_PEER
+
+      [
+        ["a.example.com", true],
+        ["A.Example.Com", true],
+        ["x.example.com", false],
+        ["b.example.com", false],
+        ["x.b.example.com", true],
+        ["cx.example.com", true],
+        ["d.x.example.com", false],
+      ].each do |name, expected_ok|
+        next if name.start_with?('cx') if libressl?(3, 2, 2)
+        begin
+          sock = TCPSocket.new("127.0.0.1", port)
+          ssl = OpenSSL::SSL::SSLSocket.new(sock, ctx)
+          ssl.hostname = name
+          if expected_ok
+            ssl.connect
+            ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+          else
+            assert_handshake_error { ssl.connect }
+          end
+        ensure
+          ssl.close if ssl
+          sock.close if sock
+        end
+      end
+    end
+  end
+
+  def test_verify_hostname_failure_error_code
+    ctx_proc = proc { |ctx|
+      exts = [
+        ["keyUsage", "keyEncipherment,digitalSignature", true],
+        ["subjectAltName", "DNS:a.example.com"],
+      ]
+      ctx.cert = issue_cert(@svr, @svr_key, 4, exts, @ca_cert, @ca_key)
+      ctx.key = @svr_key
+    }
+
+    start_server(ctx_proc: ctx_proc, ignore_listener_error: true) do |port|
+      verify_callback_ok = verify_callback_err = nil
+
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.verify_hostname = true
+      ctx.cert_store = OpenSSL::X509::Store.new
+      ctx.cert_store.add_cert(@ca_cert)
+      ctx.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      ctx.verify_callback = -> (preverify_ok, store_ctx) {
+        verify_callback_ok = preverify_ok
+        verify_callback_err = store_ctx.error
+        preverify_ok
+      }
+
+      begin
+        sock = TCPSocket.new("127.0.0.1", port)
+        ssl = OpenSSL::SSL::SSLSocket.new(sock, ctx)
+        ssl.hostname = "b.example.com"
+        assert_handshake_error { ssl.connect }
+        assert_equal false, verify_callback_ok
+        assert_equal OpenSSL::X509::V_ERR_HOSTNAME_MISMATCH, verify_callback_err
+      ensure
+        sock&.close
+      end
+    end
+  end
+
+  def test_connect_certificate_verify_failed_exception_message
+    start_server(ignore_listener_error: true) { |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.set_params
+      # OpenSSL <= 1.1.0: "self signed certificate in certificate chain"
+      # OpenSSL >= 3.0.0: "self-signed certificate in certificate chain"
+      assert_raise_with_message(OpenSSL::SSL::SSLError, /self.signed/) {
+        server_connect(port, ctx)
+      }
+    }
+
+    ctx_proc = proc { |ctx|
+      now = Time.now
+      ctx.cert = issue_cert(@svr, @svr_key, 30, [], @ca_cert, @ca_key,
+                            not_before: now - 7200, not_after: now - 3600)
+    }
+    start_server(ignore_listener_error: true, ctx_proc: ctx_proc) { |port|
+      store = OpenSSL::X509::Store.new
+      store.add_cert(@ca_cert)
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.set_params(cert_store: store)
+      assert_raise_with_message(OpenSSL::SSL::SSLError, /expired/) {
+        server_connect(port, ctx)
+      }
+    }
+  end
+
+  def test_unset_OP_ALL
+    ctx_proc = Proc.new { |ctx|
+      # If OP_DONT_INSERT_EMPTY_FRAGMENTS is not defined, this test is
+      # redundant because the default options already are equal to OP_ALL.
+      # But it also degrades gracefully, so keep it
+      ctx.options = OpenSSL::SSL::OP_ALL
+    }
+    start_server(ctx_proc: ctx_proc) { |port|
+      server_connect(port) { |ssl|
+        ssl.puts('hello')
+        assert_equal("hello\n", ssl.gets)
+      }
+    }
+  end
+
+  def check_supported_protocol_versions
+    possible_versions = [
+      OpenSSL::SSL::SSL3_VERSION,
+      OpenSSL::SSL::TLS1_VERSION,
+      OpenSSL::SSL::TLS1_1_VERSION,
+      OpenSSL::SSL::TLS1_2_VERSION,
+      # OpenSSL 1.1.1
+      defined?(OpenSSL::SSL::TLS1_3_VERSION) && OpenSSL::SSL::TLS1_3_VERSION,
+    ].compact
+
+    # Prepare for testing & do sanity check
+    supported = []
+    possible_versions.each do |ver|
+      catch(:unsupported) {
+        ctx_proc = proc { |ctx|
+          begin
+            ctx.min_version = ctx.max_version = ver
+          rescue ArgumentError, OpenSSL::SSL::SSLError
+            throw :unsupported
+          end
+        }
+        start_server(ctx_proc: ctx_proc, ignore_listener_error: true) do |port|
+          begin
+            server_connect(port) { |ssl|
+              ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+            }
+          rescue OpenSSL::SSL::SSLError, Errno::ECONNRESET
+          else
+            supported << ver
+          end
+        end
+      }
+    end
+    assert_not_empty supported
+
+    supported
+  end
+
+  def test_set_params_min_version
+    supported = check_supported_protocol_versions
+    store = OpenSSL::X509::Store.new
+    store.add_cert(@ca_cert)
+
+    if supported.include?(OpenSSL::SSL::SSL3_VERSION)
+      # SSLContext#set_params properly disables SSL 3.0 b
