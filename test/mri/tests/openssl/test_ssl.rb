@@ -1253,4 +1253,218 @@ class OpenSSL::TestSSL < OpenSSL::SSLTestCase
       # Client doesn't support TLS 1.2
       ctx1 = OpenSSL::SSL::SSLContext.new
       ctx1.options |= OpenSSL::SSL::OP_NO_TLSv1_2
-      assert_handshake_error { server_connect(port, ctx1) {
+      assert_handshake_error { server_connect(port, ctx1) { } }
+
+      # Client supports TLS 1.2 by default
+      ctx2 = OpenSSL::SSL::SSLContext.new
+      ctx2.options |= OpenSSL::SSL::OP_NO_TLSv1_3
+      assert_nothing_raised { server_connect(port, ctx2) { } }
+    }
+  end
+
+  def test_ssl_methods_constant
+    EnvUtil.suppress_warning { # Deprecated in v2.1.0
+      base = [:TLSv1_2, :TLSv1_1, :TLSv1, :SSLv3, :SSLv2, :SSLv23]
+      base.each do |name|
+        assert_include OpenSSL::SSL::SSLContext::METHODS, name
+        assert_include OpenSSL::SSL::SSLContext::METHODS, :"#{name}_client"
+        assert_include OpenSSL::SSL::SSLContext::METHODS, :"#{name}_server"
+      end
+    }
+  end
+
+  def test_renegotiation_cb
+    num_handshakes = 0
+    renegotiation_cb = Proc.new { |ssl| num_handshakes += 1 }
+    ctx_proc = Proc.new { |ctx| ctx.renegotiation_cb = renegotiation_cb }
+    start_server_version(:SSLv23, ctx_proc) { |port|
+      server_connect(port) { |ssl|
+        assert_equal(1, num_handshakes)
+        ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+      }
+    }
+  end
+
+  def test_alpn_protocol_selection_ary
+    advertised = ["http/1.1", "spdy/2"]
+    ctx_proc = Proc.new { |ctx|
+      ctx.alpn_select_cb = -> (protocols) {
+        protocols.first
+      }
+      ctx.alpn_protocols = advertised
+    }
+    start_server_version(:SSLv23, ctx_proc) { |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.alpn_protocols = advertised
+      server_connect(port, ctx) { |ssl|
+        assert_equal(advertised.first, ssl.alpn_protocol)
+        ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+      }
+    }
+  end
+
+  def test_alpn_protocol_selection_cancel
+    sock1, sock2 = socketpair
+
+    ctx1 = OpenSSL::SSL::SSLContext.new
+    ctx1.cert = @svr_cert
+    ctx1.key = @svr_key
+    ctx1.alpn_select_cb = -> (protocols) { nil }
+    ssl1 = OpenSSL::SSL::SSLSocket.new(sock1, ctx1)
+
+    ctx2 = OpenSSL::SSL::SSLContext.new
+    ctx2.alpn_protocols = ["http/1.1"]
+    ssl2 = OpenSSL::SSL::SSLSocket.new(sock2, ctx2)
+
+    t = Thread.new {
+      ssl2.connect_nonblock(exception: false)
+    }
+    assert_raise_with_message(TypeError, /nil/) { ssl1.accept }
+    t.join
+  ensure
+    sock1&.close
+    sock2&.close
+    ssl1&.close
+    ssl2&.close
+    t&.kill
+    t&.join
+  end
+
+  def test_npn_protocol_selection_ary
+    pend "NPN is not supported" unless \
+      OpenSSL::SSL::SSLContext.method_defined?(:npn_select_cb)
+    pend "LibreSSL 2.6 has broken NPN functions" if libressl?(2, 6, 1)
+
+    advertised = ["http/1.1", "spdy/2"]
+    ctx_proc = proc { |ctx| ctx.npn_protocols = advertised }
+    start_server_version(:TLSv1_2, ctx_proc) { |port|
+      selector = lambda { |which|
+        ctx = OpenSSL::SSL::SSLContext.new
+        ctx.npn_select_cb = -> (protocols) { protocols.send(which) }
+        server_connect(port, ctx) { |ssl|
+          assert_equal(advertised.send(which), ssl.npn_protocol)
+        }
+      }
+      selector.call(:first)
+      selector.call(:last)
+    }
+  end
+
+  def test_npn_protocol_selection_enum
+    pend "NPN is not supported" unless \
+      OpenSSL::SSL::SSLContext.method_defined?(:npn_select_cb)
+    pend "LibreSSL 2.6 has broken NPN functions" if libressl?(2, 6, 1)
+
+    advertised = Object.new
+    def advertised.each
+      yield "http/1.1"
+      yield "spdy/2"
+    end
+    ctx_proc = Proc.new { |ctx| ctx.npn_protocols = advertised }
+    start_server_version(:TLSv1_2, ctx_proc) { |port|
+      selector = lambda { |selected, which|
+        ctx = OpenSSL::SSL::SSLContext.new
+        ctx.npn_select_cb = -> (protocols) { protocols.to_a.send(which) }
+        server_connect(port, ctx) { |ssl|
+          assert_equal(selected, ssl.npn_protocol)
+        }
+      }
+      selector.call("http/1.1", :first)
+      selector.call("spdy/2", :last)
+    }
+  end
+
+  def test_npn_protocol_selection_cancel
+    pend "NPN is not supported" unless \
+      OpenSSL::SSL::SSLContext.method_defined?(:npn_select_cb)
+    pend "LibreSSL 2.6 has broken NPN functions" if libressl?(2, 6, 1)
+
+    ctx_proc = Proc.new { |ctx| ctx.npn_protocols = ["http/1.1"] }
+    start_server_version(:TLSv1_2, ctx_proc) { |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.npn_select_cb = -> (protocols) { raise RuntimeError.new }
+      assert_raise(RuntimeError) { server_connect(port, ctx) }
+    }
+  end
+
+  def test_npn_advertised_protocol_too_long
+    pend "NPN is not supported" unless \
+      OpenSSL::SSL::SSLContext.method_defined?(:npn_select_cb)
+    pend "LibreSSL 2.6 has broken NPN functions" if libressl?(2, 6, 1)
+
+    ctx_proc = Proc.new { |ctx| ctx.npn_protocols = ["a" * 256] }
+    start_server_version(:TLSv1_2, ctx_proc) { |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.npn_select_cb = -> (protocols) { protocols.first }
+      assert_handshake_error { server_connect(port, ctx) }
+    }
+  end
+
+  def test_npn_selected_protocol_too_long
+    pend "NPN is not supported" unless \
+      OpenSSL::SSL::SSLContext.method_defined?(:npn_select_cb)
+    pend "LibreSSL 2.6 has broken NPN functions" if libressl?(2, 6, 1)
+
+    ctx_proc = Proc.new { |ctx| ctx.npn_protocols = ["http/1.1"] }
+    start_server_version(:TLSv1_2, ctx_proc) { |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.npn_select_cb = -> (protocols) { "a" * 256 }
+      assert_handshake_error { server_connect(port, ctx) }
+    }
+  end
+
+  def readwrite_loop_safe(ctx, ssl)
+    readwrite_loop(ctx, ssl)
+  rescue OpenSSL::SSL::SSLError
+  end
+
+  def test_close_after_socket_close
+    start_server(server_proc: method(:readwrite_loop_safe)) { |port|
+      sock = TCPSocket.new("127.0.0.1", port)
+      ssl = OpenSSL::SSL::SSLSocket.new(sock)
+      ssl.connect
+      ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+      sock.close
+      assert_nothing_raised do
+        ssl.close
+      end
+    }
+  end
+
+  def test_sync_close_without_connect
+    Socket.open(:INET, :STREAM) {|s|
+      ssl = OpenSSL::SSL::SSLSocket.new(s)
+      ssl.sync_close = true
+      ssl.close
+      assert(s.closed?)
+    }
+  end
+
+  def test_get_ephemeral_key
+    # kRSA
+    ctx_proc1 = proc { |ctx|
+      ctx.ssl_version = :TLSv1_2
+      ctx.ciphers = "kRSA"
+    }
+    start_server(ctx_proc: ctx_proc1, ignore_listener_error: true) do |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.ssl_version = :TLSv1_2
+      ctx.ciphers = "kRSA"
+      begin
+        server_connect(port, ctx) { |ssl| assert_nil ssl.tmp_key }
+      rescue OpenSSL::SSL::SSLError
+        # kRSA seems disabled
+        raise unless $!.message =~ /no cipher/
+      end
+    end
+
+    # DHE
+    # TODO: How to test this with TLS 1.3?
+    ctx_proc2 = proc { |ctx|
+      ctx.ssl_version = :TLSv1_2
+      ctx.ciphers = "EDH"
+      ctx.tmp_dh = Fixtures.pkey("dh-1")
+    }
+    start_server(ctx_proc: ctx_proc2) do |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+    
