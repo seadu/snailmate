@@ -1467,4 +1467,213 @@ class OpenSSL::TestSSL < OpenSSL::SSLTestCase
     }
     start_server(ctx_proc: ctx_proc2) do |port|
       ctx = OpenSSL::SSL::SSLContext.new
-    
+      ctx.ssl_version = :TLSv1_2
+      ctx.ciphers = "EDH"
+      server_connect(port, ctx) { |ssl|
+        assert_instance_of OpenSSL::PKey::DH, ssl.tmp_key
+      }
+    end
+
+    # ECDHE
+    ctx_proc3 = proc { |ctx|
+      ctx.ciphers = "DEFAULT:!kRSA:!kEDH"
+      ctx.ecdh_curves = "P-256"
+    }
+    start_server(ctx_proc: ctx_proc3) do |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.ciphers = "DEFAULT:!kRSA:!kEDH"
+      server_connect(port, ctx) { |ssl|
+        assert_instance_of OpenSSL::PKey::EC, ssl.tmp_key
+        ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+      }
+    end
+  end
+
+  def test_fallback_scsv
+    supported = check_supported_protocol_versions
+    return unless supported.include?(OpenSSL::SSL::TLS1_1_VERSION) &&
+      supported.include?(OpenSSL::SSL::TLS1_2_VERSION)
+
+    pend "Fallback SCSV is not supported" unless \
+      OpenSSL::SSL::SSLContext.method_defined?(:enable_fallback_scsv)
+
+    start_server do |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.max_version = OpenSSL::SSL::TLS1_2_VERSION
+      # Here is OK
+      # TLS1.2 supported and this is what we ask the first time
+      server_connect(port, ctx)
+    end
+
+    ctx_proc = proc { |ctx|
+      ctx.max_version = OpenSSL::SSL::TLS1_1_VERSION
+    }
+    start_server(ctx_proc: ctx_proc) do |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.enable_fallback_scsv
+      ctx.max_version = OpenSSL::SSL::TLS1_1_VERSION
+      # Here is OK too
+      # TLS1.2 not supported, fallback to TLS1.1 and signaling the fallback
+      # Server doesn't support better, so connection OK
+      server_connect(port, ctx)
+    end
+
+    # Here is not OK
+    # TLS1.2 is supported, fallback to TLS1.1 (downgrade attack) and signaling the fallback
+    # Server support better, so refuse the connection
+    sock1, sock2 = socketpair
+    begin
+      # This test is for the downgrade protection mechanism of TLS1.2.
+      # This is why ctx1 bounds max_version == TLS1.2.
+      # Otherwise, this test fails when using openssl 1.1.1 (or later) that supports TLS1.3.
+      # TODO: We may need another test for TLS1.3 because it seems to have a different mechanism.
+      ctx1 = OpenSSL::SSL::SSLContext.new
+      ctx1.max_version = OpenSSL::SSL::TLS1_2_VERSION
+      s1 = OpenSSL::SSL::SSLSocket.new(sock1, ctx1)
+
+      ctx2 = OpenSSL::SSL::SSLContext.new
+      ctx2.enable_fallback_scsv
+      ctx2.max_version = OpenSSL::SSL::TLS1_1_VERSION
+      s2 = OpenSSL::SSL::SSLSocket.new(sock2, ctx2)
+      t = Thread.new {
+        assert_raise_with_message(OpenSSL::SSL::SSLError, /inappropriate fallback/) {
+          s2.connect
+        }
+      }
+      assert_raise_with_message(OpenSSL::SSL::SSLError, /inappropriate fallback/) {
+        s1.accept
+      }
+      t.join
+    ensure
+      sock1.close
+      sock2.close
+    end
+  end
+
+  def test_tmp_dh_callback
+    dh = Fixtures.pkey("dh-1")
+    called = false
+    ctx_proc = -> ctx {
+      ctx.max_version = :TLS1_2
+      ctx.ciphers = "DH:!NULL"
+      ctx.tmp_dh_callback = ->(*args) {
+        called = true
+        dh
+      }
+    }
+    start_server(ctx_proc: ctx_proc) do |port|
+      server_connect(port) { |ssl|
+        assert called, "dh callback should be called"
+        assert_equal dh.to_der, ssl.tmp_key.to_der
+      }
+    end
+  end
+
+  def test_connect_works_when_setting_dh_callback_to_nil
+    ctx_proc = -> ctx {
+      ctx.max_version = :TLS1_2
+      ctx.ciphers = "DH:!NULL" # use DH
+      ctx.tmp_dh_callback = nil
+    }
+    start_server(ctx_proc: ctx_proc) do |port|
+      EnvUtil.suppress_warning { # uses default callback
+        assert_nothing_raised {
+          server_connect(port) { }
+        }
+      }
+    end
+  end
+
+  def test_tmp_dh
+    dh = Fixtures.pkey("dh-1")
+    ctx_proc = -> ctx {
+      ctx.max_version = :TLS1_2
+      ctx.ciphers = "DH:!NULL" # use DH
+      ctx.tmp_dh = dh
+    }
+    start_server(ctx_proc: ctx_proc) do |port|
+      server_connect(port) { |ssl|
+        assert_equal dh.to_der, ssl.tmp_key.to_der
+      }
+    end
+  end
+
+  def test_ecdh_curves_tls12
+    ctx_proc = -> ctx {
+      # Enable both ECDHE (~ TLS 1.2) cipher suites and TLS 1.3
+      ctx.max_version = OpenSSL::SSL::TLS1_2_VERSION
+      ctx.ciphers = "kEECDH"
+      ctx.ecdh_curves = "P-384:P-521"
+    }
+    start_server(ctx_proc: ctx_proc, ignore_listener_error: true) do |port|
+      # Test 1: Client=P-256:P-384, Server=P-384:P-521 --> P-384
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.ecdh_curves = "P-256:P-384"
+      server_connect(port, ctx) { |ssl|
+        cs = ssl.cipher[0]
+        assert_match (/\AECDH/), cs
+        assert_equal "secp384r1", ssl.tmp_key.group.curve_name
+        ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+      }
+
+      # Test 2: Client=P-256, Server=P-521:P-384 --> Fail
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.ecdh_curves = "P-256"
+      assert_raise(OpenSSL::SSL::SSLError) {
+        server_connect(port, ctx) { }
+      }
+
+      # Test 3: Client=P-521:P-384, Server=P-521:P-384 --> P-521
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.ecdh_curves = "P-521:P-384"
+      server_connect(port, ctx) { |ssl|
+        assert_equal "secp521r1", ssl.tmp_key.group.curve_name
+        ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+      }
+    end
+  end
+
+  def test_ecdh_curves_tls13
+    pend "TLS 1.3 not supported" unless tls13_supported?
+
+    ctx_proc = -> ctx {
+      # Assume TLS 1.3 is enabled and chosen by default
+      ctx.ecdh_curves = "P-384:P-521"
+    }
+    start_server(ctx_proc: ctx_proc, ignore_listener_error: true) do |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.ecdh_curves = "P-256:P-384" # disable P-521
+
+      server_connect(port, ctx) { |ssl|
+        assert_equal "TLSv1.3", ssl.ssl_version
+        assert_equal "secp384r1", ssl.tmp_key.group.curve_name
+        ssl.puts "abc"; assert_equal "abc\n", ssl.gets
+      }
+    end
+  end
+
+  def test_security_level
+    ctx = OpenSSL::SSL::SSLContext.new
+    begin
+      ctx.security_level = 1
+    rescue NotImplementedError
+      assert_equal(0, ctx.security_level)
+      return
+    end
+    assert_equal(1, ctx.security_level)
+
+    dsa512 = Fixtures.pkey("dsa512")
+    dsa512_cert = issue_cert(@svr, dsa512, 50, [], @ca_cert, @ca_key)
+    rsa1024 = Fixtures.pkey("rsa1024")
+    rsa1024_cert = issue_cert(@svr, rsa1024, 51, [], @ca_cert, @ca_key)
+
+    assert_raise(OpenSSL::SSL::SSLError) {
+      # 512 bit DSA key is rejected because it offers < 80 bits of security
+      ctx.add_certificate(dsa512_cert, dsa512)
+    }
+    assert_nothing_raised {
+      ctx.add_certificate(rsa1024_cert, rsa1024)
+    }
+    ctx.security_level = 2
+    assert_raise(OpenSSL::SSL::SSLError) {
+      # < 112 bits of securit
