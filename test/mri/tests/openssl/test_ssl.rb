@@ -1676,4 +1676,87 @@ class OpenSSL::TestSSL < OpenSSL::SSLTestCase
     }
     ctx.security_level = 2
     assert_raise(OpenSSL::SSL::SSLError) {
-      # < 112 bits of securit
+      # < 112 bits of security
+      ctx.add_certificate(rsa1024_cert, rsa1024)
+    }
+  end
+
+  def test_dup
+    ctx = OpenSSL::SSL::SSLContext.new
+    sock1, sock2 = socketpair
+    ssl = OpenSSL::SSL::SSLSocket.new(sock1, ctx)
+
+    assert_raise(NoMethodError) { ctx.dup }
+    assert_raise(NoMethodError) { ssl.dup }
+  ensure
+    ssl.close if ssl
+    sock1.close
+    sock2.close
+  end
+
+  def test_freeze_calls_setup
+    bug = "[ruby/openssl#85]"
+    start_server(ignore_listener_error: true) { |port|
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      ctx.freeze
+      assert_raise(OpenSSL::SSL::SSLError, bug) {
+        server_connect(port, ctx)
+      }
+    }
+  end
+
+  def test_fileno
+    ctx = OpenSSL::SSL::SSLContext.new
+    sock1, sock2 = socketpair
+
+    socket = OpenSSL::SSL::SSLSocket.new(sock1)
+    server = OpenSSL::SSL::SSLServer.new(sock2, ctx)
+
+    assert_equal socket.fileno, socket.to_io.fileno
+    assert_equal server.fileno, server.to_io.fileno
+  ensure
+    sock1.close
+    sock2.close
+  end
+
+  private
+
+  def start_server_version(version, ctx_proc = nil,
+                           server_proc = method(:readwrite_loop), &blk)
+    ctx_wrap = Proc.new { |ctx|
+      ctx.ssl_version = version
+      ctx_proc.call(ctx) if ctx_proc
+    }
+    start_server(
+      ctx_proc: ctx_wrap,
+      server_proc: server_proc,
+      ignore_listener_error: true,
+      &blk
+    )
+  end
+
+  def server_connect(port, ctx = nil)
+    sock = TCPSocket.new("127.0.0.1", port)
+    ssl = ctx ? OpenSSL::SSL::SSLSocket.new(sock, ctx) : OpenSSL::SSL::SSLSocket.new(sock)
+    ssl.sync_close = true
+    ssl.connect
+    yield ssl if block_given?
+  ensure
+    if ssl
+      ssl.close
+    elsif sock
+      sock.close
+    end
+  end
+
+  def assert_handshake_error
+    # different OpenSSL versions react differently when facing a SSL/TLS version
+    # that has been marked as forbidden, therefore any of these may be raised
+    assert_raise(OpenSSL::SSL::SSLError, Errno::ECONNRESET, Errno::EPIPE) {
+      yield
+    }
+  end
+end
+
+end
