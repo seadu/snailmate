@@ -353,4 +353,181 @@ source http://gems.example.com/ already present in the cache
       end
     end
 
-    assert_equal [@gem_rep
+    assert_equal [@gem_repo], Gem.sources
+
+    expected = <<-EXPECTED
+    EXPECTED
+
+    assert_equal expected, @ui.output
+    assert_empty @ui.error
+  end
+
+  def test_execute_add_http_rubygems_org_forced
+    rubygems_org = "http://rubygems.org"
+
+    spec_fetcher do |fetcher|
+      fetcher.spec("a", 1)
+    end
+
+    specs = Gem::Specification.map do |spec|
+      [spec.name, spec.version, spec.original_platform]
+    end
+
+    specs_dump_gz = StringIO.new
+    Zlib::GzipWriter.wrap(specs_dump_gz) do |io|
+      Marshal.dump(specs, io)
+    end
+
+    @fetcher.data["#{rubygems_org}/specs.#{@marshal_version}.gz"] = specs_dump_gz.string
+    @cmd.handle_options %W[--force --add #{rubygems_org}]
+
+    @cmd.execute
+
+    expected = "http://rubygems.org added to sources\n"
+    assert_equal expected, ui.output
+
+    source = Gem::Source.new(rubygems_org)
+    assert Gem.sources.include?(source)
+
+    assert_empty ui.error
+  end
+
+  def test_execute_add_https_rubygems_org
+    https_rubygems_org = "https://rubygems.org/"
+
+    spec_fetcher do |fetcher|
+      fetcher.spec "a", 1
+    end
+
+    specs = Gem::Specification.map do |spec|
+      [spec.name, spec.version, spec.original_platform]
+    end
+
+    specs_dump_gz = StringIO.new
+    Zlib::GzipWriter.wrap specs_dump_gz do |io|
+      Marshal.dump specs, io
+    end
+
+    @fetcher.data["#{https_rubygems_org}/specs.#{@marshal_version}.gz"] =
+      specs_dump_gz.string
+
+    @cmd.handle_options %W[--add #{https_rubygems_org}]
+
+    ui = Gem::MockGemUi.new "n"
+
+    use_ui ui do
+      assert_raise Gem::MockGemUi::TermError do
+        @cmd.execute
+      end
+    end
+
+    assert_equal [@gem_repo], Gem.sources
+
+    expected = <<-EXPECTED
+    EXPECTED
+
+    assert_equal expected, @ui.output
+    assert_empty @ui.error
+  end
+
+  def test_execute_add_bad_uri
+    @cmd.handle_options %w[--add beta-gems.example.com]
+
+    use_ui @ui do
+      assert_raise Gem::MockGemUi::TermError do
+        @cmd.execute
+      end
+    end
+
+    assert_equal [@gem_repo], Gem.sources
+
+    expected = <<-EOF
+beta-gems.example.com is not a URI
+    EOF
+
+    assert_equal expected, @ui.output
+    assert_equal "", @ui.error
+  end
+
+  def test_execute_clear_all
+    @cmd.handle_options %w[--clear-all]
+
+    use_ui @ui do
+      @cmd.execute
+    end
+
+    expected = <<-EOF
+*** Removed specs cache ***
+    EOF
+
+    assert_equal expected, @ui.output
+    assert_equal "", @ui.error
+
+    dir = Gem.spec_cache_dir
+    refute File.exist?(dir), "cache dir removed"
+  end
+
+  def test_execute_list
+    @cmd.handle_options %w[--list]
+
+    use_ui @ui do
+      @cmd.execute
+    end
+
+    expected = <<-EOF
+*** CURRENT SOURCES ***
+
+#{@gem_repo}
+    EOF
+
+    assert_equal expected, @ui.output
+    assert_equal "", @ui.error
+  end
+
+  def test_execute_remove
+    @cmd.handle_options %W[--remove #{@gem_repo}]
+
+    use_ui @ui do
+      @cmd.execute
+    end
+
+    expected = "#{@gem_repo} removed from sources\n"
+
+    assert_equal expected, @ui.output
+    assert_equal "", @ui.error
+  end
+
+  def test_execute_remove_no_network
+    spec_fetcher
+
+    @cmd.handle_options %W[--remove #{@gem_repo}]
+
+    @fetcher.data["#{@gem_repo}Marshal.#{Gem.marshal_version}"] = proc do
+      raise Gem::RemoteFetcher::FetchError
+    end
+
+    use_ui @ui do
+      @cmd.execute
+    end
+
+    expected = "#{@gem_repo} removed from sources\n"
+
+    assert_equal expected, @ui.output
+    assert_equal "", @ui.error
+  end
+
+  def test_execute_update
+    @cmd.handle_options %w[--update]
+
+    spec_fetcher do |fetcher|
+      fetcher.gem "a", 1
+    end
+
+    use_ui @ui do
+      @cmd.execute
+    end
+
+    assert_equal "source cache successfully updated\n", @ui.output
+    assert_equal "", @ui.error
+  end
+end
