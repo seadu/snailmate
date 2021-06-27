@@ -58,4 +58,14 @@ describe :rational_divide, shared: true do
   it "calls #/ on the coerced Rational with the coerced Object" do
     rational = Rational(3, 4)
 
-    coerced_r
+    coerced_rational = mock("Coerced Rational")
+    coerced_rational.should_receive(:/).and_return(:result)
+
+    coerced_obj = mock("Coerced Object")
+
+    obj = mock("Object")
+    obj.should_receive(:coerce).and_return([coerced_rational, coerced_obj])
+
+    rational.send(@method, obj).should == :result
+  end
+end
