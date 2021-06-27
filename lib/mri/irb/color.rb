@@ -209,4 +209,38 @@ module IRB # :nodoc:
       end
     end
 
-    # A class to man
+    # A class to manage a state to know whether the current token is for Symbol or not.
+    class SymbolState
+      def initialize
+        # Push `true` to detect Symbol. `false` to increase the nest level for non-Symbol.
+        @stack = []
+      end
+
+      # Return true if the token is a part of Symbol.
+      def scan_token(token)
+        prev_state = @stack.last
+        case token
+        when :on_symbeg, :on_symbols_beg, :on_qsymbols_beg
+          @stack << true
+        when :on_ident, :on_op, :on_const, :on_ivar, :on_cvar, :on_gvar, :on_kw
+          if @stack.last # Pop only when it's Symbol
+            @stack.pop
+            return prev_state
+          end
+        when :on_tstring_beg
+          @stack << false
+        when :on_embexpr_beg
+          @stack << false
+          return prev_state
+        when :on_tstring_end # :on_tstring_end may close Symbol
+          @stack.pop
+          return prev_state
+        when :on_embexpr_end
+          @stack.pop
+        end
+        @stack.last
+      end
+    end
+    private_constant :SymbolState
+  end
+end
