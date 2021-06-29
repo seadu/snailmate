@@ -144,4 +144,272 @@ product_variants:
     available: false
     inventory_quantity: 0
     option1: beige
-    o
+    option2: 44
+    option3:
+  - &product-5-var-6
+    id: 14
+    title: white / 44
+    price: 13900
+    weight: 500
+    compare_at_price: 24900
+    available: false
+    inventory_quantity: 0
+    option1: white
+    option2: 44
+    option3:
+  - &product-6-var-1
+    id: 15
+    title: red
+    price: 2179500
+    weight: 200000
+    compare_at_price:
+    available: true
+    inventory_quantity: 0
+    option1: red
+    option2:
+    option3:
+  - &product-7-var-1
+    id: 16
+    title: black / small
+    price: 1900
+    weight: 200
+    compare_at_price:
+    available: true
+    inventory_quantity: 20
+    option1: black
+    option2: small
+    option3:
+  - &product-7-var-2
+    id: 17
+    title: black / medium
+    price: 1900
+    weight: 200
+    compare_at_price:
+    available: false
+    inventory_quantity: 0
+    option1: black
+    option2: medium
+    option3:
+  - &product-7-var-3
+    id: 18
+    title: black / large
+    price: 1900
+    weight: 200
+    compare_at_price:
+    available: true
+    inventory_quantity: 10
+    option1: black
+    option2: large
+    option3:
+  - &product-7-var-4
+    id: 19
+    title: black / extra large
+    price: 1900
+    weight: 200
+    compare_at_price:
+    available: false
+    inventory_quantity: 0
+    option1: black
+    option2: extra large
+    option3:
+  - &product-8-var-1
+    id: 20
+    title: brown / small
+    price: 5900
+    weight: 400
+    compare_at_price: 6900
+    available: true
+    inventory_quantity: 5
+    option1: brown
+    option2: small
+    option3:
+  - &product-8-var-2
+    id: 21
+    title: brown / medium
+    price: 5900
+    weight: 400
+    compare_at_price: 6900
+    available: false
+    inventory_quantity: 0
+    option1: brown
+    option2: medium
+    option3:
+  - &product-8-var-3
+    id: 22
+    title: brown / large
+    price: 5900
+    weight: 400
+    compare_at_price: 6900
+    available: true
+    inventory_quantity: 10
+    option1: brown
+    option2: large
+    option3:
+  - &product-8-var-4
+    id: 23
+    title: black / small
+    price: 5900
+    weight: 400
+    compare_at_price: 6900
+    available: true
+    inventory_quantity: 10
+    option1: black
+    option2: small
+    option3:
+  - &product-8-var-5
+    id: 24
+    title: black / medium
+    price: 5900
+    weight: 400
+    compare_at_price: 6900
+    available: true
+    inventory_quantity: 10
+    option1: black
+    option2: medium
+    option3:
+  - &product-8-var-6
+    id: 25
+    title: black / large
+    price: 5900
+    weight: 400
+    compare_at_price: 6900
+    available: false
+    inventory_quantity: 0
+    option1: black
+    option2: large
+    option3:
+  - &product-9-var-1
+    id: 26
+    title: Body Only
+    price: 499995
+    weight: 2000
+    compare_at_price:
+    available: true
+    inventory_quantity: 3
+    option1: Body Only
+    option2:
+    option3:
+  - &product-9-var-2
+    id: 27
+    title: Kit with 18-55mm VR lens
+    price: 523995
+    weight: 2000
+    compare_at_price:
+    available: true
+    inventory_quantity: 2
+    option1: Kit with 18-55mm VR lens
+    option2:
+    option3:
+  - &product-9-var-3
+    id: 28
+    title: Kit with 18-200 VR lens
+    price: 552500
+    weight: 2000
+    compare_at_price:
+    available: true
+    inventory_quantity: 3
+    option1: Kit with 18-200 VR lens
+    option2:
+    option3:
+
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+#   Products
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+products:
+  - &product-1
+    id: 1
+    title: Arbor Draft
+    handle: arbor-draft
+    type: Snowboards
+    vendor: Arbor
+    price: 23900
+    price_max: 31900
+    price_min: 23900
+    price_varies: true
+    available: true
+    tags:
+      - season2005
+      - pro
+      - intermediate
+      - wooden
+      - freestyle
+    options:
+      - Length
+      - Style
+    compare_at_price: 49900
+    compare_at_price_max: 50900
+    compare_at_price_min: 49900
+    compare_at_price_varies: true
+    url: /products/arbor-draft
+    featured_image: products/arbor_draft.jpg
+    images:
+      - products/arbor_draft.jpg
+    description:
+      The Arbor Draft snowboard wouldn't exist if Polynesians hadn't figured out how to surf hundreds of years ago. But the Draft does exist, and it's here to bring your urban and park riding to a new level. The board's freaky Tiki design pays homage to culture that inspired snowboarding. It's designed to spin with ease, land smoothly, lock hook-free onto rails, and take the abuse of a pavement pounding or twelve. The Draft will pop off kickers with authority and carve solidly across the pipe. The Draft features targeted Koa wood die cuts inlayed into the deck that enhance the flex pattern. Now bow down to riding's ancestors.
+    variants:
+      - *product-1-var-1
+      - *product-1-var-2
+      - *product-1-var-3
+  - &product-2
+    id: 2
+    title: Arbor Element
+    handle: arbor-element
+    type: Snowboards
+    vendor: Arbor
+    price: 29900
+    price_max: 29900
+    price_min: 29900
+    price_varies: false
+    available: true
+    tags:
+      - season2005
+      - pro
+      - wooden
+      - freestyle
+    options:
+      - Length
+    compare_at_price: 52900
+    compare_at_price_max: 52900
+    compare_at_price_min: 52900
+    compare_at_price_varies: false
+    url: /products/arbor-element
+    featured_image: products/element58.jpg
+    images:
+      - products/element58.jpg
+    description:
+      The Element is a technically advanced all-mountain board for riders who readily transition from one terrain, snow condition, or riding style to another. Its balanced design provides the versatility needed for the true ride-it-all experience. The Element is exceedingly lively, freely initiates, and holds a tight edge at speed. Its structural real-wood topsheet is made with book-matched Koa.
+    variants:
+      - *product-2-var-1
+
+  - &product-3
+    id: 3
+    title: Comic ~ Pastel
+    handle: comic-pastel
+    type: Snowboards
+    vendor: Technine
+    price: 19900
+    price_max: 22900
+    price_min: 19900
+    tags:
+      - season2006
+      - beginner
+      - intermediate
+      - freestyle
+      - purple
+    options:
+      - Length
+    price_varies: true
+    available: true
+    compare_at_price:
+    compare_at_price_max: 0
+    compare_at_price_min: 0
+    compare_at_price_varies: false
+    url: /products/comic-pastel
+    featured_image: products/technine1.jpg
+    images:
+      - products/technine1.jpg
+      - products/technine2.jpg
+      - products/technine_detail.jpg
+    description:
+      2005 Technine Comic Series Description The Comic series was developed to be the ultimate progressive freestyle board in the Techn
