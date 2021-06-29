@@ -10,4 +10,41 @@
 package org.truffleruby.core.exception;
 
 import org.truffleruby.core.klass.RubyClass;
-import org.tru
+import org.truffleruby.language.backtrace.Backtrace;
+
+import com.oracle.truffle.api.interop.ExceptionType;
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
+import com.oracle.truffle.api.object.Shape;
+
+@ExportLibrary(InteropLibrary.class)
+public class RubySystemExit extends RubyException {
+
+    public int exitStatus;
+
+    public RubySystemExit(
+            RubyClass rubyClass,
+            Shape shape,
+            Object message,
+            Backtrace backtrace,
+            Object cause,
+            int exitStatus) {
+        super(rubyClass, shape, message, backtrace, cause);
+        this.exitStatus = exitStatus;
+    }
+
+    // region Exception interop
+    @Override
+    @ExportMessage
+    public ExceptionType getExceptionType() {
+        return ExceptionType.EXIT;
+    }
+
+    @ExportMessage
+    public int getExceptionExitStatus() {
+        return exitStatus;
+    }
+    // endregion
+
+}
