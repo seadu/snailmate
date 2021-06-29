@@ -412,4 +412,183 @@ products:
       - products/technine2.jpg
       - products/technine_detail.jpg
     description:
-      2005 Technine Comic Series Description The Comic series was developed to be the ultimate progressive freestyle board in the Techn
+      2005 Technine Comic Series Description The Comic series was developed to be the ultimate progressive freestyle board in the Technine line. Dependable edge control and a perfect flex pattern for jumping in the park or out of bounds. Landins and progression will come easy with this board and it will help your riding progress to the next level. Street rails, park jibs, backcountry booters and park jumps, this board will do it all.
+    variants:
+      - *product-3-var-1
+      - *product-3-var-2
+      - *product-3-var-3
+
+  - &product-4
+    id: 4
+    title: Comic ~ Orange
+    handle: comic-orange
+    type: Snowboards
+    vendor: Technine
+    price: 19900
+    price_max: 19900
+    price_min: 19900
+    price_varies: false
+    available: true
+    tags:
+      - season2006
+      - beginner
+      - intermediate
+      - freestyle
+      - orange
+    options:
+      - Length
+    compare_at_price: 32900
+    compare_at_price_max: 32900
+    compare_at_price_min: 32900
+    compare_at_price_varies: false
+    url: /products/comic-orange
+    featured_image: products/technine3.jpg
+    images:
+      - products/technine3.jpg
+      - products/technine4.jpg
+    description:
+      2005 Technine Comic Series Description The Comic series was developed to be the ultimate progressive freestyle board in the Technine line. Dependable edge control and a perfect flex pattern for jumping in the park or out of bounds. Landins and progression will come easy with this board and it will help your riding progress to the next level. Street rails, park jibs, backcountry booters and park jumps, this board will do it all.
+    variants:
+      - *product-4-var-1
+
+  - &product-5
+    id: 5
+    title: Burton Boots
+    handle: burton-boots
+    type: Boots
+    vendor: Burton
+    price: 11900
+    price_max: 11900
+    price_min: 11900
+    price_varies: false
+    available: true
+    tags:
+      - season2006
+      - beginner
+      - intermediate
+      - boots
+    options:
+      - Color
+      - Shoe Size
+    compare_at_price: 22900
+    compare_at_price_max: 22900
+    compare_at_price_min: 22900
+    compare_at_price_varies: false
+    url: /products/burton-boots
+    featured_image: products/burton.jpg
+    images:
+      - products/burton.jpg
+    description:
+      The Burton boots are particularly well on snowboards. The very best thing about them is that the according picture is cubic. This makes testing in a Vision testing environment very easy.
+    variants:
+      - *product-5-var-1
+      - *product-5-var-2
+      - *product-5-var-3
+      - *product-5-var-4
+      - *product-5-var-5
+      - *product-5-var-6
+
+  - &product-6
+    id: 6
+    title: Superbike 1198 S
+    handle: superbike
+    type: Superbike
+    vendor: Ducati
+    price: 2179500
+    price_max: 2179500
+    price_min: 2179500
+    price_varies: false
+    available: true
+    tags:
+      - ducati
+      - superbike
+      - bike
+      - street
+      - racing
+      - performance
+    options:
+      - Color
+    compare_at_price:
+    compare_at_price_max: 0
+    compare_at_price_min: 0
+    compare_at_price_varies: false
+    url: /products/superbike
+    featured_image: products/ducati.jpg
+    images:
+      - products/ducati.jpg
+    description:
+      <h3>‘S’ PERFORMANCE</h3>
+      <p>Producing 170hp (125kW) and with a dry weight of just 169kg (372.6lb), the new 1198 S now incorporates more World Superbike technology than ever before by taking the 1198 motor and adding top-of-the-range suspension, lightweight chassis components and a true racing-style traction control system designed for road use.</p>
+      <p>The high performance, fully adjustable 43mm Öhlins forks, which sport low friction titanium nitride-treated fork sliders, respond effortlessly to every imperfection in the tarmac. Beyond their advanced engineering solutions, one of the most important characteristics of Öhlins forks is their ability to communicate the condition and quality of the tyre-to-road contact patch, a feature that puts every rider in superior control. The suspension set-up at the rear is complemented with a fully adjustable Öhlins rear shock equipped with a ride enhancing top-out spring and mounted to a single-sided swingarm for outstanding drive and traction. The front-to-rear Öhlins package is completed with a control-enhancing adjustable steering damper.</p>
+    variants:
+      - *product-6-var-1
+
+  - &product-7
+    id: 7
+    title: Shopify Shirt
+    handle: shopify-shirt
+    type: Shirt
+    vendor: Shopify
+    price: 1900
+    price_max: 1900
+    price_min: 1900
+    price_varies: false
+    available: true
+    tags:
+      - shopify
+      - shirt
+      - apparel
+      - tshirt
+      - clothing
+    options:
+      - Color
+      - Size
+    compare_at_price:
+    compare_at_price_max: 0
+    compare_at_price_min: 0
+    compare_at_price_varies: false
+    url: /products/shopify-shirt
+    featured_image: products/shopify_shirt.png
+    images:
+      - products/shopify_shirt.png
+    description:
+      <p>High Quality Shopify Shirt. Wear your e-commerce solution with pride and attract attention anywhere you go.</p>
+      <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+    variants:
+      - *product-7-var-1
+      - *product-7-var-2
+      - *product-7-var-3
+      - *product-7-var-4
+
+  - &product-8
+    id: 8
+    title: Hooded Sweater
+    handle: hooded-sweater
+    type: Sweater
+    vendor: Stormtech
+    price: 5900
+    price_max: 5900
+    price_min: 5900
+    price_varies: false
+    available: true
+    tags:
+      - sweater
+      - hooded
+      - apparel
+      - clothing
+    options:
+      - Color
+      - Size
+    compare_at_price: 6900
+    compare_at_price_max: 6900
+    compare_at_price_min: 6900
+    compare_at_price_varies: false
+    url: /products/hooded-sweater
+    featured_image: products/hooded-sweater.jpg
+    images:
+      - products/hooded-sweater.jpg
+      - products/hooded-sweater-b.jpg
+    description:
+      <p>Extra comfortable zip up sweater. Durable quality, ideal for any outdoor activities.</p>
+      <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+    
