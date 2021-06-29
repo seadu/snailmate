@@ -1570,3 +1570,203 @@ module Test
       #   end
       #
       #   Test::Unit::Runner.runner = StatisticsRecorder.new
+      #
+      # NOTE: record might be sent more than once per test.  It will be
+      # sent once with the results from the test itself.  If there is a
+      # failure or error in teardown, it will be sent again with the
+      # error or failure.
+
+      def record suite, method, assertions, time, error
+      end
+
+      def location e # :nodoc:
+        last_before_assertion = ""
+
+        return '<empty>' unless e.backtrace # SystemStackError can return nil.
+
+        e.backtrace.reverse_each do |s|
+          break if s =~ /in .(assert|refute|flunk|pass|fail|raise|must|wont)/
+          last_before_assertion = s
+        end
+        last_before_assertion.sub(/:in .*$/, '')
+      end
+
+      ##
+      # Writes status for failed test +meth+ in +klass+ which finished with
+      # exception +e+
+
+      def initialize # :nodoc:
+        @report = []
+        @errors = @failures = @skips = 0
+        @verbose = false
+        @mutex = Thread::Mutex.new
+        @info_signal = Signal.list['INFO']
+        @repeat_count = nil
+      end
+
+      def synchronize # :nodoc:
+        if @mutex then
+          @mutex.synchronize { yield }
+        else
+          yield
+        end
+      end
+
+      def inspect
+        "#<#{self.class.name}: " <<
+        instance_variables.filter_map do |var|
+          next if var == :@option_parser # too big
+          "#{var}=#{instance_variable_get(var).inspect}"
+        end.join(", ") << ">"
+      end
+
+      ##
+      # Top level driver, controls all output and filtering.
+
+      def _run args = []
+        args = process_args args # ARGH!! blame test/unit process_args
+        self.options.merge! args
+
+        puts "Run options: #{help}"
+
+        self.class.plugins.each do |plugin|
+          send plugin
+          break unless report.empty?
+        end
+
+        return failures + errors if self.test_count > 0 # or return nil...
+      rescue Interrupt
+        abort 'Interrupted'
+      end
+
+      ##
+      # Runs test suites matching +filter+.
+
+      def run_tests
+        _run_anything :test
+      end
+
+      ##
+      # Writes status to +io+
+
+      def status io = self.output
+        format = "%d tests, %d assertions, %d failures, %d errors, %d skips"
+        io.puts format % [test_count, assertion_count, failures, errors, skips]
+      end
+
+      prepend Test::Unit::Options
+      prepend Test::Unit::StatusLine
+      prepend Test::Unit::Parallel
+      prepend Test::Unit::Statistics
+      prepend Test::Unit::Skipping
+      prepend Test::Unit::GlobOption
+      prepend Test::Unit::RepeatOption
+      prepend Test::Unit::LoadPathOption
+      prepend Test::Unit::GCOption
+      prepend Test::Unit::ExcludesOption
+      prepend Test::Unit::TimeoutOption
+      prepend Test::Unit::RunCount
+
+      ##
+      # Begins the full test run. Delegates to +runner+'s #_run method.
+
+      def run(argv = [])
+        self.class.runner._run(argv)
+      rescue NoMemoryError
+        system("cat /proc/meminfo") if File.exist?("/proc/meminfo")
+        system("ps x -opid,args,%cpu,%mem,nlwp,rss,vsz,wchan,stat,start,time,etime,blocked,caught,ignored,pending,f") if File.exist?("/bin/ps")
+        raise
+      end
+
+      @@stop_auto_run = false
+      def self.autorun
+        at_exit {
+          Test::Unit::RunCount.run_once {
+            exit(Test::Unit::Runner.new.run(ARGV) || true)
+          } unless @@stop_auto_run
+        } unless @@installed_at_exit
+        @@installed_at_exit = true
+      end
+
+      alias orig_run_suite _run_suite
+
+      # Overriding of Test::Unit::Runner#puke
+      def puke klass, meth, e
+        n = report.size
+        e = case e
+            when Test::Unit::PendedError then
+              @skips += 1
+              return "S" unless @verbose
+              "Skipped:\n#{klass}##{meth} [#{location e}]:\n#{e.message}\n"
+            when Test::Unit::AssertionFailedError then
+              @failures += 1
+              "Failure:\n#{klass}##{meth} [#{location e}]:\n#{e.message}\n"
+            else
+              @errors += 1
+              bt = Test::filter_backtrace(e.backtrace).join "\n    "
+              "Error:\n#{klass}##{meth}:\n#{e.class}: #{e.message.b}\n    #{bt}\n"
+            end
+        @report << e
+        rep = e[0, 1]
+        if Test::Unit::PendedError === e and /no message given\z/ =~ e.message
+          report.slice!(n..-1)
+          rep = "."
+        end
+        rep
+      end
+    end
+
+    class AutoRunner # :nodoc: all
+      class Runner < Test::Unit::Runner
+        include Test::Unit::RequireFiles
+      end
+
+      attr_accessor :to_run, :options
+
+      def initialize(force_standalone = false, default_dir = nil, argv = ARGV)
+        @force_standalone = force_standalone
+        @runner = Runner.new do |files, options|
+          base = options[:base_directory] ||= default_dir
+          files << default_dir if files.empty? and default_dir
+          @to_run = files
+          yield self if block_given?
+          $LOAD_PATH.unshift base if base
+          files
+        end
+        Runner.runner = @runner
+        @options = @runner.option_parser
+        if @force_standalone
+          @options.banner.sub!(/\[options\]/, '\& tests...')
+        end
+        @argv = argv
+      end
+
+      def process_args(*args)
+        @runner.process_args(*args)
+        !@to_run.empty?
+      end
+
+      def run
+        if @force_standalone and not process_args(@argv)
+          abort @options.banner
+        end
+        @runner.run(@argv) || true
+      end
+
+      def self.run(*args)
+        new(*args).run
+      end
+    end
+
+    class ProxyError < StandardError # :nodoc: all
+      def initialize(ex)
+        @message = ex.message
+        @backtrace = ex.backtrace
+      end
+
+      attr_accessor :message, :backtrace
+    end
+  end
+end
+
+Test::Unit::Runner.autorun
