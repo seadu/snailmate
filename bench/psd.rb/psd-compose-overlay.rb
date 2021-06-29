@@ -13,4 +13,5 @@ require 'psd/renderer/compose'
 require 'chunky_png/color'
 
 benchmark do
-  PSD::Compose::overlay(0x11223344, 0x11
+  PSD::Compose::overlay(0x11223344, 0x11223344)
+end
