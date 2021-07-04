@@ -37,4 +37,8 @@ RSpec.describe TimerAction do
   end
 
   it "responds to #register by registering itself with MSpec for appropriate actions" do
-    expect(MSpec).to receive
+    expect(MSpec).to receive(:register).with(:start, @timer)
+    expect(MSpec).to receive(:register).with(:finish, @timer)
+    @timer.register
+  end
+end
