@@ -25,4 +25,91 @@ class Bundler::Thor
 
   # Raised when a command was not found.
   class UndefinedCommandError < Error
-    class SpellCh
+    class SpellChecker
+      attr_reader :error
+
+      def initialize(error)
+        @error = error
+      end
+
+      def corrections
+        @corrections ||= spell_checker.correct(error.command).map(&:inspect)
+      end
+
+      def spell_checker
+        NoKwargSpellChecker.new(error.all_commands)
+      end
+    end
+
+    attr_reader :command, :all_commands
+
+    def initialize(command, all_commands, namespace)
+      @command = command
+      @all_commands = all_commands
+
+      message = "Could not find command #{command.inspect}"
+      message = namespace ? "#{message} in #{namespace.inspect} namespace." : "#{message}."
+
+      super(message)
+    end
+
+    prepend Correctable if Correctable
+  end
+  UndefinedTaskError = UndefinedCommandError
+
+  class AmbiguousCommandError < Error
+  end
+  AmbiguousTaskError = AmbiguousCommandError
+
+  # Raised when a command was found, but not invoked properly.
+  class InvocationError < Error
+  end
+
+  class UnknownArgumentError < Error
+    class SpellChecker
+      attr_reader :error
+
+      def initialize(error)
+        @error = error
+      end
+
+      def corrections
+        @corrections ||=
+          error.unknown.flat_map { |unknown| spell_checker.correct(unknown) }.uniq.map(&:inspect)
+      end
+
+      def spell_checker
+        @spell_checker ||= NoKwargSpellChecker.new(error.switches)
+      end
+    end
+
+    attr_reader :switches, :unknown
+
+    def initialize(switches, unknown)
+      @switches = switches
+      @unknown = unknown
+
+      super("Unknown switches #{unknown.map(&:inspect).join(', ')}")
+    end
+
+    prepend Correctable if Correctable
+  end
+
+  class RequiredArgumentMissingError < InvocationError
+  end
+
+  class MalformattedArgumentError < InvocationError
+  end
+
+  if Correctable
+    if DidYouMean.respond_to?(:correct_error)
+      DidYouMean.correct_error(Bundler::Thor::UndefinedCommandError, UndefinedCommandError::SpellChecker)
+      DidYouMean.correct_error(Bundler::Thor::UnknownArgumentError, UnknownArgumentError::SpellChecker)
+    else
+      DidYouMean::SPELL_CHECKERS.merge!(
+        'Bundler::Thor::UndefinedCommandError' => UndefinedCommandError::SpellChecker,
+        'Bundler::Thor::UnknownArgumentError' => UnknownArgumentError::SpellChecker
+      )
+    end
+  end
+end
