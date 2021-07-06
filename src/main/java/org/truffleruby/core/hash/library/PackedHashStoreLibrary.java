@@ -305,3 +305,259 @@ public class PackedHashStoreLibrary {
     @ExportMessage
     protected static void replace(Object[] store, RubyHash hash, RubyHash dest,
             @Cached @Exclusive PropagateSharingNode propagateSharing) {
+        if (hash == dest) {
+            return;
+        }
+
+        propagateSharing.executePropagate(dest, hash);
+
+        Object storeCopy = copyStore(store);
+        int size = hash.size;
+        dest.store = storeCopy;
+        dest.size = size;
+        dest.defaultBlock = hash.defaultBlock;
+        dest.defaultValue = hash.defaultValue;
+        dest.compareByIdentity = hash.compareByIdentity;
+
+        assert verify(store, hash);
+    }
+
+    @ExportMessage
+    protected static RubyArray shift(Object[] store, RubyHash hash,
+            @CachedLibrary("store") HashStoreLibrary node) {
+
+        assert verify(store, hash);
+        final Object key = getKey(store, 0);
+        final Object value = getValue(store, 0);
+        removeEntry(store, 0);
+        hash.size -= 1;
+        assert verify(store, hash);
+        final RubyLanguage language = RubyLanguage.get(node);
+        final RubyContext context = RubyContext.get(node);
+        return ArrayHelpers.createArray(context, language, new Object[]{ key, value });
+    }
+
+    @ExportMessage
+    protected static void rehash(Object[] store, RubyHash hash,
+            @Cached @Shared CompareHashKeysNode compareHashKeys,
+            @Cached @Shared HashingNodes.ToHash hashNode) {
+
+        assert verify(store, hash);
+        int size = hash.size;
+        for (int n = 0; n < size; n++) {
+            final Object key = getKey(store, n);
+            final int newHash = hashNode.execute(getKey(store, n), hash.compareByIdentity);
+            setHashed(store, n, newHash);
+
+            for (int m = n - 1; m >= 0; m--) {
+                if (getHashed(store, m) == newHash && compareHashKeys.execute(
+                        hash.compareByIdentity,
+                        key,
+                        newHash,
+                        getKey(store, m),
+                        getHashed(store, m))) {
+                    removeEntry(store, n);
+                    size--;
+                    n--;
+                    break;
+                }
+            }
+        }
+        hash.size = size;
+        assert verify(store, hash);
+    }
+
+    @TruffleBoundary
+    @ExportMessage
+    protected static boolean verify(Object[] store, RubyHash hash) {
+        assert hash.store == store;
+        final int size = hash.size;
+        assert store.length == TOTAL_ELEMENTS : store.length;
+
+        for (int i = 0; i < size * ELEMENTS_PER_ENTRY; i++) {
+            assert store[i] != null;
+        }
+
+        for (int n = 0; n < size; n++) {
+            final Object key = getKey(store, n);
+            final Object value = getValue(store, n);
+            assert SharedObjects.assertPropagateSharing(hash, key) : "unshared key in shared Hash: " + key;
+            assert SharedObjects.assertPropagateSharing(hash, value) : "unshared value in shared Hash: " + value;
+        }
+
+        return true;
+    }
+
+    // endregion
+    // region Nodes
+
+    @GenerateUncached
+    @ImportStatic(HashGuards.class)
+    public abstract static class LookupPackedEntryNode extends RubyBaseNode {
+
+        public abstract Object execute(Frame frame, RubyHash hash, Object key, int hashed, PEBiFunction defaultValue);
+
+        @Specialization(
+                guards = {
+                        "isCompareByIdentity(hash) == cachedByIdentity",
+                        "cachedIndex >= 0",
+                        "cachedIndex < hash.size",
+                        "sameKeysAtIndex(refEqual, hash, key, hashed, cachedIndex, cachedByIdentity)" },
+                limit = "1")
+        protected Object getConstantIndexPackedArray(
+                RubyHash hash, Object key, int hashed, PEBiFunction defaultValueNode,
+                @Cached ReferenceEqualNode refEqual,
+                @Cached("isCompareByIdentity(hash)") boolean cachedByIdentity,
+                @Cached("index(refEqual, hash, key, hashed, cachedByIdentity)") int cachedIndex) {
+
+            final Object[] store = (Object[]) hash.store;
+            return getValue(store, cachedIndex);
+        }
+
+        protected int index(ReferenceEqualNode refEqual, RubyHash hash, Object key, int hashed,
+                boolean compareByIdentity) {
+
+            final Object[] store = (Object[]) hash.store;
+            final int size = hash.size;
+            for (int n = 0; n < size; n++) {
+                final int otherHashed = getHashed(store, n);
+                final Object otherKey = getKey(store, n);
+                if (sameKeys(refEqual, compareByIdentity, key, hashed, otherKey, otherHashed)) {
+                    return n;
+                }
+            }
+            return -1;
+        }
+
+        protected boolean sameKeysAtIndex(ReferenceEqualNode refEqual, RubyHash hash, Object key, int hashed,
+                int cachedIndex, boolean cachedByIdentity) {
+
+            final Object[] store = (Object[]) hash.store;
+            final Object otherKey = getKey(store, cachedIndex);
+            final int otherHashed = getHashed(store, cachedIndex);
+            return sameKeys(refEqual, cachedByIdentity, key, hashed, otherKey, otherHashed);
+        }
+
+        private boolean sameKeys(ReferenceEqualNode refEqual, boolean compareByIdentity, Object key, int hashed,
+                Object otherKey, int otherHashed) {
+            return CompareHashKeysNode
+                    .referenceEqualKeys(refEqual, compareByIdentity, key, hashed, otherKey, otherHashed);
+        }
+
+        @ExplodeLoop(kind = LoopExplosionKind.FULL_UNROLL_UNTIL_RETURN)
+        @Specialization(replaces = "getConstantIndexPackedArray")
+        protected Object getPackedArray(
+                Frame frame, RubyHash hash, Object key, int hashed, PEBiFunction defaultValueNode,
+                @Cached CompareHashKeysNode compareHashKeys,
+                @Cached BranchProfile notInHashProfile,
+                @Cached ConditionProfile byIdentityProfile) {
+
+            final boolean compareByIdentity = byIdentityProfile.profile(hash.compareByIdentity);
+            final Object[] store = (Object[]) hash.store;
+            final int size = hash.size;
+            for (int n = 0; n < MAX_ENTRIES; n++) {
+                if (n < size) {
+                    final int otherHashed = getHashed(store, n);
+                    final Object otherKey = getKey(store, n);
+                    if (equalKeys(compareHashKeys, compareByIdentity, key, hashed, otherKey, otherHashed)) {
+                        return getValue(store, n);
+                    }
+                }
+            }
+
+            notInHashProfile.enter();
+            return defaultValueNode.accept(frame, hash, key);
+        }
+
+        protected boolean equalKeys(CompareHashKeysNode compareHashKeys, boolean compareByIdentity, Object key,
+                int hashed, Object otherKey, int otherHashed) {
+            return compareHashKeys.execute(compareByIdentity, key, hashed, otherKey, otherHashed);
+        }
+    }
+
+    public static class SmallHashLiteralNode extends HashLiteralNode {
+
+        @Child private HashingNodes.ToHashByHashCode hashNode;
+        @Child private DispatchNode equalNode;
+        @Child private BooleanCastNode booleanCastNode;
+        @Child private FreezeHashKeyIfNeededNode freezeHashKeyIfNeededNode = FreezeHashKeyIfNeededNodeGen.create();
+        private final BranchProfile duplicateKeyProfile = BranchProfile.create();
+
+        public SmallHashLiteralNode(RubyNode[] keyValues) {
+            super(keyValues);
+        }
+
+        @ExplodeLoop
+        @Override
+        public Object execute(VirtualFrame frame) {
+            final Object[] store = createStore();
+            int size = 0;
+
+            for (int n = 0; n < keyValues.length / 2; n++) {
+                Object key = keyValues[n * 2].execute(frame);
+                key = freezeHashKeyIfNeededNode.executeFreezeIfNeeded(key, false);
+
+                final int hashed = hash(key);
+
+                final Object value = keyValues[n * 2 + 1].execute(frame);
+                boolean duplicateKey = false;
+
+                for (int i = 0; i < n; i++) {
+                    if (i < size &&
+                            hashed == getHashed(store, i) &&
+                            callEqual(key, getKey(store, i))) {
+                        duplicateKeyProfile.enter();
+                        setKey(store, i, key);
+                        setValue(store, i, value);
+                        duplicateKey = true;
+                        break;
+                    }
+                }
+
+                if (!duplicateKey) {
+                    setHashedKeyValue(store, size, hashed, key, value);
+                    size++;
+                }
+            }
+
+            return new RubyHash(
+                    coreLibrary().hashClass,
+                    getLanguage().hashShape,
+                    getContext(),
+                    store,
+                    size,
+                    false);
+        }
+
+        private int hash(Object key) {
+            if (hashNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                hashNode = insert(HashingNodes.ToHashByHashCode.create());
+            }
+            return hashNode.execute(key);
+        }
+
+        private boolean callEqual(Object receiver, Object key) {
+            if (equalNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                equalNode = insert(DispatchNode.create());
+            }
+
+            if (booleanCastNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                booleanCastNode = insert(BooleanCastNode.create());
+            }
+
+            return booleanCastNode.execute(equalNode.call(receiver, "eql?", key));
+        }
+
+        @Override
+        public RubyNode cloneUninitialized() {
+            var copy = new SmallHashLiteralNode(cloneUninitialized(keyValues));
+            return copy.copyFlags(this);
+        }
+
+    }
+
+    // endregion
+}
