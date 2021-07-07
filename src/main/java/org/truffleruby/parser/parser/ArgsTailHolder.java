@@ -46,4 +46,23 @@ public class ArgsTailHolder {
         this.position = position;
         this.blockArg = blockArg;
         this.keywordArgs = keywordArgs;
-        
+        this.keywordRestArg = keywordRestArg;
+    }
+
+    public SourceIndexLength getPosition() {
+        return position;
+    }
+
+    public BlockArgParseNode getBlockArg() {
+        return blockArg;
+    }
+
+    public ListParseNode getKeywordArgs() {
+        return keywordArgs;
+    }
+
+    public KeywordRestArgParseNode getKeywordRestArgNode() {
+        return keywordRestArg;
+    }
+
+}
