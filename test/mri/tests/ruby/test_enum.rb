@@ -259,3 +259,251 @@ class TestEnumerable < Test::Unit::TestCase
     assert_equal(2*(FIXNUM_MAX+1), Array.new(2, FIXNUM_MAX+1).inject(:+))
     assert_equal(10*FIXNUM_MAX, Array.new(10, FIXNUM_MAX).inject(:+))
     assert_equal(0, ([FIXNUM_MAX, 1, -FIXNUM_MAX, -1]*10).inject(:+))
+    assert_equal(FIXNUM_MAX*10, ([FIXNUM_MAX+1, -1]*10).inject(:+))
+    assert_equal(2*FIXNUM_MIN, Array.new(2, FIXNUM_MIN).inject(:+))
+    assert_equal(3*FIXNUM_MIN, Array.new(3, FIXNUM_MIN).inject(:+))
+    assert_equal((FIXNUM_MAX+1).to_f, [FIXNUM_MAX, 1, 0.0].inject(:+))
+    assert_float_equal(10.0, [3.0, 5].inject(2.0, :+))
+    assert_float_equal((FIXNUM_MAX+1).to_f, [0.0, FIXNUM_MAX+1].inject(:+))
+    assert_equal(2.0+3.0i, [2.0, 3.0i].inject(:+))
+  end
+
+  def test_inject_op_redefined
+    assert_separately([], "#{<<~"end;"}\n""end")
+    k = Class.new do
+      include Enumerable
+      def each
+        yield 1
+        yield 2
+        yield 3
+      end
+    end
+    all_assertions_foreach("", *%i[+ * / - %]) do |op|
+      bug = '[ruby-dev:49510] [Bug#12178] should respect redefinition'
+      begin
+        Integer.class_eval do
+          alias_method :orig, op
+          define_method(op) do |x|
+            0
+          end
+        end
+        assert_equal(0, k.new.inject(op), bug)
+      ensure
+        Integer.class_eval do
+          undef_method op
+          alias_method op, :orig
+        end
+      end
+    end;
+  end
+
+  def test_inject_op_private
+    assert_separately([], "#{<<~"end;"}\n""end")
+    k = Class.new do
+      include Enumerable
+      def each
+        yield 1
+        yield 2
+        yield 3
+      end
+    end
+    all_assertions_foreach("", *%i[+ * / - %]) do |op|
+      bug = '[ruby-core:81349] [Bug #13592] should respect visibility'
+      assert_raise_with_message(NoMethodError, /private method/, bug) do
+        begin
+          Integer.class_eval do
+            private op
+          end
+          k.new.inject(op)
+        ensure
+          Integer.class_eval do
+            public op
+          end
+        end
+      end
+    end;
+  end
+
+  def test_inject_array_op_redefined
+    assert_separately([], "#{<<~"end;"}\n""end")
+    all_assertions_foreach("", *%i[+ * / - %]) do |op|
+      bug = '[ruby-dev:49510] [Bug#12178] should respect redefinition'
+      begin
+        Integer.class_eval do
+          alias_method :orig, op
+          define_method(op) do |x|
+            0
+          end
+        end
+        assert_equal(0, [1,2,3].inject(op), bug)
+      ensure
+        Integer.class_eval do
+          undef_method op
+          alias_method op, :orig
+        end
+      end
+    end;
+  end
+
+  def test_inject_array_op_private
+    assert_separately([], "#{<<~"end;"}\n""end")
+    all_assertions_foreach("", *%i[+ * / - %]) do |op|
+      bug = '[ruby-core:81349] [Bug #13592] should respect visibility'
+      assert_raise_with_message(NoMethodError, /private method/, bug) do
+        begin
+          Integer.class_eval do
+            private op
+          end
+          [1,2,3].inject(op)
+        ensure
+          Integer.class_eval do
+            public op
+          end
+        end
+      end
+    end;
+  end
+
+  def test_refine_Enumerable_then_include
+    assert_separately([], "#{<<~"end;"}\n")
+      module RefinementBug
+        refine Enumerable do
+          def refined_method
+            :rm
+          end
+        end
+      end
+      using RefinementBug
+
+      class A
+        include Enumerable
+      end
+
+      assert_equal(:rm, [].refined_method)
+    end;
+  end
+
+  def test_partition
+    assert_equal([[1, 3, 1], [2, 2]], @obj.partition {|x| x % 2 == 1 })
+    cond = ->(x, i) { x % 2 == 1 }
+    assert_equal([[[1, 0], [3, 2], [1, 3]], [[2, 1], [2, 4]]], @obj.each_with_index.partition(&cond))
+  end
+
+  def test_group_by
+    h = { 1 => [1, 1], 2 => [2, 2], 3 => [3] }
+    assert_equal(h, @obj.group_by {|x| x })
+
+    h = {1=>[[1, 0], [1, 3]], 2=>[[2, 1], [2, 4]], 3=>[[3, 2]]}
+    cond = ->(x, i) { x }
+    assert_equal(h, @obj.each_with_index.group_by(&cond))
+  end
+
+  def test_tally
+    h = {1 => 2, 2 => 2, 3 => 1}
+    assert_equal(h, @obj.tally)
+
+    h = {1 => 5, 2 => 2, 3 => 1, 4 => "x"}
+    assert_equal(h, @obj.tally({1 => 3, 4 => "x"}))
+
+    assert_raise(TypeError) do
+      @obj.tally({1 => ""})
+    end
+
+    h = {1 => 2, 2 => 2, 3 => 1}
+    assert_same(h, @obj.tally(h))
+
+    h = {1 => 2, 2 => 2, 3 => 1}.freeze
+    assert_raise(FrozenError) do
+      @obj.tally(h)
+    end
+    assert_equal({1 => 2, 2 => 2, 3 => 1}, h)
+
+    hash_convertible = Object.new
+    def hash_convertible.to_hash
+      {1 => 3, 4 => "x"}
+    end
+    assert_equal({1 => 5, 2 => 2, 3 => 1, 4 => "x"}, @obj.tally(hash_convertible))
+
+    hash_convertible = Object.new
+    def hash_convertible.to_hash
+      {1 => 3, 4 => "x"}.freeze
+    end
+    assert_raise(FrozenError) do
+      @obj.tally(hash_convertible)
+    end
+    assert_equal({1 => 3, 4 => "x"}, hash_convertible.to_hash)
+
+    assert_raise(TypeError) do
+      @obj.tally(BasicObject.new)
+    end
+
+    h = {1 => 2, 2 => 2, 3 => 1}
+    assert_equal(h, @obj.tally(Hash.new(100)))
+    assert_equal(h, @obj.tally(Hash.new {100}))
+  end
+
+  def test_first
+    assert_equal(1, @obj.first)
+    assert_equal([1, 2, 3], @obj.first(3))
+    assert_nil(@empty.first)
+    assert_equal([], @empty.first(10))
+
+    bug5801 = '[ruby-dev:45041]'
+    assert_in_out_err([], <<-'end;', [], /unexpected break/, bug5801)
+      empty = Object.new
+      class << empty
+        attr_reader :block
+        include Enumerable
+        def each(&block)
+          @block = block
+          self
+        end
+      end
+      empty.first
+      empty.block.call
+    end;
+
+    bug18475 = '[ruby-dev:107059]'
+    assert_in_out_err([], <<-'end;', [], /unexpected break/, bug18475)
+      e = Enumerator.new do |g|
+        Thread.new do
+          g << 1
+        end.join
+      end
+
+      e.first
+    end;
+  end
+
+  def test_sort
+    assert_equal([1, 1, 2, 2, 3], @obj.sort)
+    assert_equal([3, 2, 2, 1, 1], @obj.sort {|x, y| y <=> x })
+  end
+
+  def test_sort_by
+    assert_equal([3, 2, 2, 1, 1], @obj.sort_by {|x| -x })
+    assert_equal((1..300).to_a.reverse, (1..300).sort_by {|x| -x })
+
+    cond = ->(x, i) { [-x, i] }
+    assert_equal([[3, 2], [2, 1], [2, 4], [1, 0], [1, 3]], @obj.each_with_index.sort_by(&cond))
+  end
+
+  def test_all
+    assert_equal(true, @obj.all? {|x| x <= 3 })
+    assert_equal(false, @obj.all? {|x| x < 3 })
+    assert_equal(true, @obj.all?)
+    assert_equal(false, [true, true, false].all?)
+    assert_equal(true, [].all?)
+    assert_equal(true, @empty.all?)
+    assert_equal(true, @obj.all?(Integer))
+    assert_equal(false, @obj.all?(1..2))
+  end
+
+  def test_all_with_unused_block
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      [1, 2].all?(1) {|x| x == 3 }
+    EOS
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      (1..2).all?(1) {|x| x == 3 }
+    EOS
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block 
