@@ -506,4 +506,186 @@ class TestEnumerable < Test::Unit::TestCase
     assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
       (1..2).all?(1) {|x| x == 3 }
     EOS
-    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block 
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      3.times.all?(1) {|x| x == 3 }
+    EOS
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      {a: 1, b: 2}.all?([:b, 2]) {|x| x == 4 }
+    EOS
+  end
+
+  def test_any
+    assert_equal(true, @obj.any? {|x| x >= 3 })
+    assert_equal(false, @obj.any? {|x| x > 3 })
+    assert_equal(true, @obj.any?)
+    assert_equal(false, [false, false, false].any?)
+    assert_equal(false, [].any?)
+    assert_equal(false, @empty.any?)
+    assert_equal(true, @obj.any?(1..2))
+    assert_equal(false, @obj.any?(Float))
+    assert_equal(false, [1, 42].any?(Float))
+    assert_equal(true, [1, 4.2].any?(Float))
+    assert_equal(false, {a: 1, b: 2}.any?(->(kv) { kv == [:foo, 42] }))
+    assert_equal(true, {a: 1, b: 2}.any?(->(kv) { kv == [:b, 2] }))
+  end
+
+  def test_any_with_unused_block
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      [1, 23].any?(1) {|x| x == 1 }
+    EOS
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      (1..2).any?(34) {|x| x == 2 }
+    EOS
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      3.times.any?(1) {|x| x == 3 }
+    EOS
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      {a: 1, b: 2}.any?([:b, 2]) {|x| x == 4 }
+    EOS
+  end
+
+  def test_one
+    assert(@obj.one? {|x| x == 3 })
+    assert(!(@obj.one? {|x| x == 1 }))
+    assert(!(@obj.one? {|x| x == 4 }))
+    assert(@obj.one?(3..4))
+    assert(!(@obj.one?(1..2)))
+    assert(!(@obj.one?(4..5)))
+    assert(%w{ant bear cat}.one? {|word| word.length == 4})
+    assert(!(%w{ant bear cat}.one? {|word| word.length > 4}))
+    assert(!(%w{ant bear cat}.one? {|word| word.length < 4}))
+    assert(%w{ant bear cat}.one?(/b/))
+    assert(!(%w{ant bear cat}.one?(/t/)))
+    assert(!([ nil, true, 99 ].one?))
+    assert([ nil, true, false ].one?)
+    assert(![].one?)
+    assert(!@empty.one?)
+    assert([ nil, true, 99 ].one?(Integer))
+  end
+
+  def test_one_with_unused_block
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      [1, 2].one?(1) {|x| x == 3 }
+    EOS
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      (1..2).one?(1) {|x| x == 3 }
+    EOS
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      3.times.one?(1) {|x| x == 3 }
+    EOS
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      {a: 1, b: 2}.one?([:b, 2]) {|x| x == 4 }
+    EOS
+  end
+
+  def test_none
+    assert(@obj.none? {|x| x == 4 })
+    assert(!(@obj.none? {|x| x == 1 }))
+    assert(!(@obj.none? {|x| x == 3 }))
+    assert(@obj.none?(4..5))
+    assert(!(@obj.none?(1..3)))
+    assert(%w{ant bear cat}.none? {|word| word.length == 5})
+    assert(!(%w{ant bear cat}.none? {|word| word.length >= 4}))
+    assert(%w{ant bear cat}.none?(/d/))
+    assert(!(%w{ant bear cat}.none?(/b/)))
+    assert([].none?)
+    assert([nil].none?)
+    assert([nil,false].none?)
+    assert(![nil,false,true].none?)
+    assert(@empty.none?)
+  end
+
+  def test_none_with_unused_block
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      [1, 2].none?(1) {|x| x == 3 }
+    EOS
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      (1..2).none?(1) {|x| x == 3 }
+    EOS
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      3.times.none?(1) {|x| x == 3 }
+    EOS
+    assert_in_out_err [], <<-EOS, [], ["-:1: warning: given block not used"]
+      {a: 1, b: 2}.none?([:b, 2]) {|x| x == 4 }
+    EOS
+  end
+
+  def test_min
+    assert_equal(1, @obj.min)
+    assert_equal(3, @obj.min {|a,b| b <=> a })
+    cond = ->((a, ia), (b, ib)) { (b <=> a).nonzero? or ia <=> ib }
+    assert_equal([3, 2], @obj.each_with_index.min(&cond))
+    enum = %w(albatross dog horse).to_enum
+    assert_equal("albatross", enum.min)
+    assert_equal("dog", enum.min {|a,b| a.length <=> b.length })
+    assert_equal(1, [3,2,1].to_enum.min)
+    assert_equal(%w[albatross dog], enum.min(2))
+    assert_equal(%w[dog horse],
+                 enum.min(2) {|a,b| a.length <=> b.length })
+    assert_equal([13, 14], [20, 32, 32, 21, 30, 25, 29, 13, 14].to_enum.min(2))
+    assert_equal([2, 4, 6, 7], [2, 4, 8, 6, 7].to_enum.min(4))
+  end
+
+  def test_max
+    assert_equal(3, @obj.max)
+    assert_equal(1, @obj.max {|a,b| b <=> a })
+    cond = ->((a, ia), (b, ib)) { (b <=> a).nonzero? or ia <=> ib }
+    assert_equal([1, 3], @obj.each_with_index.max(&cond))
+    enum = %w(albatross dog horse).to_enum
+    assert_equal("horse", enum.max)
+    assert_equal("albatross", enum.max {|a,b| a.length <=> b.length })
+    assert_equal(1, [3,2,1].to_enum.max{|a,b| b <=> a })
+    assert_equal(%w[horse dog], enum.max(2))
+    assert_equal(%w[albatross horse],
+                 enum.max(2) {|a,b| a.length <=> b.length })
+    assert_equal([3, 2], [0, 0, 0, 0, 0, 0, 1, 3, 2].to_enum.max(2))
+  end
+
+  def test_minmax
+    assert_equal([1, 3], @obj.minmax)
+    assert_equal([3, 1], @obj.minmax {|a,b| b <=> a })
+    ary = %w(albatross dog horse)
+    assert_equal(["albatross", "horse"], ary.minmax)
+    assert_equal(["dog", "albatross"], ary.minmax {|a,b| a.length <=> b.length })
+    assert_equal([1, 3], [2,3,1].minmax)
+    assert_equal([3, 1], [2,3,1].minmax {|a,b| b <=> a })
+    assert_equal([1, 3], [2,2,3,3,1,1].minmax)
+    assert_equal([nil, nil], [].minmax)
+  end
+
+  def test_min_by
+    assert_equal(3, @obj.min_by {|x| -x })
+    cond = ->(x, i) { -x }
+    assert_equal([3, 2], @obj.each_with_index.min_by(&cond))
+    a = %w(albatross dog horse)
+    assert_equal("dog", a.min_by {|x| x.length })
+    assert_equal(3, [2,3,1].min_by {|x| -x })
+    assert_equal(%w[dog horse], a.min_by(2) {|x| x.length })
+    assert_equal([13, 14], [20, 32, 32, 21, 30, 25, 29, 13, 14].min_by(2) {|x| x})
+  end
+
+  def test_max_by
+    assert_equal(1, @obj.max_by {|x| -x })
+    cond = ->(x, i) { -x }
+    assert_equal([1, 0], @obj.each_with_index.max_by(&cond))
+    a = %w(albatross dog horse)
+    assert_equal("albatross", a.max_by {|x| x.length })
+    assert_equal(1, [2,3,1].max_by {|x| -x })
+    assert_equal(%w[albatross horse], a.max_by(2) {|x| x.length })
+    assert_equal([3, 2], [0, 0, 0, 0, 0, 0, 1, 3, 2].max_by(2) {|x| x})
+  end
+
+  def test_minmax_by
+    assert_equal([3, 1], @obj.minmax_by {|x| -x })
+    cond = ->(x, i) { -x }
+    assert_equal([[3, 2], [1, 0]], @obj.each_with_index.minmax_by(&cond))
+    a = %w(albatross dog horse)
+    assert_equal(["dog", "albatross"], a.minmax_by {|x| x.length })
+    assert_equal([3, 1], [2,3,1].minmax_by {|x| -x })
+  end
+
+  def test_member
+    assert(@obj.member?(1))
+    assert(!(@obj.member?(4)))
+    assert([1,2,3].member?(1))
+    assert(!(
