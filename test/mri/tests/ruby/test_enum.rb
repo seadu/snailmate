@@ -688,4 +688,247 @@ class TestEnumerable < Test::Unit::TestCase
     assert(@obj.member?(1))
     assert(!(@obj.member?(4)))
     assert([1,2,3].member?(1))
-    assert(!(
+    assert(!([1,2,3].member?(4)))
+  end
+
+  class Foo
+    include Enumerable
+    def each
+      yield 1
+      yield 1,2
+    end
+  end
+
+  def test_each_with_index
+    a = []
+    @obj.each_with_index {|x, i| a << [x, i] }
+    assert_equal([[1,0],[2,1],[3,2],[1,3],[2,4]], a)
+
+    hash = Hash.new
+    %w(cat dog wombat).each_with_index do |item, index|
+      hash[item] = index
+    end
+    assert_equal({"cat"=>0, "wombat"=>2, "dog"=>1}, hash)
+    assert_equal([[1, 0], [[1, 2], 1]], Foo.new.each_with_index.to_a)
+  end
+
+  def test_each_with_object
+    obj = [0, 1]
+    ret = (1..10).each_with_object(obj) {|i, memo|
+      memo[0] += i
+      memo[1] *= i
+    }
+    assert_same(obj, ret)
+    assert_equal([55, 3628800], ret)
+    assert_equal([[1, nil], [[1, 2], nil]], Foo.new.each_with_object(nil).to_a)
+  end
+
+  def test_each_entry
+    assert_equal([1, 2, 3], [1, 2, 3].each_entry.to_a)
+    assert_equal([1, [1, 2]], Foo.new.each_entry.to_a)
+    a = []
+    cond = ->(x, i) { a << x }
+    @obj.each_with_index.each_entry(&cond)
+    assert_equal([1, 2, 3, 1, 2], a)
+  end
+
+  def test_each_slice
+    ary = []
+    (1..10).each_slice(3) {|a| ary << a}
+    assert_equal([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10]], ary)
+
+    bug9749 = '[ruby-core:62060] [Bug #9749]'
+    ary.clear
+    (1..10).each_slice(3, &lambda {|a, *| ary << a})
+    assert_equal([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10]], ary, bug9749)
+
+    ary.clear
+    (1..10).each_slice(10) {|a| ary << a}
+    assert_equal([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]], ary)
+
+    ary.clear
+    (1..10).each_slice(11) {|a| ary << a}
+    assert_equal([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]], ary)
+
+    assert_equal(1..10, (1..10).each_slice(3) { })
+    assert_equal([], [].each_slice(3) { })
+  end
+
+  def test_each_cons
+    ary = []
+    (1..5).each_cons(3) {|a| ary << a}
+    assert_equal([[1, 2, 3], [2, 3, 4], [3, 4, 5]], ary)
+
+    bug9749 = '[ruby-core:62060] [Bug #9749]'
+    ary.clear
+    (1..5).each_cons(3, &lambda {|a, *| ary << a})
+    assert_equal([[1, 2, 3], [2, 3, 4], [3, 4, 5]], ary, bug9749)
+
+    ary.clear
+    (1..5).each_cons(5) {|a| ary << a}
+    assert_equal([[1, 2, 3, 4, 5]], ary)
+
+    ary.clear
+    (1..5).each_cons(6) {|a| ary << a}
+    assert_empty(ary)
+
+    assert_equal(1..5, (1..5).each_cons(3) { })
+    assert_equal([], [].each_cons(3) { })
+  end
+
+  def test_zip
+    assert_equal([[1,1],[2,2],[3,3],[1,1],[2,2]], @obj.zip(@obj))
+    assert_equal([["a",1],["b",2],["c",3]], ["a", "b", "c"].zip(@obj))
+
+    a = []
+    result = @obj.zip([:a, :b, :c]) {|x,y| a << [x, y] }
+    assert_nil result
+    assert_equal([[1,:a],[2,:b],[3,:c],[1,nil],[2,nil]], a)
+
+    a = []
+    cond = ->((x, i), y) { a << [x, y, i] }
+    @obj.each_with_index.zip([:a, :b, :c], &cond)
+    assert_equal([[1,:a,0],[2,:b,1],[3,:c,2],[1,nil,3],[2,nil,4]], a)
+
+    a = []
+    @obj.zip({a: "A", b: "B", c: "C"}) {|x,y| a << [x, y] }
+    assert_equal([[1,[:a,"A"]],[2,[:b,"B"]],[3,[:c,"C"]],[1,nil],[2,nil]], a)
+
+    ary = Object.new
+    def ary.to_a;   [1, 2]; end
+    assert_raise(TypeError) {%w(a b).zip(ary)}
+    def ary.each; [3, 4].each{|e|yield e}; end
+    assert_equal([[1, 3], [2, 4], [3, nil], [1, nil], [2, nil]], @obj.zip(ary))
+    def ary.to_ary; [5, 6]; end
+    assert_equal([[1, 5], [2, 6], [3, nil], [1, nil], [2, nil]], @obj.zip(ary))
+    obj = eval("class C\u{1f5ff}; self; end").new
+    assert_raise_with_message(TypeError, /C\u{1f5ff}/) {(1..1).zip(obj)}
+  end
+
+  def test_take
+    assert_equal([1,2,3], @obj.take(3))
+  end
+
+  def test_take_while
+    assert_equal([1,2], @obj.take_while {|x| x <= 2})
+    cond = ->(x, i) {x <= 2}
+    assert_equal([[1, 0], [2, 1]], @obj.each_with_index.take_while(&cond))
+
+    bug5801 = '[ruby-dev:45040]'
+    @empty.take_while {true}
+    block = @empty.block
+    assert_nothing_raised(bug5801) {100.times {block.call}}
+  end
+
+  def test_drop
+    assert_equal([3,1,2], @obj.drop(2))
+  end
+
+  def test_drop_while
+    assert_equal([3,1,2], @obj.drop_while {|x| x <= 2})
+    cond = ->(x, i) {x <= 2}
+    assert_equal([[3, 2], [1, 3], [2, 4]], @obj.each_with_index.drop_while(&cond))
+  end
+
+  def test_cycle
+    assert_equal([1,2,3,1,2,1,2,3,1,2], @obj.cycle.take(10))
+    a = []
+    @obj.cycle(2) {|x| a << x}
+    assert_equal([1,2,3,1,2,1,2,3,1,2], a)
+    a = []
+    cond = ->(x, i) {a << x}
+    @obj.each_with_index.cycle(2, &cond)
+    assert_equal([1,2,3,1,2,1,2,3,1,2], a)
+  end
+
+  def test_callcc
+    assert_raise(RuntimeError) do
+      c = nil
+      @obj.sort_by {|x| callcc {|c2| c ||= c2 }; x }
+      c.call
+    end
+
+    assert_raise(RuntimeError) do
+      c = nil
+      o = Object.new
+      class << o; self; end.class_eval do
+        define_method(:<=>) do |x|
+          callcc {|c2| c ||= c2 }
+          0
+        end
+      end
+      [o, o].sort_by {|x| x }
+      c.call
+    end
+
+    assert_raise(RuntimeError) do
+      c = nil
+      o = Object.new
+      class << o; self; end.class_eval do
+        define_method(:<=>) do |x|
+          callcc {|c2| c ||= c2 }
+          0
+        end
+      end
+      [o, o, o].sort_by {|x| x }
+      c.call
+    end
+
+    assert_raise_with_message(RuntimeError, /reentered/) do
+      i = 0
+      c = nil
+      o = Object.new
+      class << o; self; end.class_eval do
+        define_method(:<=>) do |x|
+          callcc {|c2| c ||= c2 }
+          i += 1
+          0
+        end
+      end
+      [o, o].min(1)
+      assert_operator(i, :<=, 5, "infinite loop")
+      c.call
+    end
+  end
+
+  def test_reverse_each
+    assert_equal([2,1,3,2,1], @obj.reverse_each.to_a)
+  end
+
+  def test_reverse_each_memory_corruption
+    bug16354 = '[ruby-dev:50867]'
+    assert_normal_exit %q{
+      size = 1000
+      (0...size).reverse_each do |i|
+        i.inspect
+        ObjectSpace.each_object(Array) do |a|
+          a.clear if a.length == size
+        end
+      end
+    }, bug16354
+  end
+
+  def test_chunk
+    e = [].chunk {|elt| true }
+    assert_equal([], e.to_a)
+
+    e = @obj.chunk {|elt| elt & 2 == 0 ? false : true }
+    assert_equal([[false, [1]], [true, [2, 3]], [false, [1]], [true, [2]]], e.to_a)
+
+    e = @obj.chunk {|elt| elt < 3 ? :_alone : true }
+    assert_equal([[:_alone, [1]],
+                  [:_alone, [2]],
+                  [true, [3]],
+                  [:_alone, [1]],
+                  [:_alone, [2]]], e.to_a)
+
+    e = @obj.chunk {|elt| elt == 3 ? :_separator : true }
+    assert_equal([[true, [1, 2]],
+                  [true, [1, 2]]], e.to_a)
+
+    e = @obj.chunk {|elt| elt == 3 ? nil : true }
+    assert_equal([[true, [1, 2]],
+                  [true, [1, 2]]], e.to_a)
+
+    e = @obj.chunk {|elt| :_foo }
+    assert_raise(RuntimeErro
