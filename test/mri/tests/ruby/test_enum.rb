@@ -1171,4 +1171,166 @@ class TestEnumerable < Test::Unit::TestCase
   def test_sum
     class << (enum = Object.new)
       include Enumerable
-    
+      def each
+        yield 3
+        yield 5
+        yield 7
+      end
+    end
+    assert_int_equal(15, enum.sum)
+
+    assert_int_equal(0, [].each.sum)
+    assert_int_equal(3, [3].each.sum)
+    assert_int_equal(8, [3, 5].each.sum)
+    assert_int_equal(15, [3, 5, 7].each.sum)
+    assert_rational_equal(8r, [3, 5r].each.sum)
+    assert_float_equal(15.0, [3, 5, 7.0].each.sum)
+    assert_float_equal(15.0, [3, 5r, 7.0].each.sum)
+    assert_complex_equal(8r + 1i, [3, 5r, 1i].each.sum)
+    assert_complex_equal(15.0 + 1i, [3, 5r, 7.0, 1i].each.sum)
+
+    assert_int_equal(2*FIXNUM_MAX, Array.new(2, FIXNUM_MAX).each.sum)
+    assert_int_equal(2*(FIXNUM_MAX+1), Array.new(2, FIXNUM_MAX+1).each.sum)
+    assert_int_equal(10*FIXNUM_MAX, Array.new(10, FIXNUM_MAX).each.sum)
+    assert_int_equal(0, ([FIXNUM_MAX, 1, -FIXNUM_MAX, -1]*10).each.sum)
+    assert_int_equal(FIXNUM_MAX*10, ([FIXNUM_MAX+1, -1]*10).each.sum)
+    assert_int_equal(2*FIXNUM_MIN, Array.new(2, FIXNUM_MIN).each.sum)
+
+    assert_float_equal(0.0, [].each.sum(0.0))
+    assert_float_equal(3.0, [3].each.sum(0.0))
+    assert_float_equal(3.5, [3].each.sum(0.5))
+    assert_float_equal(8.5, [3.5, 5].each.sum)
+    assert_float_equal(10.5, [2, 8.5].each.sum)
+    assert_float_equal((FIXNUM_MAX+1).to_f, [FIXNUM_MAX, 1, 0.0].each.sum)
+    assert_float_equal((FIXNUM_MAX+1).to_f, [0.0, FIXNUM_MAX+1].each.sum)
+
+    assert_rational_equal(3/2r, [1/2r, 1].each.sum)
+    assert_rational_equal(5/6r, [1/2r, 1/3r].each.sum)
+
+    assert_equal(2.0+3.0i, [2.0, 3.0i].each.sum)
+
+    assert_int_equal(13, [1, 2].each.sum(10))
+    assert_int_equal(16, [1, 2].each.sum(10) {|v| v * 2 })
+
+    yielded = []
+    three = SimpleDelegator.new(3)
+    ary = [1, 2.0, three]
+    assert_float_equal(12.0, ary.each.sum {|x| yielded << x; x * 2 })
+    assert_equal(ary, yielded)
+
+    assert_raise(TypeError) { [Object.new].each.sum }
+
+    large_number = 100000000
+    small_number = 1e-9
+    until (large_number + small_number) == large_number
+      small_number /= 10
+    end
+    assert_float_equal(large_number+(small_number*10), [large_number, *[small_number]*10].each.sum)
+    assert_float_equal(large_number+(small_number*10), [large_number/1r, *[small_number]*10].each.sum)
+    assert_float_equal(large_number+(small_number*11), [small_number, large_number/1r, *[small_number]*10].each.sum)
+    assert_float_equal(small_number, [large_number, small_number, -large_number].each.sum)
+
+    k = Class.new do
+      include Enumerable
+      def initialize(*values)
+        @values = values
+      end
+      def each(&block)
+        @values.each(&block)
+      end
+    end
+    assert_equal(+Float::INFINITY, k.new(0.0, +Float::INFINITY).sum)
+    assert_equal(+Float::INFINITY, k.new(+Float::INFINITY, 0.0).sum)
+    assert_equal(-Float::INFINITY, k.new(0.0, -Float::INFINITY).sum)
+    assert_equal(-Float::INFINITY, k.new(-Float::INFINITY, 0.0).sum)
+    assert_predicate(k.new(-Float::INFINITY, Float::INFINITY).sum, :nan?)
+
+    assert_equal("abc", ["a", "b", "c"].each.sum(""))
+    assert_equal([1, [2], 3], [[1], [[2]], [3]].each.sum([]))
+  end
+
+  def test_hash_sum
+    histogram = { 1 => 6, 2 => 4, 3 => 3, 4 => 7, 5 => 5, 6 => 4 }
+    assert_equal(100, histogram.sum {|v, n| v * n })
+  end
+
+  def test_range_sum
+    assert_int_equal(55, (1..10).sum)
+    assert_float_equal(55.0, (1..10).sum(0.0))
+    assert_int_equal(90, (5..10).sum {|v| v * 2 })
+    assert_float_equal(90.0, (5..10).sum(0.0) {|v| v * 2 })
+    assert_int_equal(0, (2..0).sum)
+    assert_int_equal(5, (2..0).sum(5))
+    assert_int_equal(2, (2..2).sum)
+    assert_int_equal(42, (2...2).sum(42))
+
+    not_a_range = Class.new do
+      include Enumerable # Defines the `#sum` method
+      def each
+        yield 2
+        yield 4
+        yield 6
+      end
+
+      def begin; end
+      def end; end
+    end
+    assert_equal(12, not_a_range.new.sum)
+  end
+
+  def test_uniq
+    src = [1, 1, 1, 1, 2, 2, 3, 4, 5, 6]
+    assert_equal([1, 2, 3, 4, 5, 6], src.uniq.to_a)
+    olympics = {
+      1896 => 'Athens',
+      1900 => 'Paris',
+      1904 => 'Chicago',
+      1906 => 'Athens',
+      1908 => 'Rome',
+    }
+    assert_equal([[1896, "Athens"], [1900, "Paris"], [1904, "Chicago"], [1908, "Rome"]],
+                 olympics.uniq{|k,v| v})
+    assert_equal([1, 2, 3, 4, 5, 10], (1..100).uniq{|x| (x**2) % 10 }.first(6))
+    assert_equal([1, [1, 2]], Foo.new.to_enum.uniq)
+  end
+
+  def test_compact
+    class << (enum = Object.new)
+      include Enumerable
+      def each
+        yield 3
+        yield nil
+        yield 7
+        yield 9
+        yield nil
+      end
+    end
+
+    assert_equal([3, 7, 9], enum.compact)
+  end
+
+  def test_transient_heap_sort_by
+    klass = Class.new do
+      include Comparable
+      attr_reader :i
+      def initialize e
+        @i = e
+      end
+      def <=> other
+        GC.start
+        i <=> other.i
+      end
+    end
+    assert_equal [1, 2, 3, 4, 5], (1..5).sort_by{|e| klass.new e}
+  end
+
+  def test_filter_map
+    @obj = (1..8).to_a
+    assert_equal([4, 8, 12, 16], @obj.filter_map { |i| i * 2 if i.even? })
+    assert_equal([2, 4, 6, 8, 10, 12, 14, 16], @obj.filter_map { |i| i * 2 })
+    assert_equal([0, 0, 0, 0, 0, 0, 0, 0], @obj.filter_map { 0 })
+    assert_equal([], @obj.filter_map { false })
+    assert_equal([], @obj.filter_map { nil })
+    assert_instance_of(Enumerator, @obj.filter_map)
+  end
+end
