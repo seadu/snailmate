@@ -931,4 +931,244 @@ class TestEnumerable < Test::Unit::TestCase
                   [true, [1, 2]]], e.to_a)
 
     e = @obj.chunk {|elt| :_foo }
-    assert_raise(RuntimeErro
+    assert_raise(RuntimeError) { e.to_a }
+
+    e = @obj.chunk.with_index {|elt, i| elt - i }
+    assert_equal([[1, [1, 2, 3]],
+                  [-2, [1, 2]]], e.to_a)
+
+    assert_equal(4, (0..3).chunk.size)
+  end
+
+  def test_slice_before
+    e = [].slice_before {|elt| true }
+    assert_equal([], e.to_a)
+
+    e = @obj.slice_before {|elt| elt.even? }
+    assert_equal([[1], [2,3,1], [2]], e.to_a)
+
+    e = @obj.slice_before {|elt| elt.odd? }
+    assert_equal([[1,2], [3], [1,2]], e.to_a)
+
+    ss = %w[abc defg h ijk l mno pqr st u vw xy z]
+    assert_equal([%w[abc defg h], %w[ijk l], %w[mno], %w[pqr st u vw xy z]],
+                 ss.slice_before(/\A...\z/).to_a)
+    assert_warning("") {ss.slice_before(/\A...\z/).to_a}
+  end
+
+  def test_slice_after0
+    assert_raise(ArgumentError) { [].slice_after }
+  end
+
+  def test_slice_after1
+    e = [].slice_after {|a| flunk "should not be called" }
+    assert_equal([], e.to_a)
+
+    e = [1,2].slice_after(1)
+    assert_equal([[1], [2]], e.to_a)
+
+    e = [1,2].slice_after(3)
+    assert_equal([[1, 2]], e.to_a)
+
+    [true, false].each {|b|
+      block_results = [true, b]
+      e = [1,2].slice_after {|a| block_results.shift }
+      assert_equal([[1], [2]], e.to_a)
+      assert_equal([], block_results)
+
+      block_results = [false, b]
+      e = [1,2].slice_after {|a| block_results.shift }
+      assert_equal([[1, 2]], e.to_a)
+      assert_equal([], block_results)
+    }
+  end
+
+  def test_slice_after_both_pattern_and_block
+    assert_raise(ArgumentError) { [].slice_after(1) {|a| true } }
+  end
+
+  def test_slice_after_continuation_lines
+    lines = ["foo\n", "bar\\\n", "baz\n", "\n", "qux\n"]
+    e = lines.slice_after(/[^\\]\n\z/)
+    assert_equal([["foo\n"], ["bar\\\n", "baz\n"], ["\n", "qux\n"]], e.to_a)
+  end
+
+  def test_slice_before_empty_line
+    lines = ["foo", "", "bar"]
+    e = lines.slice_after(/\A\s*\z/)
+    assert_equal([["foo", ""], ["bar"]], e.to_a)
+  end
+
+  def test_slice_when_0
+    e = [].slice_when {|a, b| flunk "should not be called" }
+    assert_equal([], e.to_a)
+  end
+
+  def test_slice_when_1
+    e = [1].slice_when {|a, b| flunk "should not be called" }
+    assert_equal([[1]], e.to_a)
+  end
+
+  def test_slice_when_2
+    e = [1,2].slice_when {|a,b|
+      assert_equal(1, a)
+      assert_equal(2, b)
+      true
+    }
+    assert_equal([[1], [2]], e.to_a)
+
+    e = [1,2].slice_when {|a,b|
+      assert_equal(1, a)
+      assert_equal(2, b)
+      false
+    }
+    assert_equal([[1, 2]], e.to_a)
+  end
+
+  def test_slice_when_3
+    block_invocations = [
+      lambda {|a, b|
+        assert_equal(1, a)
+        assert_equal(2, b)
+        true
+      },
+      lambda {|a, b|
+        assert_equal(2, a)
+        assert_equal(3, b)
+        false
+      }
+    ]
+    e = [1,2,3].slice_when {|a,b|
+      block_invocations.shift.call(a, b)
+    }
+    assert_equal([[1], [2, 3]], e.to_a)
+    assert_equal([], block_invocations)
+  end
+
+  def test_slice_when_noblock
+    assert_raise(ArgumentError) { [].slice_when }
+  end
+
+  def test_slice_when_contiguously_increasing_integers
+    e = [1,4,9,10,11,12,15,16,19,20,21].slice_when {|i, j| i+1 != j }
+    assert_equal([[1], [4], [9,10,11,12], [15,16], [19,20,21]], e.to_a)
+  end
+
+  def test_chunk_while_contiguously_increasing_integers
+    e = [1,4,9,10,11,12,15,16,19,20,21].chunk_while {|i, j| i+1 == j }
+    assert_equal([[1], [4], [9,10,11,12], [15,16], [19,20,21]], e.to_a)
+  end
+
+  def test_detect
+    @obj = ('a'..'z')
+    assert_equal('c', @obj.detect {|x| x == 'c' })
+
+    proc = Proc.new {|x| x == 'c' }
+    assert_equal('c', @obj.detect(&proc))
+
+    lambda = ->(x) { x == 'c' }
+    assert_equal('c', @obj.detect(&lambda))
+
+    assert_equal(['c',2], @obj.each_with_index.detect {|x, i| x == 'c' })
+
+    proc2 = Proc.new {|x, i| x == 'c' }
+    assert_equal(['c',2], @obj.each_with_index.detect(&proc2))
+
+    bug9605 = '[ruby-core:61340]'
+    lambda2 = ->(x, i) { x == 'c' }
+    assert_equal(['c',2], @obj.each_with_index.detect(&lambda2), bug9605)
+  end
+
+  def test_select
+    @obj = ('a'..'z')
+    assert_equal(['c'], @obj.select {|x| x == 'c' })
+
+    proc = Proc.new {|x| x == 'c' }
+    assert_equal(['c'], @obj.select(&proc))
+
+    lambda = ->(x) { x == 'c' }
+    assert_equal(['c'], @obj.select(&lambda))
+
+    assert_equal([['c',2]], @obj.each_with_index.select {|x, i| x == 'c' })
+
+    proc2 = Proc.new {|x, i| x == 'c' }
+    assert_equal([['c',2]], @obj.each_with_index.select(&proc2))
+
+    bug9605 = '[ruby-core:61340]'
+    lambda2 = ->(x, i) { x == 'c' }
+    assert_equal([['c',2]], @obj.each_with_index.select(&lambda2), bug9605)
+  end
+
+  def test_map
+    @obj = ('a'..'e')
+    assert_equal(['A', 'B', 'C', 'D', 'E'], @obj.map {|x| x.upcase })
+
+    proc = Proc.new {|x| x.upcase }
+    assert_equal(['A', 'B', 'C', 'D', 'E'], @obj.map(&proc))
+
+    lambda = ->(x) { x.upcase }
+    assert_equal(['A', 'B', 'C', 'D', 'E'], @obj.map(&lambda))
+
+    assert_equal([['A',0], ['B',1], ['C',2], ['D',3], ['E',4]],
+      @obj.each_with_index.map {|x, i| [x.upcase, i] })
+
+    proc2 = Proc.new {|x, i| [x.upcase, i] }
+    assert_equal([['A',0], ['B',1], ['C',2], ['D',3], ['E',4]],
+      @obj.each_with_index.map(&proc2))
+
+    lambda2 = ->(x, i) { [x.upcase, i] }
+    assert_equal([['A',0], ['B',1], ['C',2], ['D',3], ['E',4]],
+      @obj.each_with_index.map(&lambda2))
+
+    hash = { a: 'hoge', b: 'fuga' }
+    lambda = -> (k, v) { "#{k}:#{v}" }
+    assert_equal ["a:hoge", "b:fuga"], hash.map(&lambda)
+  end
+
+  def test_flat_map
+    @obj = [[1,2], [3,4]]
+    assert_equal([2,4,6,8], @obj.flat_map {|i| i.map{|j| j*2} })
+
+    proc = Proc.new {|i| i.map{|j| j*2} }
+    assert_equal([2,4,6,8], @obj.flat_map(&proc))
+
+    lambda = ->(i) { i.map{|j| j*2} }
+    assert_equal([2,4,6,8], @obj.flat_map(&lambda))
+
+    assert_equal([[1,2],0,[3,4],1],
+                 @obj.each_with_index.flat_map {|x, i| [x,i] })
+
+    proc2 = Proc.new {|x, i| [x,i] }
+    assert_equal([[1,2],0,[3,4],1],
+                 @obj.each_with_index.flat_map(&proc2))
+
+    lambda2 = ->(x, i) { [x,i] }
+    assert_equal([[1,2],0,[3,4],1],
+                 @obj.each_with_index.flat_map(&lambda2))
+  end
+
+  def assert_typed_equal(e, v, cls, msg=nil)
+    assert_kind_of(cls, v, msg)
+    assert_equal(e, v, msg)
+  end
+
+  def assert_int_equal(e, v, msg=nil)
+    assert_typed_equal(e, v, Integer, msg)
+  end
+
+  def assert_rational_equal(e, v, msg=nil)
+    assert_typed_equal(e, v, Rational, msg)
+  end
+
+  def assert_float_equal(e, v, msg=nil)
+    assert_typed_equal(e, v, Float, msg)
+  end
+
+  def assert_complex_equal(e, v, msg=nil)
+    assert_typed_equal(e, v, Complex, msg)
+  end
+
+  def test_sum
+    class << (enum = Object.new)
+      include Enumerable
+    
