@@ -541,4 +541,28 @@ Init_ossl_engine(void)
     rb_define_method(cEngine, "load_private_key", ossl_engine_load_privkey, -1);
     rb_define_method(cEngine, "load_public_key", ossl_engine_load_pubkey, -1);
     rb_define_method(cEngine, "set_default", ossl_engine_set_default, 1);
-    rb_define_method(cE
+    rb_define_method(cEngine, "ctrl_cmd", ossl_engine_ctrl_cmd, -1);
+    rb_define_method(cEngine, "cmds", ossl_engine_get_cmds, 0);
+    rb_define_method(cEngine, "inspect", ossl_engine_inspect, 0);
+
+    DefEngineConst(METHOD_RSA);
+    DefEngineConst(METHOD_DSA);
+    DefEngineConst(METHOD_DH);
+    DefEngineConst(METHOD_RAND);
+#ifdef ENGINE_METHOD_BN_MOD_EXP
+    DefEngineConst(METHOD_BN_MOD_EXP);
+#endif
+#ifdef ENGINE_METHOD_BN_MOD_EXP_CRT
+    DefEngineConst(METHOD_BN_MOD_EXP_CRT);
+#endif
+    DefEngineConst(METHOD_CIPHERS);
+    DefEngineConst(METHOD_DIGESTS);
+    DefEngineConst(METHOD_ALL);
+    DefEngineConst(METHOD_NONE);
+}
+#else
+void
+Init_ossl_engine(void)
+{
+}
+#endif
