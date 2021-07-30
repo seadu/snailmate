@@ -1,0 +1,3 @@
+
+fails:Readline.basic_quote_characters returns not nil
+fails:Readline.basic_quote_characters= returns the passed string
