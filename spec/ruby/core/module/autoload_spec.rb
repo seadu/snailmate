@@ -158,4 +158,200 @@ describe "Module#autoload" do
     ScratchPad.clear
 
     ModuleSpecs::Autoload::KHash.should be_kind_of(Class)
-    ModuleSpecs::Autoload::KH
+    ModuleSpecs::Autoload::KHash::K.should == :autoload_k
+    ScratchPad.recorded.should be_nil
+  end
+
+  it "ignores the autoload request if the file is already loaded" do
+    filename = fixture(__FILE__, "autoload_s.rb")
+
+    require filename
+
+    ScratchPad.recorded.should == :loaded
+    ScratchPad.clear
+
+    ModuleSpecs::Autoload.autoload :S, filename
+    @remove << :S
+    ModuleSpecs::Autoload.autoload?(:S).should be_nil
+  end
+
+  it "retains the autoload even if the request to require fails" do
+    filename = fixture(__FILE__, "a_path_that_should_not_exist.rb")
+
+    ModuleSpecs::Autoload.autoload :NotThere, filename
+    ModuleSpecs::Autoload.autoload?(:NotThere).should == filename
+
+    -> {
+      require filename
+    }.should raise_error(LoadError)
+
+    ModuleSpecs::Autoload.autoload?(:NotThere).should == filename
+  end
+
+  it "allows multiple autoload constants for a single file" do
+    filename = fixture(__FILE__, "autoload_lm.rb")
+    ModuleSpecs::Autoload.autoload :L, filename
+    ModuleSpecs::Autoload.autoload :M, filename
+    ModuleSpecs::Autoload::L.should == :autoload_l
+    ModuleSpecs::Autoload::M.should == :autoload_m
+  end
+
+  it "runs for an exception condition class and doesn't trample the exception" do
+    filename = fixture(__FILE__, "autoload_ex1.rb")
+    ModuleSpecs::Autoload.autoload :EX1, filename
+    ModuleSpecs::Autoload.use_ex1.should == :good
+  end
+
+  it "considers an autoload constant as loaded when autoload is called for/from the current file" do
+    filename = fixture(__FILE__, "autoload_during_require_current_file.rb")
+    require filename
+
+    ScratchPad.recorded.should be_nil
+  end
+
+  describe "interacting with defined?" do
+    it "does not load the file when referring to the constant in defined?" do
+      module ModuleSpecs::Autoload::Dog
+        autoload :R, fixture(__FILE__, "autoload_exception.rb")
+      end
+
+      defined?(ModuleSpecs::Autoload::Dog::R).should == "constant"
+      ScratchPad.recorded.should be_nil
+
+      ModuleSpecs::Autoload::Dog.should have_constant(:R)
+    end
+
+    it "loads an autoloaded parent when referencing a nested constant" do
+      module ModuleSpecs::Autoload
+        autoload :GoodParent, fixture(__FILE__, "autoload_nested.rb")
+      end
+      @remove << :GoodParent
+
+      defined?(ModuleSpecs::Autoload::GoodParent::Nested).should == 'constant'
+      ScratchPad.recorded.should == :loaded
+    end
+
+    it "returns nil when it fails to load an autoloaded parent when referencing a nested constant" do
+      module ModuleSpecs::Autoload
+        autoload :BadParent, fixture(__FILE__, "autoload_exception.rb")
+      end
+
+      defined?(ModuleSpecs::Autoload::BadParent::Nested).should be_nil
+      ScratchPad.recorded.should == :exception
+    end
+  end
+
+  describe "the autoload is triggered when the same file is required directly" do
+    before :each do
+      module ModuleSpecs::Autoload
+        autoload :RequiredDirectly, fixture(__FILE__, "autoload_required_directly.rb")
+      end
+      @remove << :RequiredDirectly
+      @path = fixture(__FILE__, "autoload_required_directly.rb")
+      @check = -> {
+        [
+          defined?(ModuleSpecs::Autoload::RequiredDirectly),
+          ModuleSpecs::Autoload.autoload?(:RequiredDirectly)
+        ]
+      }
+      ScratchPad.record @check
+    end
+
+    it "with a full path" do
+      @check.call.should == ["constant", @path]
+      require @path
+      ScratchPad.recorded.should == [nil, nil]
+      @check.call.should == ["constant", nil]
+    end
+
+    it "with a relative path" do
+      @check.call.should == ["constant", @path]
+      $:.push File.dirname(@path)
+      begin
+        require "autoload_required_directly.rb"
+      ensure
+        $:.pop
+      end
+      ScratchPad.recorded.should == [nil, nil]
+      @check.call.should == ["constant", nil]
+    end
+
+    it "in a nested require" do
+      nested = fixture(__FILE__, "autoload_required_directly_nested.rb")
+      nested_require = -> {
+        result = nil
+        ScratchPad.record -> {
+          result = @check.call
+        }
+        require nested
+        result
+      }
+      ScratchPad.record nested_require
+
+      @check.call.should == ["constant", @path]
+      require @path
+      ScratchPad.recorded.should == [nil, nil]
+      @check.call.should == ["constant", nil]
+    end
+
+    it "does not raise an error if the autoload constant was not defined" do
+      module ModuleSpecs::Autoload
+        autoload :RequiredDirectlyNoConstant, fixture(__FILE__, "autoload_required_directly_no_constant.rb")
+      end
+      @path = fixture(__FILE__, "autoload_required_directly_no_constant.rb")
+      @remove << :RequiredDirectlyNoConstant
+      @check = -> {
+        [
+            defined?(ModuleSpecs::Autoload::RequiredDirectlyNoConstant),
+            ModuleSpecs::Autoload.constants(false).include?(:RequiredDirectlyNoConstant),
+            ModuleSpecs::Autoload.const_defined?(:RequiredDirectlyNoConstant),
+            ModuleSpecs::Autoload.autoload?(:RequiredDirectlyNoConstant)
+        ]
+      }
+      ScratchPad.record @check
+      @check.call.should == ["constant", true, true, @path]
+      $:.push File.dirname(@path)
+      begin
+        require "autoload_required_directly_no_constant.rb"
+      ensure
+        $:.pop
+      end
+      ScratchPad.recorded.should == [nil, true, false, nil]
+      @check.call.should == [nil, true, false, nil]
+    end
+  end
+
+  describe "after the autoload is triggered by require" do
+    before :each do
+      @path = tmp("autoload.rb")
+    end
+
+    after :each do
+      rm_r @path
+    end
+
+    it "the mapping feature to autoload is removed, and a new autoload with the same path is considered" do
+      ModuleSpecs::Autoload.autoload :RequireMapping1, @path
+      touch(@path) { |f| f.puts "ModuleSpecs::Autoload::RequireMapping1 = 1" }
+      ModuleSpecs::Autoload::RequireMapping1.should == 1
+
+      $LOADED_FEATURES.delete(@path)
+      ModuleSpecs::Autoload.autoload :RequireMapping2, @path[0...-3]
+      @remove << :RequireMapping2
+      touch(@path) { |f| f.puts "ModuleSpecs::Autoload::RequireMapping2 = 2" }
+      ModuleSpecs::Autoload::RequireMapping2.should == 2
+    end
+  end
+
+  describe "during the autoload before the constant is assigned" do
+    before :each do
+      @path = fixture(__FILE__, "autoload_during_autoload.rb")
+      ModuleSpecs::Autoload.autoload :DuringAutoload, @path
+      @remove << :DuringAutoload
+      raise unless ModuleSpecs::Autoload.autoload?(:DuringAutoload) == @path
+    end
+
+    def check_before_during_thread_after(&check)
+      before = check.call
+      to_autoload_thread, from_autoload_thread = Queue.new, Queue.new
+      Scrat
