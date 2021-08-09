@@ -354,4 +354,183 @@ describe "Module#autoload" do
     def check_before_during_thread_after(&check)
       before = check.call
       to_autoload_thread, from_autoload_thread = Queue.new, Queue.new
-      Scrat
+      ScratchPad.record -> {
+        from_autoload_thread.push check.call
+        to_autoload_thread.pop
+      }
+      t = Thread.new {
+        in_loading_thread = from_autoload_thread.pop
+        in_other_thread = check.call
+        to_autoload_thread.push :done
+        [in_loading_thread, in_other_thread]
+      }
+      in_loading_thread, in_other_thread = nil
+      begin
+        ModuleSpecs::Autoload::DuringAutoload
+      ensure
+        in_loading_thread, in_other_thread = t.value
+      end
+      after = check.call
+      [before, in_loading_thread, in_other_thread, after]
+    end
+
+    it "returns nil in autoload thread and 'constant' otherwise for defined?" do
+      results = check_before_during_thread_after {
+        defined?(ModuleSpecs::Autoload::DuringAutoload)
+      }
+      results.should == ['constant', nil, 'constant', 'constant']
+    end
+
+    it "keeps the constant in Module#constants" do
+      results = check_before_during_thread_after {
+        ModuleSpecs::Autoload.constants(false).include?(:DuringAutoload)
+      }
+      results.should == [true, true, true, true]
+    end
+
+    it "returns false in autoload thread and true otherwise for Module#const_defined?" do
+      results = check_before_during_thread_after {
+        ModuleSpecs::Autoload.const_defined?(:DuringAutoload, false)
+      }
+      results.should == [true, false, true, true]
+    end
+
+    it "returns nil in autoload thread and returns the path in other threads for Module#autoload?" do
+      results = check_before_during_thread_after {
+        ModuleSpecs::Autoload.autoload?(:DuringAutoload)
+      }
+      results.should == [@path, nil, @path, nil]
+    end
+  end
+
+  it "does not remove the constant from Module#constants if load fails and keeps it as an autoload" do
+    ModuleSpecs::Autoload.autoload :Fail, @non_existent
+
+    ModuleSpecs::Autoload.const_defined?(:Fail).should == true
+    ModuleSpecs::Autoload.should have_constant(:Fail)
+    ModuleSpecs::Autoload.autoload?(:Fail).should == @non_existent
+
+    -> { ModuleSpecs::Autoload::Fail }.should raise_error(LoadError)
+
+    ModuleSpecs::Autoload.should have_constant(:Fail)
+    ModuleSpecs::Autoload.const_defined?(:Fail).should == true
+    ModuleSpecs::Autoload.autoload?(:Fail).should == @non_existent
+
+    -> { ModuleSpecs::Autoload::Fail }.should raise_error(LoadError)
+  end
+
+  it "does not remove the constant from Module#constants if load raises a RuntimeError and keeps it as an autoload" do
+    path = fixture(__FILE__, "autoload_raise.rb")
+    ScratchPad.record []
+    ModuleSpecs::Autoload.autoload :Raise, path
+
+    ModuleSpecs::Autoload.const_defined?(:Raise).should == true
+    ModuleSpecs::Autoload.should have_constant(:Raise)
+    ModuleSpecs::Autoload.autoload?(:Raise).should == path
+
+    -> { ModuleSpecs::Autoload::Raise }.should raise_error(RuntimeError)
+    ScratchPad.recorded.should == [:raise]
+
+    ModuleSpecs::Autoload.should have_constant(:Raise)
+    ModuleSpecs::Autoload.const_defined?(:Raise).should == true
+    ModuleSpecs::Autoload.autoload?(:Raise).should == path
+
+    -> { ModuleSpecs::Autoload::Raise }.should raise_error(RuntimeError)
+    ScratchPad.recorded.should == [:raise, :raise]
+  end
+
+  ruby_version_is "3.1" do
+    it "removes the constant from Module#constants if the loaded file does not define it" do
+      path = fixture(__FILE__, "autoload_o.rb")
+      ScratchPad.record []
+      ModuleSpecs::Autoload.autoload :O, path
+
+      ModuleSpecs::Autoload.const_defined?(:O).should == true
+      ModuleSpecs::Autoload.should have_constant(:O)
+      ModuleSpecs::Autoload.autoload?(:O).should == path
+
+      -> { ModuleSpecs::Autoload::O }.should raise_error(NameError)
+
+      ModuleSpecs::Autoload.const_defined?(:O).should == false
+      ModuleSpecs::Autoload.should_not have_constant(:O)
+      ModuleSpecs::Autoload.autoload?(:O).should == nil
+      -> { ModuleSpecs::Autoload.const_get(:O) }.should raise_error(NameError)
+    end
+  end
+
+  ruby_version_is ""..."3.1" do
+    it "does not remove the constant from Module#constants if the loaded file does not define it, but leaves it as 'undefined'" do
+      path = fixture(__FILE__, "autoload_o.rb")
+      ScratchPad.record []
+      ModuleSpecs::Autoload.autoload :O, path
+
+      ModuleSpecs::Autoload.const_defined?(:O).should == true
+      ModuleSpecs::Autoload.should have_constant(:O)
+      ModuleSpecs::Autoload.autoload?(:O).should == path
+
+      -> { ModuleSpecs::Autoload::O }.should raise_error(NameError)
+
+      ModuleSpecs::Autoload.const_defined?(:O).should == false
+      ModuleSpecs::Autoload.should have_constant(:O)
+      ModuleSpecs::Autoload.autoload?(:O).should == nil
+      -> { ModuleSpecs::Autoload.const_get(:O) }.should raise_error(NameError)
+    end
+  end
+
+  it "does not try to load the file again if the loaded file did not define the constant" do
+    path = fixture(__FILE__, "autoload_o.rb")
+    ScratchPad.record []
+    ModuleSpecs::Autoload.autoload :NotDefinedByFile, path
+
+    -> { ModuleSpecs::Autoload::NotDefinedByFile }.should raise_error(NameError)
+    ScratchPad.recorded.should == [:loaded]
+    -> { ModuleSpecs::Autoload::NotDefinedByFile }.should raise_error(NameError)
+    ScratchPad.recorded.should == [:loaded]
+
+    Thread.new {
+      -> { ModuleSpecs::Autoload::NotDefinedByFile }.should raise_error(NameError)
+    }.join
+    ScratchPad.recorded.should == [:loaded]
+  end
+
+  it "returns 'constant' on referring the constant with defined?()" do
+    module ModuleSpecs::Autoload::Q
+      autoload :R, fixture(__FILE__, "autoload.rb")
+      defined?(R).should == 'constant'
+    end
+    ModuleSpecs::Autoload::Q.should have_constant(:R)
+  end
+
+  it "does not load the file when removing an autoload constant" do
+    module ModuleSpecs::Autoload::Q
+      autoload :R, fixture(__FILE__, "autoload.rb")
+      remove_const :R
+    end
+    ModuleSpecs::Autoload::Q.should_not have_constant(:R)
+  end
+
+  it "does not load the file when accessing the constants table of the module" do
+    ModuleSpecs::Autoload.autoload :P, @non_existent
+    ModuleSpecs::Autoload.const_defined?(:P).should be_true
+    ModuleSpecs::Autoload.const_defined?("P").should be_true
+  end
+
+  it "loads the file when opening a module that is the autoloaded constant" do
+    module ModuleSpecs::Autoload::U
+      autoload :V, fixture(__FILE__, "autoload_v.rb")
+
+      class V
+        X = get_value
+      end
+    end
+    @remove << :U
+
+    ModuleSpecs::Autoload::U::V::X.should == :autoload_uvx
+  end
+
+  it "loads the file that defines subclass XX::CS_CONST_AUTOLOAD < CS_CONST_AUTOLOAD and CS_CONST_AUTOLOAD is a top level constant" do
+    module ModuleSpecs::Autoload::XX
+      autoload :CS_CONST_AUTOLOAD, fixture(__FILE__, "autoload_subclass.rb")
+    end
+
+    ModuleSpecs::Autoload::XX::CS_CONST_AUTOLOAD.superclass.should == CS_CO
