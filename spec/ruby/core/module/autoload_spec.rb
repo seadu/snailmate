@@ -695,4 +695,229 @@ describe "Module#autoload" do
           module DefinedInPrependedModule
             Prep = :defined_in_prepended_module
           end
-          include DefinedInPrepend
+          include DefinedInPrependedModule
+        }
+        autoload :Prep, fixture(__FILE__, "autoload_callback.rb")
+        Prep.should == :defined_in_prepended_module
+      end
+    end
+
+    it "in a meta class scope" do
+      module ModuleSpecs::Autoload
+        ScratchPad.record -> {
+          class MetaScope
+          end
+        }
+        autoload :MetaScope, fixture(__FILE__, "autoload_callback.rb")
+        class << self
+          def r
+            MetaScope.new
+          end
+        end
+      end
+      ModuleSpecs::Autoload.r.should be_kind_of(ModuleSpecs::Autoload::MetaScope)
+    end
+  end
+
+  # [ruby-core:19127] [ruby-core:29941]
+  it "does NOT raise a NameError when the autoload file did not define the constant and a module is opened with the same name" do
+    module ModuleSpecs::Autoload
+      class W
+        autoload :Y, fixture(__FILE__, "autoload_w.rb")
+
+        class Y
+        end
+      end
+    end
+    @remove << :W
+
+    ModuleSpecs::Autoload::W::Y.should be_kind_of(Class)
+    ScratchPad.recorded.should == :loaded
+  end
+
+  it "does not call #require a second time and does not warn if already loading the same feature with #require" do
+    main = TOPLEVEL_BINDING.eval("self")
+    main.should_not_receive(:require)
+
+    module ModuleSpecs::Autoload
+      autoload :AutoloadDuringRequire, fixture(__FILE__, "autoload_during_require.rb")
+    end
+
+    -> {
+      Kernel.require fixture(__FILE__, "autoload_during_require.rb")
+    }.should_not complain(verbose: true)
+    ModuleSpecs::Autoload::AutoloadDuringRequire.should be_kind_of(Class)
+  end
+
+  it "does not call #require a second time and does not warn if feature sets and trigger autoload on itself" do
+    main = TOPLEVEL_BINDING.eval("self")
+    main.should_not_receive(:require)
+
+    -> {
+      Kernel.require fixture(__FILE__, "autoload_self_during_require.rb")
+    }.should_not complain(verbose: true)
+    ModuleSpecs::Autoload::AutoloadSelfDuringRequire.should be_kind_of(Class)
+  end
+
+  it "handles multiple autoloads in the same file" do
+    $LOAD_PATH.unshift(File.expand_path('../fixtures/multi', __FILE__))
+    begin
+      require 'foo/bar_baz'
+      ModuleSpecs::Autoload::Foo::Bar.should be_kind_of(Class)
+      ModuleSpecs::Autoload::Foo::Baz.should be_kind_of(Class)
+    ensure
+      $LOAD_PATH.shift
+    end
+  end
+
+  it "calls #to_path on non-string filenames" do
+    p = mock('path')
+    p.should_receive(:to_path).and_return @non_existent
+    ModuleSpecs.autoload :A, p
+  end
+
+  it "raises an ArgumentError when an empty filename is given" do
+    -> { ModuleSpecs.autoload :A, "" }.should raise_error(ArgumentError)
+  end
+
+  it "raises a NameError when the constant name starts with a lower case letter" do
+    -> { ModuleSpecs.autoload "a", @non_existent }.should raise_error(NameError)
+  end
+
+  it "raises a NameError when the constant name starts with a number" do
+    -> { ModuleSpecs.autoload "1two", @non_existent }.should raise_error(NameError)
+  end
+
+  it "raises a NameError when the constant name has a space in it" do
+    -> { ModuleSpecs.autoload "a name", @non_existent }.should raise_error(NameError)
+  end
+
+  it "shares the autoload request across dup'ed copies of modules" do
+    require fixture(__FILE__, "autoload_s.rb")
+    @remove << :S
+    filename = fixture(__FILE__, "autoload_t.rb")
+    mod1 = Module.new { autoload :T, filename }
+    -> {
+      ModuleSpecs::Autoload::S = mod1
+    }.should complain(/already initialized constant/)
+    mod2 = mod1.dup
+
+    mod1.autoload?(:T).should == filename
+    mod2.autoload?(:T).should == filename
+
+    mod1::T.should == :autoload_t
+    -> { mod2::T }.should raise_error(NameError)
+  end
+
+  it "raises a TypeError if opening a class with a different superclass than the class defined in the autoload file" do
+    ModuleSpecs::Autoload.autoload :Z, fixture(__FILE__, "autoload_z.rb")
+    class ModuleSpecs::Autoload::ZZ
+    end
+
+    -> do
+      class ModuleSpecs::Autoload::Z < ModuleSpecs::Autoload::ZZ
+      end
+    end.should raise_error(TypeError)
+  end
+
+  it "raises a TypeError if not passed a String or object responding to #to_path for the filename" do
+    name = mock("autoload_name.rb")
+
+    -> { ModuleSpecs::Autoload.autoload :Str, name }.should raise_error(TypeError)
+  end
+
+  it "calls #to_path on non-String filename arguments" do
+    name = mock("autoload_name.rb")
+    name.should_receive(:to_path).and_return("autoload_name.rb")
+
+    -> { ModuleSpecs::Autoload.autoload :Str, name }.should_not raise_error
+  end
+
+  describe "on a frozen module" do
+    it "raises a FrozenError before setting the name" do
+      frozen_module = Module.new.freeze
+      -> { frozen_module.autoload :Foo, @non_existent }.should raise_error(FrozenError)
+      frozen_module.should_not have_constant(:Foo)
+    end
+  end
+
+  describe "when changing $LOAD_PATH" do
+    before do
+      $LOAD_PATH.unshift(File.expand_path('../fixtures/path1', __FILE__))
+    end
+
+    after do
+      $LOAD_PATH.shift
+      $LOAD_PATH.shift
+    end
+
+    it "does not reload a file due to a different load path" do
+      ModuleSpecs::Autoload.autoload :LoadPath, "load_path"
+      ModuleSpecs::Autoload::LoadPath.loaded.should == :autoload_load_path
+    end
+  end
+
+  describe "(concurrently)" do
+    it "blocks a second thread while a first is doing the autoload" do
+      ModuleSpecs::Autoload.autoload :Concur, fixture(__FILE__, "autoload_concur.rb")
+      @remove << :Concur
+
+      start = false
+
+      ScratchPad.record []
+
+      t1_val = nil
+      t2_val = nil
+
+      fin = false
+
+      t1 = Thread.new do
+        Thread.pass until start
+        t1_val = ModuleSpecs::Autoload::Concur
+        ScratchPad.recorded << :t1_post
+        fin = true
+      end
+
+      t2_exc = nil
+
+      t2 = Thread.new do
+        Thread.pass until t1 and t1[:in_autoload_rb]
+        begin
+          t2_val = ModuleSpecs::Autoload::Concur
+        rescue Exception => e
+          t2_exc = e
+        else
+          Thread.pass until fin
+          ScratchPad.recorded << :t2_post
+        end
+      end
+
+      start = true
+
+      t1.join
+      t2.join
+
+      ScratchPad.recorded.should == [:con_pre, :con_post, :t1_post, :t2_post]
+
+      t1_val.should == 1
+      t2_val.should == t1_val
+
+      t2_exc.should be_nil
+    end
+
+    # https://bugs.ruby-lang.org/issues/10892
+    it "blocks others threads while doing an autoload" do
+      file_path     = fixture(__FILE__, "repeated_concurrent_autoload.rb")
+      autoload_path = file_path.sub(/\.rb\Z/, '')
+      mod_count     = 30
+      thread_count  = 16
+
+      mod_names = []
+      mod_count.times do |i|
+        mod_name = :"Mod#{i}"
+        Object.autoload mod_name, autoload_path
+        mod_names << mod_name
+      end
+
+      barrier = ModuleSpecs::CyclicBarrier.new thread_count
+      ScratchPad.record ModuleSpecs::ThreadSafeCounter.ne
