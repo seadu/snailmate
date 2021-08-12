@@ -920,4 +920,93 @@ describe "Module#autoload" do
       end
 
       barrier = ModuleSpecs::CyclicBarrier.new thread_count
-      ScratchPad.record ModuleSpecs::ThreadSafeCounter.ne
+      ScratchPad.record ModuleSpecs::ThreadSafeCounter.new
+
+      threads = (1..thread_count).map do
+        Thread.new do
+          mod_names.each do |mod_name|
+            break false unless barrier.enabled?
+
+            was_last_one_in = barrier.await # wait for all threads to finish the iteration
+            # clean up so we can autoload the same file again
+            $LOADED_FEATURES.delete(file_path) if was_last_one_in && $LOADED_FEATURES.include?(file_path)
+            barrier.await # get ready for race
+
+            begin
+              Object.const_get(mod_name).foo
+            rescue NoMethodError
+              barrier.disable!
+              break false
+            end
+          end
+        end
+      end
+
+      # check that no thread got a NoMethodError because of partially loaded module
+      threads.all? {|t| t.value}.should be_true
+
+      # check that the autoloaded file was evaled exactly once
+      ScratchPad.recorded.get.should == mod_count
+
+      mod_names.each do |mod_name|
+        Object.send(:remove_const, mod_name)
+      end
+    end
+
+    it "raises a NameError in each thread if the constant is not set" do
+      file = fixture(__FILE__, "autoload_never_set.rb")
+      start = false
+
+      threads = Array.new(10) do
+        Thread.new do
+          Thread.pass until start
+          begin
+            ModuleSpecs::Autoload.autoload :NeverSetConstant, file
+            Thread.pass
+            ModuleSpecs::Autoload::NeverSetConstant
+          rescue NameError => e
+            e
+          ensure
+            Thread.pass
+          end
+        end
+      end
+
+      start = true
+      threads.each { |t|
+        t.value.should be_an_instance_of(NameError)
+      }
+    end
+
+    it "raises a LoadError in each thread if the file does not exist" do
+      file = fixture(__FILE__, "autoload_does_not_exist.rb")
+      start = false
+
+      threads = Array.new(10) do
+        Thread.new do
+          Thread.pass until start
+          begin
+            ModuleSpecs::Autoload.autoload :FileDoesNotExist, file
+            Thread.pass
+            ModuleSpecs::Autoload::FileDoesNotExist
+          rescue LoadError => e
+            e
+          ensure
+            Thread.pass
+          end
+        end
+      end
+
+      start = true
+      threads.each { |t|
+        t.value.should be_an_instance_of(LoadError)
+      }
+    end
+  end
+
+  it "loads the registered constant even if the constant was already loaded by another thread" do
+    Thread.new {
+      ModuleSpecs::Autoload::FromThread::D.foo
+    }.value.should == :foo
+  end
+end
