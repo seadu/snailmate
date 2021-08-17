@@ -255,4 +255,22 @@ module WEBrick
     #
     # If +seconds+ is zero or nil, simply executes the block
     if defined?(::TruffleRuby)
- 
+      def timeout(seconds, exception=Timeout::Error, &block)
+        return yield if seconds.nil? or seconds.zero?
+        Timeout.timeout(seconds, exception, &block)
+      end
+    else
+      def timeout(seconds, exception=Timeout::Error)
+        return yield if seconds.nil? or seconds.zero?
+        # raise ThreadError, "timeout within critical session" if Thread.critical
+        id = TimeoutHandler.register(seconds, exception)
+        begin
+          yield(seconds)
+        ensure
+          TimeoutHandler.cancel(id)
+        end
+      end
+    end
+    module_function :timeout
+  end
+end
