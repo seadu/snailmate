@@ -302,4 +302,29 @@ class TestGemPackageTarWriter < Gem::Package::TarTestCase
 
     # note, GNU tar 1.28 is unable to handle this case too,
     # tested with "tar --format=ustar -cPf /tmp/foo.tartar -- /aaaaaa....a"
-    n
+    name = "/" + "a" * 100
+    exception = assert_raise Gem::Package::TooLongFileName do
+      @tar_writer.split_name name
+    end
+    assert_includes exception.message, name
+  end
+
+  def test_split_name_too_long_prefix
+    name = File.join "a" * 155, "b"
+    assert_equal ["b", "a" * 155], @tar_writer.split_name(name)
+
+    name = File.join "a" * 156, "b"
+    exception = assert_raise Gem::Package::TooLongFileName do
+      @tar_writer.split_name name
+    end
+    assert_includes exception.message, name
+  end
+
+  def test_split_name_too_long_total
+    name = "a" * 257
+    exception = assert_raise Gem::Package::TooLongFileName do
+      @tar_writer.split_name name
+    end
+    assert_includes exception.message, name
+  end
+end
