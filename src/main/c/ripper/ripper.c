@@ -225,4 +225,249 @@ enum lex_state_e {
 };
 #define IS_lex_state_for(x, ls)	((x) & (ls))
 #define IS_lex_state_all_for(x, ls) (((x) & (ls)) == (ls))
-#define IS_lex_state(ls)	IS_lex_state_for(p->lex.st
+#define IS_lex_state(ls)	IS_lex_state_for(p->lex.state, (ls))
+#define IS_lex_state_all(ls)	IS_lex_state_all_for(p->lex.state, (ls))
+
+# define SET_LEX_STATE(ls) \
+    parser_set_lex_state(p, ls, __LINE__)
+static inline enum lex_state_e parser_set_lex_state(struct parser_params *p, enum lex_state_e ls, int line);
+
+typedef VALUE stack_type;
+
+static const rb_code_location_t NULL_LOC = { {0, -1}, {0, -1} };
+
+# define SHOW_BITSTACK(stack, name) (p->debug ? rb_parser_show_bitstack(p, stack, name, __LINE__) : (void)0)
+# define BITSTACK_PUSH(stack, n) (((p->stack) = ((p->stack)<<1)|((n)&1)), SHOW_BITSTACK(p->stack, #stack"(push)"))
+# define BITSTACK_POP(stack)	 (((p->stack) = (p->stack) >> 1), SHOW_BITSTACK(p->stack, #stack"(pop)"))
+# define BITSTACK_SET_P(stack)	 (SHOW_BITSTACK(p->stack, #stack), (p->stack)&1)
+# define BITSTACK_SET(stack, n)	 ((p->stack)=(n), SHOW_BITSTACK(p->stack, #stack"(set)"))
+
+/* A flag to identify keyword_do_cond, "do" keyword after condition expression.
+   Examples: `while ... do`, `until ... do`, and `for ... in ... do` */
+#define COND_PUSH(n)	BITSTACK_PUSH(cond_stack, (n))
+#define COND_POP()	BITSTACK_POP(cond_stack)
+#define COND_P()	BITSTACK_SET_P(cond_stack)
+#define COND_SET(n)	BITSTACK_SET(cond_stack, (n))
+
+/* A flag to identify keyword_do_block; "do" keyword after command_call.
+   Example: `foo 1, 2 do`. */
+#define CMDARG_PUSH(n)	BITSTACK_PUSH(cmdarg_stack, (n))
+#define CMDARG_POP()	BITSTACK_POP(cmdarg_stack)
+#define CMDARG_P()	BITSTACK_SET_P(cmdarg_stack)
+#define CMDARG_SET(n)	BITSTACK_SET(cmdarg_stack, (n))
+
+struct vtable {
+    ID *tbl;
+    int pos;
+    int capa;
+    struct vtable *prev;
+};
+
+struct local_vars {
+    struct vtable *args;
+    struct vtable *vars;
+    struct vtable *used;
+# if WARN_PAST_SCOPE
+    struct vtable *past;
+# endif
+    struct local_vars *prev;
+# ifndef RIPPER
+    struct {
+	NODE *outer, *inner, *current;
+    } numparam;
+# endif
+};
+
+enum {
+    ORDINAL_PARAM = -1,
+    NO_PARAM = 0,
+    NUMPARAM_MAX = 9,
+};
+
+#define NUMPARAM_ID_P(id) numparam_id_p(id)
+#define NUMPARAM_ID_TO_IDX(id) (unsigned int)(((id) >> ID_SCOPE_SHIFT) - tNUMPARAM_1 + 1)
+#define NUMPARAM_IDX_TO_ID(idx) TOKEN2LOCALID((tNUMPARAM_1 + (idx) - 1))
+static int
+numparam_id_p(ID id)
+{
+    if (!is_local_id(id)) return 0;
+    unsigned int idx = NUMPARAM_ID_TO_IDX(id);
+    return idx > 0 && idx <= NUMPARAM_MAX;
+}
+static void numparam_name(struct parser_params *p, ID id);
+
+#define DVARS_INHERIT ((void*)1)
+#define DVARS_TOPSCOPE NULL
+#define DVARS_TERMINAL_P(tbl) ((tbl) == DVARS_INHERIT || (tbl) == DVARS_TOPSCOPE)
+
+typedef struct token_info {
+    const char *token;
+    rb_code_position_t beg;
+    int indent;
+    int nonspc;
+    struct token_info *next;
+} token_info;
+
+typedef struct rb_strterm_struct rb_strterm_t;
+
+/*
+    Structure of Lexer Buffer:
+
+ lex.pbeg     lex.ptok     lex.pcur     lex.pend
+    |            |            |            |
+    |------------+------------+------------|
+                 |<---------->|
+                     token
+*/
+struct parser_params {
+    rb_imemo_tmpbuf_t *heap;
+
+    YYSTYPE *lval;
+
+    struct {
+	rb_strterm_t *strterm;
+	VALUE (*gets)(struct parser_params*,VALUE);
+	VALUE input;
+	VALUE prevline;
+	VALUE lastline;
+	VALUE nextline;
+	const char *pbeg;
+	const char *pcur;
+	const char *pend;
+	const char *ptok;
+	union {
+	    long ptr;
+	    VALUE (*call)(VALUE, int);
+	} gets_;
+	enum lex_state_e state;
+	/* track the nest level of any parens "()[]{}" */
+	int paren_nest;
+	/* keep p->lex.paren_nest at the beginning of lambda "->" to detect tLAMBEG and keyword_do_LAMBDA */
+	int lpar_beg;
+	/* track the nest level of only braces "{}" */
+	int brace_nest;
+    } lex;
+    stack_type cond_stack;
+    stack_type cmdarg_stack;
+    int tokidx;
+    int toksiz;
+    int tokline;
+    int heredoc_end;
+    int heredoc_indent;
+    int heredoc_line_indent;
+    char *tokenbuf;
+    struct local_vars *lvtbl;
+    st_table *pvtbl;
+    st_table *pktbl;
+    int line_count;
+    int ruby_sourceline;	/* current line no. */
+    const char *ruby_sourcefile; /* current source file */
+    VALUE ruby_sourcefile_string;
+    rb_encoding *enc;
+    token_info *token_info;
+    VALUE case_labels;
+    VALUE compile_option;
+
+    VALUE debug_buffer;
+    VALUE debug_output;
+
+    ID cur_arg;
+
+    rb_ast_t *ast;
+    int node_id;
+
+    int max_numparam;
+
+    struct lex_context ctxt;
+
+    unsigned int command_start:1;
+    unsigned int eofp: 1;
+    unsigned int ruby__end__seen: 1;
+    unsigned int debug: 1;
+    unsigned int has_shebang: 1;
+    unsigned int token_seen: 1;
+    unsigned int token_info_enabled: 1;
+# if WARN_PAST_SCOPE
+    unsigned int past_scope_enabled: 1;
+# endif
+    unsigned int error_p: 1;
+    unsigned int cr_seen: 1;
+
+#ifndef RIPPER
+    /* Ruby core only */
+
+    unsigned int do_print: 1;
+    unsigned int do_loop: 1;
+    unsigned int do_chomp: 1;
+    unsigned int do_split: 1;
+    unsigned int keep_script_lines: 1;
+
+    NODE *eval_tree_begin;
+    NODE *eval_tree;
+    VALUE error_buffer;
+    VALUE debug_lines;
+    const struct rb_iseq_struct *parent_iseq;
+#else
+    /* Ripper only */
+
+    struct {
+	VALUE token;
+	int line;
+	int col;
+    } delayed;
+
+    VALUE value;
+    VALUE result;
+    VALUE parsing_thread;
+#endif
+};
+
+#define intern_cstr(n,l,en) rb_intern3(n,l,en)
+
+#define STR_NEW(ptr,len) rb_enc_str_new((ptr),(len),p->enc)
+#define STR_NEW0() rb_enc_str_new(0,0,p->enc)
+#define STR_NEW2(ptr) rb_enc_str_new((ptr),strlen(ptr),p->enc)
+#define STR_NEW3(ptr,len,e,func) parser_str_new((ptr),(len),(e),(func),p->enc)
+#define TOK_INTERN() intern_cstr(tok(p), toklen(p), p->enc)
+
+static st_table *
+push_pvtbl(struct parser_params *p)
+{
+    st_table *tbl = p->pvtbl;
+    p->pvtbl = st_init_numtable();
+    return tbl;
+}
+
+static void
+pop_pvtbl(struct parser_params *p, st_table *tbl)
+{
+    st_free_table(p->pvtbl);
+    p->pvtbl = tbl;
+}
+
+static st_table *
+push_pktbl(struct parser_params *p)
+{
+    st_table *tbl = p->pktbl;
+    p->pktbl = 0;
+    return tbl;
+}
+
+static void
+pop_pktbl(struct parser_params *p, st_table *tbl)
+{
+    if (p->pktbl) st_free_table(p->pktbl);
+    p->pktbl = tbl;
+}
+
+RBIMPL_ATTR_NONNULL((1, 2, 3))
+static int parser_yyerror(struct parser_params*, const YYLTYPE *yylloc, const char*);
+RBIMPL_ATTR_NONNULL((1, 2))
+static int parser_yyerror0(struct parser_params*, const char*);
+#define yyerror0(msg) parser_yyerror0(p, (msg))
+#define yyerror1(loc, msg) parser_yyerror(p, (loc), (msg))
+#define yyerror(yylloc, p, msg) parser_yyerror(p, yylloc, msg)
+#define token_flush(ptr) ((ptr)->lex.ptok = (ptr)->lex.pcur)
+
+static void token_info_setup(token_info *ptinfo, const char *ptr, const rb_code_location_t *loc);
+s
