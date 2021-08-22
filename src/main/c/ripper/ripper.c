@@ -470,4 +470,146 @@ static int parser_yyerror0(struct parser_params*, const char*);
 #define token_flush(ptr) ((ptr)->lex.ptok = (ptr)->lex.pcur)
 
 static void token_info_setup(token_info *ptinfo, const char *ptr, const rb_code_location_t *loc);
-s
+static void token_info_push(struct parser_params*, const char *token, const rb_code_location_t *loc);
+static void token_info_pop(struct parser_params*, const char *token, const rb_code_location_t *loc);
+static void token_info_warn(struct parser_params *p, const char *token, token_info *ptinfo_beg, int same, const rb_code_location_t *loc);
+static void token_info_drop(struct parser_params *p, const char *token, rb_code_position_t beg_pos);
+
+#ifdef RIPPER
+#define compile_for_eval	(0)
+#else
+#define compile_for_eval	(p->parent_iseq != 0)
+#endif
+
+#define token_column		((int)(p->lex.ptok - p->lex.pbeg))
+
+#define CALL_Q_P(q) ((q) == TOKEN2VAL(tANDDOT))
+#define NODE_CALL_Q(q) (CALL_Q_P(q) ? NODE_QCALL : NODE_CALL)
+#define NEW_QCALL(q,r,m,a,loc) NEW_NODE(NODE_CALL_Q(q),r,m,a,loc)
+
+#define lambda_beginning_p() (p->lex.lpar_beg == p->lex.paren_nest)
+
+#define ANON_BLOCK_ID '&'
+
+static enum yytokentype yylex(YYSTYPE*, YYLTYPE*, struct parser_params*);
+
+#ifndef RIPPER
+static inline void
+rb_discard_node(struct parser_params *p, NODE *n)
+{
+    rb_ast_delete_node(p->ast, n);
+}
+#endif
+
+#ifdef RIPPER
+static inline VALUE
+add_mark_object(struct parser_params *p, VALUE obj)
+{
+    if (!SPECIAL_CONST_P(obj)
+	&& !RB_TYPE_P(obj, T_NODE) /* Ripper jumbles NODE objects and other objects... */
+    ) {
+	rb_ast_add_mark_object(p->ast, obj);
+    }
+    return obj;
+}
+#else
+static NODE* node_newnode_with_locals(struct parser_params *, enum node_type, VALUE, VALUE, const rb_code_location_t*);
+#endif
+
+static NODE* node_newnode(struct parser_params *, enum node_type, VALUE, VALUE, VALUE, const rb_code_location_t*);
+#define rb_node_newnode(type, a1, a2, a3, loc) node_newnode(p, (type), (a1), (a2), (a3), (loc))
+
+static NODE *nd_set_loc(NODE *nd, const YYLTYPE *loc);
+
+static int
+parser_get_node_id(struct parser_params *p)
+{
+    int node_id = p->node_id;
+    p->node_id++;
+    return node_id;
+}
+
+#ifndef RIPPER
+static inline void
+set_line_body(NODE *body, int line)
+{
+    if (!body) return;
+    switch (nd_type(body)) {
+      case NODE_RESCUE:
+      case NODE_ENSURE:
+	nd_set_line(body, line);
+    }
+}
+
+#define yyparse ruby_yyparse
+
+static NODE* cond(struct parser_params *p, NODE *node, const YYLTYPE *loc);
+static NODE* method_cond(struct parser_params *p, NODE *node, const YYLTYPE *loc);
+#define new_nil(loc) NEW_NIL(loc)
+static NODE *new_nil_at(struct parser_params *p, const rb_code_position_t *pos);
+static NODE *new_if(struct parser_params*,NODE*,NODE*,NODE*,const YYLTYPE*);
+static NODE *new_unless(struct parser_params*,NODE*,NODE*,NODE*,const YYLTYPE*);
+static NODE *logop(struct parser_params*,ID,NODE*,NODE*,const YYLTYPE*,const YYLTYPE*);
+
+static NODE *newline_node(NODE*);
+static void fixpos(NODE*,NODE*);
+
+static int value_expr_gen(struct parser_params*,NODE*);
+static void void_expr(struct parser_params*,NODE*);
+static NODE *remove_begin(NODE*);
+static NODE *remove_begin_all(NODE*);
+#define value_expr(node) value_expr_gen(p, (node))
+static NODE *void_stmts(struct parser_params*,NODE*);
+static void reduce_nodes(struct parser_params*,NODE**);
+static void block_dup_check(struct parser_params*,NODE*,NODE*);
+
+static NODE *block_append(struct parser_params*,NODE*,NODE*);
+static NODE *list_append(struct parser_params*,NODE*,NODE*);
+static NODE *list_concat(NODE*,NODE*);
+static NODE *arg_append(struct parser_params*,NODE*,NODE*,const YYLTYPE*);
+static NODE *last_arg_append(struct parser_params *p, NODE *args, NODE *last_arg, const YYLTYPE *loc);
+static NODE *rest_arg_append(struct parser_params *p, NODE *args, NODE *rest_arg, const YYLTYPE *loc);
+static NODE *literal_concat(struct parser_params*,NODE*,NODE*,const YYLTYPE*);
+static NODE *new_evstr(struct parser_params*,NODE*,const YYLTYPE*);
+static NODE *new_dstr(struct parser_params*,NODE*,const YYLTYPE*);
+static NODE *evstr2dstr(struct parser_params*,NODE*);
+static NODE *splat_array(NODE*);
+static void mark_lvar_used(struct parser_params *p, NODE *rhs);
+
+static NODE *call_bin_op(struct parser_params*,NODE*,ID,NODE*,const YYLTYPE*,const YYLTYPE*);
+static NODE *call_uni_op(struct parser_params*,NODE*,ID,const YYLTYPE*,const YYLTYPE*);
+static NODE *new_qcall(struct parser_params* p, ID atype, NODE *recv, ID mid, NODE *args, const YYLTYPE *op_loc, const YYLTYPE *loc);
+static NODE *new_command_qcall(struct parser_params* p, ID atype, NODE *recv, ID mid, NODE *args, NODE *block, const YYLTYPE *op_loc, const YYLTYPE *loc);
+static NODE *method_add_block(struct parser_params*p, NODE *m, NODE *b, const YYLTYPE *loc) {b->nd_iter = m; b->nd_loc = *loc; return b;}
+
+static bool args_info_empty_p(struct rb_args_info *args);
+static NODE *new_args(struct parser_params*,NODE*,NODE*,ID,NODE*,NODE*,const YYLTYPE*);
+static NODE *new_args_tail(struct parser_params*,NODE*,ID,ID,const YYLTYPE*);
+static NODE *new_array_pattern(struct parser_params *p, NODE *constant, NODE *pre_arg, NODE *aryptn, const YYLTYPE *loc);
+static NODE *new_array_pattern_tail(struct parser_params *p, NODE *pre_args, int has_rest, ID rest_arg, NODE *post_args, const YYLTYPE *loc);
+static NODE *new_find_pattern(struct parser_params *p, NODE *constant, NODE *fndptn, const YYLTYPE *loc);
+static NODE *new_find_pattern_tail(struct parser_params *p, ID pre_rest_arg, NODE *args, ID post_rest_arg, const YYLTYPE *loc);
+static NODE *new_hash_pattern(struct parser_params *p, NODE *constant, NODE *hshptn, const YYLTYPE *loc);
+static NODE *new_hash_pattern_tail(struct parser_params *p, NODE *kw_args, ID kw_rest_arg, const YYLTYPE *loc);
+
+static NODE *new_kw_arg(struct parser_params *p, NODE *k, const YYLTYPE *loc);
+static NODE *args_with_numbered(struct parser_params*,NODE*,int);
+
+static VALUE negate_lit(struct parser_params*, VALUE);
+static NODE *ret_args(struct parser_params*,NODE*);
+static NODE *arg_blk_pass(NODE*,NODE*);
+static NODE *new_yield(struct parser_params*,NODE*,const YYLTYPE*);
+static NODE *dsym_node(struct parser_params*,NODE*,const YYLTYPE*);
+
+static NODE *gettable(struct parser_params*,ID,const YYLTYPE*);
+static NODE *assignable(struct parser_params*,ID,NODE*,const YYLTYPE*);
+
+static NODE *aryset(struct parser_params*,NODE*,NODE*,const YYLTYPE*);
+static NODE *attrset(struct parser_params*,NODE*,ID,ID,const YYLTYPE*);
+
+static void rb_backref_error(struct parser_params*,NODE*);
+static NODE *node_assign(struct parser_params*,NODE*,NODE*,struct lex_context,const YYLTYPE*);
+
+static NODE *new_op_assign(struct parser_params *p, NODE *lhs, ID op, NODE *rhs, struct lex_context, const YYLTYPE *loc);
+static NODE *new_ary_op_assign(struct parser_params *p, NODE *ary, NODE *args, ID op, NODE *rhs, const YYLTYPE *args_loc, const YYLTYPE *loc);
+static NODE *new_attr_op_assign(struct parser_params *p, NODE *lhs, ID atype, ID attr, ID op, NODE *rhs, const 
