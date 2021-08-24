@@ -612,4 +612,168 @@ static NODE *node_assign(struct parser_params*,NODE*,NODE*,struct lex_context,co
 
 static NODE *new_op_assign(struct parser_params *p, NODE *lhs, ID op, NODE *rhs, struct lex_context, const YYLTYPE *loc);
 static NODE *new_ary_op_assign(struct parser_params *p, NODE *ary, NODE *args, ID op, NODE *rhs, const YYLTYPE *args_loc, const YYLTYPE *loc);
-static NODE *new_attr_op_assign(struct parser_params *p, NODE *lhs, ID atype, ID attr, ID op, NODE *rhs, const 
+static NODE *new_attr_op_assign(struct parser_params *p, NODE *lhs, ID atype, ID attr, ID op, NODE *rhs, const YYLTYPE *loc);
+static NODE *new_const_op_assign(struct parser_params *p, NODE *lhs, ID op, NODE *rhs, struct lex_context, const YYLTYPE *loc);
+static NODE *new_bodystmt(struct parser_params *p, NODE *head, NODE *rescue, NODE *rescue_else, NODE *ensure, const YYLTYPE *loc);
+
+static NODE *const_decl(struct parser_params *p, NODE* path, const YYLTYPE *loc);
+
+static NODE *opt_arg_append(NODE*, NODE*);
+static NODE *kwd_append(NODE*, NODE*);
+
+static NODE *new_hash(struct parser_params *p, NODE *hash, const YYLTYPE *loc);
+static NODE *new_unique_key_hash(struct parser_params *p, NODE *hash, const YYLTYPE *loc);
+
+static NODE *new_defined(struct parser_params *p, NODE *expr, const YYLTYPE *loc);
+
+static NODE *new_regexp(struct parser_params *, NODE *, int, const YYLTYPE *);
+
+#define make_list(list, loc) ((list) ? (nd_set_loc(list, loc), list) : NEW_ZLIST(loc))
+
+static NODE *new_xstring(struct parser_params *, NODE *, const YYLTYPE *loc);
+
+static NODE *symbol_append(struct parser_params *p, NODE *symbols, NODE *symbol);
+
+static NODE *match_op(struct parser_params*,NODE*,NODE*,const YYLTYPE*,const YYLTYPE*);
+
+static rb_ast_id_table_t *local_tbl(struct parser_params*);
+
+static VALUE reg_compile(struct parser_params*, VALUE, int);
+static void reg_fragment_setenc(struct parser_params*, VALUE, int);
+static int reg_fragment_check(struct parser_params*, VALUE, int);
+static NODE *reg_named_capture_assign(struct parser_params* p, VALUE regexp, const YYLTYPE *loc);
+
+static int literal_concat0(struct parser_params *p, VALUE head, VALUE tail);
+static NODE *heredoc_dedent(struct parser_params*,NODE*);
+
+static void check_literal_when(struct parser_params *p, NODE *args, const YYLTYPE *loc);
+
+#define get_id(id) (id)
+#define get_value(val) (val)
+#define get_num(num) (num)
+#else  /* RIPPER */
+#define NODE_RIPPER NODE_CDECL
+#define NEW_RIPPER(a,b,c,loc) (VALUE)NEW_CDECL(a,b,c,loc)
+
+static inline int ripper_is_node_yylval(VALUE n);
+
+static inline VALUE
+ripper_new_yylval(struct parser_params *p, ID a, VALUE b, VALUE c)
+{
+    if (ripper_is_node_yylval(c)) c = RNODE(c)->nd_cval;
+    add_mark_object(p, b);
+    add_mark_object(p, c);
+    return NEW_RIPPER(a, b, c, &NULL_LOC);
+}
+
+static inline int
+ripper_is_node_yylval(VALUE n)
+{
+    return RB_TYPE_P(n, T_NODE) && nd_type_p(RNODE(n), NODE_RIPPER);
+}
+
+#define value_expr(node) ((void)(node))
+#define remove_begin(node) (node)
+#define void_stmts(p,x) (x)
+#define rb_dvar_defined(id, base) 0
+#define rb_local_defined(id, base) 0
+static ID ripper_get_id(VALUE);
+#define get_id(id) ripper_get_id(id)
+static VALUE ripper_get_value(VALUE);
+#define get_value(val) ripper_get_value(val)
+#define get_num(num) (int)get_id(num)
+static VALUE assignable(struct parser_params*,VALUE);
+static int id_is_var(struct parser_params *p, ID id);
+
+#define method_cond(p,node,loc) (node)
+#define call_bin_op(p, recv,id,arg1,op_loc,loc) dispatch3(binary, (recv), STATIC_ID2SYM(id), (arg1))
+#define match_op(p,node1,node2,op_loc,loc) call_bin_op(0, (node1), idEqTilde, (node2), op_loc, loc)
+#define call_uni_op(p, recv,id,op_loc,loc) dispatch2(unary, STATIC_ID2SYM(id), (recv))
+#define logop(p,id,node1,node2,op_loc,loc) call_bin_op(0, (node1), (id), (node2), op_loc, loc)
+
+#define new_nil(loc) Qnil
+
+static VALUE new_regexp(struct parser_params *, VALUE, VALUE, const YYLTYPE *);
+
+static VALUE const_decl(struct parser_params *p, VALUE path);
+
+static VALUE var_field(struct parser_params *p, VALUE a);
+static VALUE assign_error(struct parser_params *p, const char *mesg, VALUE a);
+
+static VALUE parser_reg_compile(struct parser_params*, VALUE, int, VALUE *);
+
+static VALUE backref_error(struct parser_params*, NODE *, VALUE);
+#endif /* !RIPPER */
+
+/* forward declaration */
+typedef struct rb_strterm_heredoc_struct rb_strterm_heredoc_t;
+
+RUBY_SYMBOL_EXPORT_BEGIN
+VALUE rb_parser_reg_compile(struct parser_params* p, VALUE str, int options);
+int rb_reg_fragment_setenc(struct parser_params*, VALUE, int);
+enum lex_state_e rb_parser_trace_lex_state(struct parser_params *, enum lex_state_e, enum lex_state_e, int);
+VALUE rb_parser_lex_state_name(enum lex_state_e state);
+void rb_parser_show_bitstack(struct parser_params *, stack_type, const char *, int);
+PRINTF_ARGS(void rb_parser_fatal(struct parser_params *p, const char *fmt, ...), 2, 3);
+YYLTYPE *rb_parser_set_location_from_strterm_heredoc(struct parser_params *p, rb_strterm_heredoc_t *here, YYLTYPE *yylloc);
+YYLTYPE *rb_parser_set_location_of_none(struct parser_params *p, YYLTYPE *yylloc);
+YYLTYPE *rb_parser_set_location(struct parser_params *p, YYLTYPE *yylloc);
+RUBY_SYMBOL_EXPORT_END
+
+static void error_duplicate_pattern_variable(struct parser_params *p, ID id, const YYLTYPE *loc);
+static void error_duplicate_pattern_key(struct parser_params *p, ID id, const YYLTYPE *loc);
+#ifndef RIPPER
+static ID formal_argument(struct parser_params*, ID);
+#else
+static ID formal_argument(struct parser_params*, VALUE);
+#endif
+static ID shadowing_lvar(struct parser_params*,ID);
+static void new_bv(struct parser_params*,ID);
+
+static void local_push(struct parser_params*,int);
+static void local_pop(struct parser_params*);
+static void local_var(struct parser_params*, ID);
+static void arg_var(struct parser_params*, ID);
+static int  local_id(struct parser_params *p, ID id);
+static int  local_id_ref(struct parser_params*, ID, ID **);
+#ifndef RIPPER
+static ID   internal_id(struct parser_params*);
+static NODE *new_args_forward_call(struct parser_params*, NODE*, const YYLTYPE*, const YYLTYPE*);
+#endif
+static int check_forwarding_args(struct parser_params*);
+static void add_forwarding_args(struct parser_params *p);
+
+static const struct vtable *dyna_push(struct parser_params *);
+static void dyna_pop(struct parser_params*, const struct vtable *);
+static int dyna_in_block(struct parser_params*);
+#define dyna_var(p, id) local_var(p, id)
+static int dvar_defined(struct parser_params*, ID);
+static int dvar_defined_ref(struct parser_params*, ID, ID**);
+static int dvar_curr(struct parser_params*,ID);
+
+static int lvar_defined(struct parser_params*, ID);
+
+static NODE *numparam_push(struct parser_params *p);
+static void numparam_pop(struct parser_params *p, NODE *prev_inner);
+
+#ifdef RIPPER
+# define METHOD_NOT idNOT
+#else
+# define METHOD_NOT '!'
+#endif
+
+#define idFWD_REST   '*'
+#ifdef RUBY3_KEYWORDS
+#define idFWD_KWREST idPow /* Use simple "**", as tDSTAR is "**arg" */
+#else
+#define idFWD_KWREST 0
+#endif
+#define idFWD_BLOCK  '&'
+
+#define RE_OPTION_ONCE (1<<16)
+#define RE_OPTION_ENCODING_SHIFT 8
+#define RE_OPTION_ENCODING(e) (((e)&0xff)<<RE_OPTION_ENCODING_SHIFT)
+#define RE_OPTION_ENCODING_IDX(o) (((o)>>RE_OPTION_ENCODING_SHIFT)&0xff)
+#define RE_OPTION_ENCODING_NONE(o) ((o)&RE_OPTION_ARG_ENCODING_NONE)
+#define RE_OPTION_MASK  0xff
+#define RE_OPTION_ARG_ENCODIN
