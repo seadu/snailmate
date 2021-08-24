@@ -776,4 +776,199 @@ static void numparam_pop(struct parser_params *p, NODE *prev_inner);
 #define RE_OPTION_ENCODING_IDX(o) (((o)>>RE_OPTION_ENCODING_SHIFT)&0xff)
 #define RE_OPTION_ENCODING_NONE(o) ((o)&RE_OPTION_ARG_ENCODING_NONE)
 #define RE_OPTION_MASK  0xff
-#define RE_OPTION_ARG_ENCODIN
+#define RE_OPTION_ARG_ENCODING_NONE 32
+
+/* structs for managing terminator of string literal and heredocment */
+typedef struct rb_strterm_literal_struct {
+    union {
+	VALUE dummy;
+	long nest;
+    } u0;
+    union {
+	VALUE dummy;
+	long func;	    /* STR_FUNC_* (e.g., STR_FUNC_ESCAPE and STR_FUNC_EXPAND) */
+    } u1;
+    union {
+	VALUE dummy;
+	long paren;	    /* '(' of `%q(...)` */
+    } u2;
+    union {
+	VALUE dummy;
+	long term;	    /* ')' of `%q(...)` */
+    } u3;
+} rb_strterm_literal_t;
+
+#define HERETERM_LENGTH_BITS ((SIZEOF_VALUE - 1) * CHAR_BIT - 1)
+
+struct rb_strterm_heredoc_struct {
+    VALUE lastline;	/* the string of line that contains `<<"END"` */
+    long offset;	/* the column of END in `<<"END"` */
+    int sourceline;	/* lineno of the line that contains `<<"END"` */
+    unsigned length	/* the length of END in `<<"END"` */
+#if HERETERM_LENGTH_BITS < SIZEOF_INT * CHAR_BIT
+    : HERETERM_LENGTH_BITS
+# define HERETERM_LENGTH_MAX ((1U << HERETERM_LENGTH_BITS) - 1)
+#else
+# define HERETERM_LENGTH_MAX UINT_MAX
+#endif
+    ;
+#if HERETERM_LENGTH_BITS < SIZEOF_INT * CHAR_BIT
+    unsigned quote: 1;
+    unsigned func: 8;
+#else
+    uint8_t quote;
+    uint8_t func;
+#endif
+};
+STATIC_ASSERT(rb_strterm_heredoc_t, sizeof(rb_strterm_heredoc_t) <= 4 * SIZEOF_VALUE);
+
+#define STRTERM_HEREDOC IMEMO_FL_USER0
+
+struct rb_strterm_struct {
+    VALUE flags;
+    union {
+	rb_strterm_literal_t literal;
+	rb_strterm_heredoc_t heredoc;
+    } u;
+};
+
+#ifndef RIPPER
+void
+rb_strterm_mark(VALUE obj)
+{
+    rb_strterm_t *strterm = (rb_strterm_t*)obj;
+    if (RBASIC(obj)->flags & STRTERM_HEREDOC) {
+	rb_strterm_heredoc_t *heredoc = &strterm->u.heredoc;
+	rb_gc_mark(heredoc->lastline);
+    }
+}
+#endif
+
+#define yytnamerr(yyres, yystr) (YYSIZE_T)rb_yytnamerr(p, yyres, yystr)
+size_t rb_yytnamerr(struct parser_params *p, char *yyres, const char *yystr);
+
+#define TOKEN2ID(tok) ( \
+    tTOKEN_LOCAL_BEGIN<(tok)&&(tok)<tTOKEN_LOCAL_END ? TOKEN2LOCALID(tok) : \
+    tTOKEN_INSTANCE_BEGIN<(tok)&&(tok)<tTOKEN_INSTANCE_END ? TOKEN2INSTANCEID(tok) : \
+    tTOKEN_GLOBAL_BEGIN<(tok)&&(tok)<tTOKEN_GLOBAL_END ? TOKEN2GLOBALID(tok) : \
+    tTOKEN_CONST_BEGIN<(tok)&&(tok)<tTOKEN_CONST_END ? TOKEN2CONSTID(tok) : \
+    tTOKEN_CLASS_BEGIN<(tok)&&(tok)<tTOKEN_CLASS_END ? TOKEN2CLASSID(tok) : \
+    tTOKEN_ATTRSET_BEGIN<(tok)&&(tok)<tTOKEN_ATTRSET_END ? TOKEN2ATTRSETID(tok) : \
+    ((tok) / ((tok)<tPRESERVED_ID_END && ((tok)>=128 || rb_ispunct(tok)))))
+
+/****** Ripper *******/
+
+#ifdef RIPPER
+#define RIPPER_VERSION "0.1.0"
+
+static inline VALUE intern_sym(const char *name);
+
+#include "eventids1.c"
+#include "eventids2.c"
+
+static VALUE ripper_dispatch0(struct parser_params*,ID);
+static VALUE ripper_dispatch1(struct parser_params*,ID,VALUE);
+static VALUE ripper_dispatch2(struct parser_params*,ID,VALUE,VALUE);
+static VALUE ripper_dispatch3(struct parser_params*,ID,VALUE,VALUE,VALUE);
+static VALUE ripper_dispatch4(struct parser_params*,ID,VALUE,VALUE,VALUE,VALUE);
+static VALUE ripper_dispatch5(struct parser_params*,ID,VALUE,VALUE,VALUE,VALUE,VALUE);
+static VALUE ripper_dispatch7(struct parser_params*,ID,VALUE,VALUE,VALUE,VALUE,VALUE,VALUE,VALUE);
+static void ripper_error(struct parser_params *p);
+
+#define dispatch0(n)            ripper_dispatch0(p, TOKEN_PASTE(ripper_id_, n))
+#define dispatch1(n,a)          ripper_dispatch1(p, TOKEN_PASTE(ripper_id_, n), (a))
+#define dispatch2(n,a,b)        ripper_dispatch2(p, TOKEN_PASTE(ripper_id_, n), (a), (b))
+#define dispatch3(n,a,b,c)      ripper_dispatch3(p, TOKEN_PASTE(ripper_id_, n), (a), (b), (c))
+#define dispatch4(n,a,b,c,d)    ripper_dispatch4(p, TOKEN_PASTE(ripper_id_, n), (a), (b), (c), (d))
+#define dispatch5(n,a,b,c,d,e)  ripper_dispatch5(p, TOKEN_PASTE(ripper_id_, n), (a), (b), (c), (d), (e))
+#define dispatch7(n,a,b,c,d,e,f,g) ripper_dispatch7(p, TOKEN_PASTE(ripper_id_, n), (a), (b), (c), (d), (e), (f), (g))
+
+#define yyparse ripper_yyparse
+
+#define ID2VAL(id) STATIC_ID2SYM(id)
+#define TOKEN2VAL(t) ID2VAL(TOKEN2ID(t))
+#define KWD2EID(t, v) ripper_new_yylval(p, keyword_##t, get_value(v), 0)
+
+#define params_new(pars, opts, rest, pars2, kws, kwrest, blk) \
+        dispatch7(params, (pars), (opts), (rest), (pars2), (kws), (kwrest), (blk))
+
+#define escape_Qundef(x) ((x)==Qundef ? Qnil : (x))
+
+static inline VALUE
+new_args(struct parser_params *p, VALUE pre_args, VALUE opt_args, VALUE rest_arg, VALUE post_args, VALUE tail, YYLTYPE *loc)
+{
+    NODE *t = (NODE *)tail;
+    VALUE kw_args = t->u1.value, kw_rest_arg = t->u2.value, block = t->u3.value;
+    return params_new(pre_args, opt_args, rest_arg, post_args, kw_args, kw_rest_arg, escape_Qundef(block));
+}
+
+static inline VALUE
+new_args_tail(struct parser_params *p, VALUE kw_args, VALUE kw_rest_arg, VALUE block, YYLTYPE *loc)
+{
+    NODE *t = rb_node_newnode(NODE_ARGS_AUX, kw_args, kw_rest_arg, block, &NULL_LOC);
+    add_mark_object(p, kw_args);
+    add_mark_object(p, kw_rest_arg);
+    add_mark_object(p, block);
+    return (VALUE)t;
+}
+
+static inline VALUE
+args_with_numbered(struct parser_params *p, VALUE args, int max_numparam)
+{
+    return args;
+}
+
+static VALUE
+new_array_pattern(struct parser_params *p, VALUE constant, VALUE pre_arg, VALUE aryptn, const YYLTYPE *loc)
+{
+    NODE *t = (NODE *)aryptn;
+    VALUE pre_args = t->u1.value, rest_arg = t->u2.value, post_args = t->u3.value;
+
+    if (!NIL_P(pre_arg)) {
+	if (!NIL_P(pre_args)) {
+	    rb_ary_unshift(pre_args, pre_arg);
+	}
+	else {
+	    pre_args = rb_ary_new_from_args(1, pre_arg);
+	}
+    }
+    return dispatch4(aryptn, constant, pre_args, rest_arg, post_args);
+}
+
+static VALUE
+new_array_pattern_tail(struct parser_params *p, VALUE pre_args, VALUE has_rest, VALUE rest_arg, VALUE post_args, const YYLTYPE *loc)
+{
+    NODE *t;
+
+    if (has_rest) {
+	rest_arg = dispatch1(var_field, rest_arg ? rest_arg : Qnil);
+    }
+    else {
+	rest_arg = Qnil;
+    }
+
+    t = rb_node_newnode(NODE_ARYPTN, pre_args, rest_arg, post_args, &NULL_LOC);
+    add_mark_object(p, pre_args);
+    add_mark_object(p, rest_arg);
+    add_mark_object(p, post_args);
+    return (VALUE)t;
+}
+
+static VALUE
+new_find_pattern(struct parser_params *p, VALUE constant, VALUE fndptn, const YYLTYPE *loc)
+{
+    NODE *t = (NODE *)fndptn;
+    VALUE pre_rest_arg = t->u1.value, args = t->u2.value, post_rest_arg = t->u3.value;
+
+    return dispatch4(fndptn, constant, pre_rest_arg, args, post_rest_arg);
+}
+
+static VALUE
+new_find_pattern_tail(struct parser_params *p, VALUE pre_rest_arg, VALUE args, VALUE post_rest_arg, const YYLTYPE *loc)
+{
+    NODE *t;
+
+    pre_rest_arg = dispatch1(var_field, pre_rest_arg ? pre_rest_arg : Qnil);
+    post_rest_arg = dispatch1(var_field, post_rest_arg ? post_rest_arg : Qnil);
+
+    t = rb_node_newnode(NODE_F
