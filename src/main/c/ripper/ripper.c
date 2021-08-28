@@ -971,4 +971,192 @@ new_find_pattern_tail(struct parser_params *p, VALUE pre_rest_arg, VALUE args, V
     pre_rest_arg = dispatch1(var_field, pre_rest_arg ? pre_rest_arg : Qnil);
     post_rest_arg = dispatch1(var_field, post_rest_arg ? post_rest_arg : Qnil);
 
-    t = rb_node_newnode(NODE_F
+    t = rb_node_newnode(NODE_FNDPTN, pre_rest_arg, args, post_rest_arg, &NULL_LOC);
+    add_mark_object(p, pre_rest_arg);
+    add_mark_object(p, args);
+    add_mark_object(p, post_rest_arg);
+    return (VALUE)t;
+}
+
+#define new_hash(p,h,l) rb_ary_new_from_args(0)
+
+static VALUE
+new_unique_key_hash(struct parser_params *p, VALUE ary, const YYLTYPE *loc)
+{
+    return ary;
+}
+
+static VALUE
+new_hash_pattern(struct parser_params *p, VALUE constant, VALUE hshptn, const YYLTYPE *loc)
+{
+    NODE *t = (NODE *)hshptn;
+    VALUE kw_args = t->u1.value, kw_rest_arg = t->u2.value;
+    return dispatch3(hshptn, constant, kw_args, kw_rest_arg);
+}
+
+static VALUE
+new_hash_pattern_tail(struct parser_params *p, VALUE kw_args, VALUE kw_rest_arg, const YYLTYPE *loc)
+{
+    NODE *t;
+    if (kw_rest_arg) {
+	kw_rest_arg = dispatch1(var_field, kw_rest_arg);
+    }
+    else {
+	kw_rest_arg = Qnil;
+    }
+    t = rb_node_newnode(NODE_HSHPTN, kw_args, kw_rest_arg, 0, &NULL_LOC);
+
+    add_mark_object(p, kw_args);
+    add_mark_object(p, kw_rest_arg);
+    return (VALUE)t;
+}
+
+#define new_defined(p,expr,loc) dispatch1(defined, (expr))
+
+static VALUE heredoc_dedent(struct parser_params*,VALUE);
+
+#else
+#define ID2VAL(id) (id)
+#define TOKEN2VAL(t) ID2VAL(t)
+#define KWD2EID(t, v) keyword_##t
+
+static NODE *
+set_defun_body(struct parser_params *p, NODE *n, NODE *args, NODE *body, const YYLTYPE *loc)
+{
+    body = remove_begin(body);
+    reduce_nodes(p, &body);
+    n->nd_defn = NEW_SCOPE(args, body, loc);
+    n->nd_loc = *loc;
+    nd_set_line(n->nd_defn, loc->end_pos.lineno);
+    set_line_body(body, loc->beg_pos.lineno);
+    return n;
+}
+
+static NODE *
+rescued_expr(struct parser_params *p, NODE *arg, NODE *rescue,
+	     const YYLTYPE *arg_loc, const YYLTYPE *mod_loc, const YYLTYPE *res_loc)
+{
+    YYLTYPE loc = code_loc_gen(mod_loc, res_loc);
+    rescue = NEW_RESBODY(0, remove_begin(rescue), 0, &loc);
+    loc.beg_pos = arg_loc->beg_pos;
+    return NEW_RESCUE(arg, rescue, 0, &loc);
+}
+
+#endif /* RIPPER */
+
+static void
+restore_defun(struct parser_params *p, NODE *name)
+{
+    YYSTYPE c = {.val = name->nd_cval};
+    p->cur_arg = name->nd_vid;
+    p->ctxt.in_def = c.ctxt.in_def;
+    p->ctxt.shareable_constant_value = c.ctxt.shareable_constant_value;
+}
+
+static void
+endless_method_name(struct parser_params *p, NODE *defn, const YYLTYPE *loc)
+{
+#ifdef RIPPER
+    defn = defn->nd_defn;
+#endif
+    ID mid = defn->nd_mid;
+    if (is_attrset_id(mid)) {
+	yyerror1(loc, "setter method cannot be defined in an endless method definition");
+    }
+    token_info_drop(p, "def", loc->beg_pos);
+}
+
+#ifndef RIPPER
+# define Qnone 0
+# define Qnull 0
+# define ifndef_ripper(x) (x)
+#else
+# define Qnone Qnil
+# define Qnull Qundef
+# define ifndef_ripper(x)
+#endif
+
+# define rb_warn0(fmt)         WARN_CALL(WARN_ARGS(fmt, 1))
+# define rb_warn1(fmt,a)       WARN_CALL(WARN_ARGS(fmt, 2), (a))
+# define rb_warn2(fmt,a,b)     WARN_CALL(WARN_ARGS(fmt, 3), (a), (b))
+# define rb_warn3(fmt,a,b,c)   WARN_CALL(WARN_ARGS(fmt, 4), (a), (b), (c))
+# define rb_warn4(fmt,a,b,c,d) WARN_CALL(WARN_ARGS(fmt, 5), (a), (b), (c), (d))
+# define rb_warning0(fmt)         WARNING_CALL(WARNING_ARGS(fmt, 1))
+# define rb_warning1(fmt,a)       WARNING_CALL(WARNING_ARGS(fmt, 2), (a))
+# define rb_warning2(fmt,a,b)     WARNING_CALL(WARNING_ARGS(fmt, 3), (a), (b))
+# define rb_warning3(fmt,a,b,c)   WARNING_CALL(WARNING_ARGS(fmt, 4), (a), (b), (c))
+# define rb_warning4(fmt,a,b,c,d) WARNING_CALL(WARNING_ARGS(fmt, 5), (a), (b), (c), (d))
+# define rb_warn0L(l,fmt)         WARN_CALL(WARN_ARGS_L(l, fmt, 1))
+# define rb_warn1L(l,fmt,a)       WARN_CALL(WARN_ARGS_L(l, fmt, 2), (a))
+# define rb_warn2L(l,fmt,a,b)     WARN_CALL(WARN_ARGS_L(l, fmt, 3), (a), (b))
+# define rb_warn3L(l,fmt,a,b,c)   WARN_CALL(WARN_ARGS_L(l, fmt, 4), (a), (b), (c))
+# define rb_warn4L(l,fmt,a,b,c,d) WARN_CALL(WARN_ARGS_L(l, fmt, 5), (a), (b), (c), (d))
+# define rb_warning0L(l,fmt)         WARNING_CALL(WARNING_ARGS_L(l, fmt, 1))
+# define rb_warning1L(l,fmt,a)       WARNING_CALL(WARNING_ARGS_L(l, fmt, 2), (a))
+# define rb_warning2L(l,fmt,a,b)     WARNING_CALL(WARNING_ARGS_L(l, fmt, 3), (a), (b))
+# define rb_warning3L(l,fmt,a,b,c)   WARNING_CALL(WARNING_ARGS_L(l, fmt, 4), (a), (b), (c))
+# define rb_warning4L(l,fmt,a,b,c,d) WARNING_CALL(WARNING_ARGS_L(l, fmt, 5), (a), (b), (c), (d))
+#ifdef RIPPER
+static ID id_warn, id_warning, id_gets, id_assoc;
+# define ERR_MESG() STR_NEW2(mesg) /* to bypass Ripper DSL */
+# define WARN_S_L(s,l) STR_NEW(s,l)
+# define WARN_S(s) STR_NEW2(s)
+# define WARN_I(i) INT2NUM(i)
+# define WARN_ID(i) rb_id2str(i)
+# define WARN_IVAL(i) i
+# define PRIsWARN "s"
+# define rb_warn0L_experimental(l,fmt)         WARN_CALL(WARN_ARGS_L(l, fmt, 1))
+# define WARN_ARGS(fmt,n) p->value, id_warn, n, rb_usascii_str_new_lit(fmt)
+# define WARN_ARGS_L(l,fmt,n) WARN_ARGS(fmt,n)
+# ifdef HAVE_VA_ARGS_MACRO
+# define WARN_CALL(...) rb_funcall(__VA_ARGS__)
+# else
+# define WARN_CALL rb_funcall
+# endif
+# define WARNING_ARGS(fmt,n) p->value, id_warning, n, rb_usascii_str_new_lit(fmt)
+# define WARNING_ARGS_L(l, fmt,n) WARNING_ARGS(fmt,n)
+# ifdef HAVE_VA_ARGS_MACRO
+# define WARNING_CALL(...) rb_funcall(__VA_ARGS__)
+# else
+# define WARNING_CALL rb_funcall
+# endif
+PRINTF_ARGS(static void ripper_compile_error(struct parser_params*, const char *fmt, ...), 2, 3);
+# define compile_error ripper_compile_error
+#else
+# define WARN_S_L(s,l) s
+# define WARN_S(s) s
+# define WARN_I(i) i
+# define WARN_ID(i) rb_id2name(i)
+# define WARN_IVAL(i) NUM2INT(i)
+# define PRIsWARN PRIsVALUE
+# define WARN_ARGS(fmt,n) WARN_ARGS_L(p->ruby_sourceline,fmt,n)
+# define WARN_ARGS_L(l,fmt,n) p->ruby_sourcefile, (l), (fmt)
+# define WARN_CALL rb_compile_warn
+# define rb_warn0L_experimental(l,fmt) rb_category_compile_warn(RB_WARN_CATEGORY_EXPERIMENTAL, WARN_ARGS_L(l, fmt, 1))
+# define WARNING_ARGS(fmt,n) WARN_ARGS(fmt,n)
+# define WARNING_ARGS_L(l,fmt,n) WARN_ARGS_L(l,fmt,n)
+# define WARNING_CALL rb_compile_warning
+PRINTF_ARGS(static void parser_compile_error(struct parser_params*, const char *fmt, ...), 2, 3);
+# define compile_error parser_compile_error
+#endif
+
+#define WARN_EOL(tok) \
+    (looking_at_eol_p(p) ? \
+     (void)rb_warning0("`" tok "' at the end of line without an expression") : \
+     (void)0)
+static int looking_at_eol_p(struct parser_params *p);
+
+#line 1146 "ripper.c"
+
+# ifndef YY_CAST
+#  ifdef __cplusplus
+#   define YY_CAST(Type, Val) static_cast<Type> (Val)
+#   define YY_REINTERPRET_CAST(Type, Val) reinterpret_cast<Type> (Val)
+#  else
+#   define YY_CAST(Type, Val) ((Type) (Val))
+#   define YY_REINTERPRET_CAST(Type, Val) ((Type) (Val))
+#  endif
+# endif
+# ifndef YY_NULLPTR
+#  if defined __cplusplus
+#   if 201103L <= __cplu
