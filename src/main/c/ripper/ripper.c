@@ -1303,4 +1303,148 @@ extern int yydebug;
     tSTRING_DEND = 346,            /* "'}'"  */
     tSTRING_DBEG = 347,            /* tSTRING_DBEG  */
     tSTRING_DVAR = 348,            /* tSTRING_DVAR  */
-    tLAMBEG = 349,
+    tLAMBEG = 349,                 /* tLAMBEG  */
+    tLABEL_END = 350,              /* tLABEL_END  */
+    tLOWEST = 351,                 /* tLOWEST  */
+    tUMINUS_NUM = 352,             /* tUMINUS_NUM  */
+    tLAST_TOKEN = 353              /* tLAST_TOKEN  */
+  };
+  typedef enum yytokentype yytoken_kind_t;
+#endif
+
+/* Value type.  */
+#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
+union YYSTYPE
+{
+#line 1126 "ripper.y"
+
+    VALUE val;
+    NODE *node;
+    ID id;
+    int num;
+    st_table *tbl;
+    const struct vtable *vars;
+    struct rb_strterm_struct *strterm;
+    struct lex_context ctxt;
+
+#line 1325 "ripper.c"
+
+};
+typedef union YYSTYPE YYSTYPE;
+# define YYSTYPE_IS_TRIVIAL 1
+# define YYSTYPE_IS_DECLARED 1
+#endif
+
+/* Location type.  */
+#if ! defined YYLTYPE && ! defined YYLTYPE_IS_DECLARED
+typedef struct YYLTYPE YYLTYPE;
+struct YYLTYPE
+{
+  int first_line;
+  int first_column;
+  int last_line;
+  int last_column;
+};
+# define YYLTYPE_IS_DECLARED 1
+# define YYLTYPE_IS_TRIVIAL 1
+#endif
+
+
+
+
+int yyparse (struct parser_params *p);
+
+
+
+/* Symbol kind.  */
+enum yysymbol_kind_t
+{
+  YYSYMBOL_YYEMPTY = -2,
+  YYSYMBOL_YYEOF = 0,                      /* "end-of-input"  */
+  YYSYMBOL_YYerror = 1,                    /* error  */
+  YYSYMBOL_YYUNDEF = 2,                    /* "invalid token"  */
+  YYSYMBOL_keyword_class = 3,              /* "`class'"  */
+  YYSYMBOL_keyword_module = 4,             /* "`module'"  */
+  YYSYMBOL_keyword_def = 5,                /* "`def'"  */
+  YYSYMBOL_keyword_undef = 6,              /* "`undef'"  */
+  YYSYMBOL_keyword_begin = 7,              /* "`begin'"  */
+  YYSYMBOL_keyword_rescue = 8,             /* "`rescue'"  */
+  YYSYMBOL_keyword_ensure = 9,             /* "`ensure'"  */
+  YYSYMBOL_keyword_end = 10,               /* "`end'"  */
+  YYSYMBOL_keyword_if = 11,                /* "`if'"  */
+  YYSYMBOL_keyword_unless = 12,            /* "`unless'"  */
+  YYSYMBOL_keyword_then = 13,              /* "`then'"  */
+  YYSYMBOL_keyword_elsif = 14,             /* "`elsif'"  */
+  YYSYMBOL_keyword_else = 15,              /* "`else'"  */
+  YYSYMBOL_keyword_case = 16,              /* "`case'"  */
+  YYSYMBOL_keyword_when = 17,              /* "`when'"  */
+  YYSYMBOL_keyword_while = 18,             /* "`while'"  */
+  YYSYMBOL_keyword_until = 19,             /* "`until'"  */
+  YYSYMBOL_keyword_for = 20,               /* "`for'"  */
+  YYSYMBOL_keyword_break = 21,             /* "`break'"  */
+  YYSYMBOL_keyword_next = 22,              /* "`next'"  */
+  YYSYMBOL_keyword_redo = 23,              /* "`redo'"  */
+  YYSYMBOL_keyword_retry = 24,             /* "`retry'"  */
+  YYSYMBOL_keyword_in = 25,                /* "`in'"  */
+  YYSYMBOL_keyword_do = 26,                /* "`do'"  */
+  YYSYMBOL_keyword_do_cond = 27,           /* "`do' for condition"  */
+  YYSYMBOL_keyword_do_block = 28,          /* "`do' for block"  */
+  YYSYMBOL_keyword_do_LAMBDA = 29,         /* "`do' for lambda"  */
+  YYSYMBOL_keyword_return = 30,            /* "`return'"  */
+  YYSYMBOL_keyword_yield = 31,             /* "`yield'"  */
+  YYSYMBOL_keyword_super = 32,             /* "`super'"  */
+  YYSYMBOL_keyword_self = 33,              /* "`self'"  */
+  YYSYMBOL_keyword_nil = 34,               /* "`nil'"  */
+  YYSYMBOL_keyword_true = 35,              /* "`true'"  */
+  YYSYMBOL_keyword_false = 36,             /* "`false'"  */
+  YYSYMBOL_keyword_and = 37,               /* "`and'"  */
+  YYSYMBOL_keyword_or = 38,                /* "`or'"  */
+  YYSYMBOL_keyword_not = 39,               /* "`not'"  */
+  YYSYMBOL_modifier_if = 40,               /* "`if' modifier"  */
+  YYSYMBOL_modifier_unless = 41,           /* "`unless' modifier"  */
+  YYSYMBOL_modifier_while = 42,            /* "`while' modifier"  */
+  YYSYMBOL_modifier_until = 43,            /* "`until' modifier"  */
+  YYSYMBOL_modifier_rescue = 44,           /* "`rescue' modifier"  */
+  YYSYMBOL_keyword_alias = 45,             /* "`alias'"  */
+  YYSYMBOL_keyword_defined = 46,           /* "`defined?'"  */
+  YYSYMBOL_keyword_BEGIN = 47,             /* "`BEGIN'"  */
+  YYSYMBOL_keyword_END = 48,               /* "`END'"  */
+  YYSYMBOL_keyword__LINE__ = 49,           /* "`__LINE__'"  */
+  YYSYMBOL_keyword__FILE__ = 50,           /* "`__FILE__'"  */
+  YYSYMBOL_keyword__ENCODING__ = 51,       /* "`__ENCODING__'"  */
+  YYSYMBOL_tIDENTIFIER = 52,               /* "local variable or method"  */
+  YYSYMBOL_tFID = 53,                      /* "method"  */
+  YYSYMBOL_tGVAR = 54,                     /* "global variable"  */
+  YYSYMBOL_tIVAR = 55,                     /* "instance variable"  */
+  YYSYMBOL_tCONSTANT = 56,                 /* "constant"  */
+  YYSYMBOL_tCVAR = 57,                     /* "class variable"  */
+  YYSYMBOL_tLABEL = 58,                    /* "label"  */
+  YYSYMBOL_tINTEGER = 59,                  /* "integer literal"  */
+  YYSYMBOL_tFLOAT = 60,                    /* "float literal"  */
+  YYSYMBOL_tRATIONAL = 61,                 /* "rational literal"  */
+  YYSYMBOL_tIMAGINARY = 62,                /* "imaginary literal"  */
+  YYSYMBOL_tCHAR = 63,                     /* "char literal"  */
+  YYSYMBOL_tNTH_REF = 64,                  /* "numbered reference"  */
+  YYSYMBOL_tBACK_REF = 65,                 /* "back reference"  */
+  YYSYMBOL_tSTRING_CONTENT = 66,           /* "literal content"  */
+  YYSYMBOL_tREGEXP_END = 67,               /* tREGEXP_END  */
+  YYSYMBOL_68_ = 68,                       /* '.'  */
+  YYSYMBOL_69_backslash_ = 69,             /* "backslash"  */
+  YYSYMBOL_tSP = 70,                       /* "escaped space"  */
+  YYSYMBOL_71_escaped_horizontal_tab_ = 71, /* "escaped horizontal tab"  */
+  YYSYMBOL_72_escaped_form_feed_ = 72,     /* "escaped form feed"  */
+  YYSYMBOL_73_escaped_carriage_return_ = 73, /* "escaped carriage return"  */
+  YYSYMBOL_74_escaped_vertical_tab_ = 74,  /* "escaped vertical tab"  */
+  YYSYMBOL_tUPLUS = 75,                    /* "unary+"  */
+  YYSYMBOL_tUMINUS = 76,                   /* "unary-"  */
+  YYSYMBOL_tPOW = 77,                      /* "**"  */
+  YYSYMBOL_tCMP = 78,                      /* "<=>"  */
+  YYSYMBOL_tEQ = 79,                       /* "=="  */
+  YYSYMBOL_tEQQ = 80,                      /* "==="  */
+  YYSYMBOL_tNEQ = 81,                      /* "!="  */
+  YYSYMBOL_tGEQ = 82,                      /* ">="  */
+  YYSYMBOL_tLEQ = 83,                      /* "<="  */
+  YYSYMBOL_tANDOP = 84,                    /* "&&"  */
+  YYSYMBOL_tOROP = 85,                     /* "||"  */
+  YYSYMBOL_tMATCH = 86,                    /* "=~"  */
+  YYSYMBOL_tNMATCH = 87,                   /*
