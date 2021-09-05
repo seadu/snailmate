@@ -2261,4 +2261,127 @@ static const yytype_int16 yyrline[] =
     5585,  5595,  5599,  5605,  5610,  5610,  5634,  5635,  5644,  5646,
     5669,  5680,  5687,  5696,  5704,  5723,  5724,  5725,  5728,  5729,
     5730,  5731,  5734,  5735,  5736,  5739,  5740,  5743,  5744,  5747,
-    5748,  5751,  5752,  5755,  5756,  575
+    5748,  5751,  5752,  5755,  5756,  5759,  5762,  5765,  5768,  5769,
+    5770,  5773,  5774,  5777,  5778,  5782
+};
+#endif
+
+/** Accessing symbol of state STATE.  */
+#define YY_ACCESSING_SYMBOL(State) YY_CAST (yysymbol_kind_t, yystos[State])
+
+#if 1
+/* The user-facing name of the symbol whose (internal) number is
+   YYSYMBOL.  No bounds checking.  */
+static const char *yysymbol_name (yysymbol_kind_t yysymbol) YY_ATTRIBUTE_UNUSED;
+
+/* YYTNAME[SYMBOL-NUM] -- String name of the symbol SYMBOL-NUM.
+   First, the terminals, then, starting at YYNTOKENS, nonterminals.  */
+static const char *const yytname[] =
+{
+  "\"end-of-input\"", "error", "\"invalid token\"", "\"`class'\"",
+  "\"`module'\"", "\"`def'\"", "\"`undef'\"", "\"`begin'\"",
+  "\"`rescue'\"", "\"`ensure'\"", "\"`end'\"", "\"`if'\"", "\"`unless'\"",
+  "\"`then'\"", "\"`elsif'\"", "\"`else'\"", "\"`case'\"", "\"`when'\"",
+  "\"`while'\"", "\"`until'\"", "\"`for'\"", "\"`break'\"", "\"`next'\"",
+  "\"`redo'\"", "\"`retry'\"", "\"`in'\"", "\"`do'\"",
+  "\"`do' for condition\"", "\"`do' for block\"", "\"`do' for lambda\"",
+  "\"`return'\"", "\"`yield'\"", "\"`super'\"", "\"`self'\"", "\"`nil'\"",
+  "\"`true'\"", "\"`false'\"", "\"`and'\"", "\"`or'\"", "\"`not'\"",
+  "\"`if' modifier\"", "\"`unless' modifier\"", "\"`while' modifier\"",
+  "\"`until' modifier\"", "\"`rescue' modifier\"", "\"`alias'\"",
+  "\"`defined?'\"", "\"`BEGIN'\"", "\"`END'\"", "\"`__LINE__'\"",
+  "\"`__FILE__'\"", "\"`__ENCODING__'\"", "\"local variable or method\"",
+  "\"method\"", "\"global variable\"", "\"instance variable\"",
+  "\"constant\"", "\"class variable\"", "\"label\"", "\"integer literal\"",
+  "\"float literal\"", "\"rational literal\"", "\"imaginary literal\"",
+  "\"char literal\"", "\"numbered reference\"", "\"back reference\"",
+  "\"literal content\"", "tREGEXP_END", "'.'", "\"backslash\"",
+  "\"escaped space\"", "\"escaped horizontal tab\"",
+  "\"escaped form feed\"", "\"escaped carriage return\"",
+  "\"escaped vertical tab\"", "\"unary+\"", "\"unary-\"", "\"**\"",
+  "\"<=>\"", "\"==\"", "\"===\"", "\"!=\"", "\">=\"", "\"<=\"", "\"&&\"",
+  "\"||\"", "\"=~\"", "\"!~\"", "\"..\"", "\"...\"", "\"(..\"", "\"(...\"",
+  "\"[]\"", "\"[]=\"", "\"<<\"", "\">>\"", "\"&.\"", "\"::\"",
+  "\":: at EXPR_BEG\"", "\"operator-assignment\"", "\"=>\"", "\"(\"",
+  "\"( arg\"", "\")\"", "\"[\"", "\"{\"", "\"{ arg\"", "\"*\"",
+  "\"**arg\"", "\"&\"", "\"->\"", "\"symbol literal\"",
+  "\"string literal\"", "\"backtick literal\"", "\"regexp literal\"",
+  "\"word list\"", "\"verbatim word list\"", "\"symbol list\"",
+  "\"verbatim symbol list\"", "\"terminator\"", "\"'}'\"", "tSTRING_DBEG",
+  "tSTRING_DVAR", "tLAMBEG", "tLABEL_END", "tLOWEST", "'='", "'?'", "':'",
+  "'>'", "'<'", "'|'", "'^'", "'&'", "'+'", "'-'", "'*'", "'/'", "'%'",
+  "tUMINUS_NUM", "'!'", "'~'", "tLAST_TOKEN", "'{'", "'}'", "'['", "','",
+  "'`'", "'('", "')'", "']'", "';'", "' '", "'\\n'", "$accept", "program",
+  "$@1", "top_compstmt", "top_stmts", "top_stmt", "begin_block",
+  "bodystmt", "$@2", "compstmt", "stmts", "stmt_or_begin", "$@3", "stmt",
+  "$@4", "command_asgn", "command_rhs", "expr", "@5", "@6", "@7", "@8",
+  "def_name", "defn_head", "defs_head", "$@9", "expr_value",
+  "expr_value_do", "$@10", "$@11", "command_call", "block_command",
+  "cmd_brace_block", "fcall", "command", "mlhs", "mlhs_inner",
+  "mlhs_basic", "mlhs_item", "mlhs_head", "mlhs_post", "mlhs_node", "lhs",
+  "cname", "cpath", "fname", "fitem", "undef_list", "$@12", "op",
+  "reswords", "arg", "$@13", "relop", "rel_expr", "lex_ctxt", "arg_value",
+  "aref_args", "arg_rhs", "paren_args", "opt_paren_args", "opt_call_args",
+  "call_args", "command_args", "$@14", "block_arg", "opt_block_arg",
+  "args", "mrhs_arg", "mrhs", "primary", "$@15", "$@16", "$@17", "$@18",
+  "@19", "@20", "$@21", "$@22", "$@23", "primary_value", "k_begin", "k_if",
+  "k_unless", "k_while", "k_until", "k_case", "k_for", "k_class",
+  "k_module", "k_def", "k_do", "k_do_block", "k_rescue", "k_ensure",
+  "k_when", "k_else", "k_elsif", "k_end", "k_return", "then", "do",
+  "if_tail", "opt_else", "for_var", "f_marg", "f_marg_list", "f_margs",
+  "f_rest_marg", "f_any_kwrest", "f_eq", "$@24", "block_args_tail",
+  "opt_block_args_tail", "excessed_comma", "block_param",
+  "opt_block_param", "block_param_def", "opt_bv_decl", "bv_decls", "bvar",
+  "lambda", "@25", "@26", "@27", "$@28", "f_larglist", "lambda_body",
+  "do_block", "block_call", "method_call", "brace_block", "brace_body",
+  "@29", "@30", "@31", "do_body", "@32", "@33", "@34", "case_args",
+  "case_body", "cases", "p_case_body", "@35", "@36", "$@37", "p_cases",
+  "p_top_expr", "p_top_expr_body", "p_expr", "p_as", "p_alt", "p_lparen",
+  "p_lbracket", "p_expr_basic", "@38", "@39", "p_args", "p_args_head",
+  "p_args_tail", "p_find", "p_rest", "p_args_post", "p_arg", "p_kwargs",
+  "p_kwarg", "p_kw", "p_kw_label", "p_kwrest", "p_kwnorest",
+  "p_any_kwrest", "p_value", "p_primitive", "p_variable", "p_var_ref",
+  "p_expr_ref", "p_const", "opt_rescue", "exc_list", "exc_var",
+  "opt_ensure", "literal", "strings", "string", "string1", "xstring",
+  "regexp", "words", "word_list", "word", "symbols", "symbol_list",
+  "qwords", "qsymbols", "qword_list", "qsym_list", "string_contents",
+  "xstring_contents", "regexp_contents", "string_content", "@40", "$@41",
+  "@42", "@43", "@44", "@45", "string_dvar", "symbol", "ssym", "sym",
+  "dsym", "numeric", "simple_numeric", "nonlocal_var", "user_variable",
+  "keyword_variable", "var_ref", "var_lhs", "backref", "superclass",
+  "$@46", "f_opt_paren_args", "f_paren_args", "f_arglist", "@47",
+  "args_tail", "opt_args_tail", "f_args", "args_forward", "f_bad_arg",
+  "f_norm_arg", "f_arg_asgn", "f_arg_item", "f_arg", "f_label", "f_kw",
+  "f_block_kw", "f_block_kwarg", "f_kwarg", "kwrest_mark", "f_no_kwarg",
+  "f_kwrest", "f_opt", "f_block_opt", "f_block_optarg", "f_optarg",
+  "restarg_mark", "f_rest_arg", "blkarg_mark", "f_block_arg",
+  "opt_f_block_arg", "singleton", "$@48", "assoc_list", "assocs", "assoc",
+  "operation", "operation2", "operation3", "dot_or_colon", "call_op",
+  "call_op2", "opt_terms", "opt_nl", "rparen", "rbracket", "rbrace",
+  "trailer", "term", "terms", "none", YY_NULLPTR
+};
+
+static const char *
+yysymbol_name (yysymbol_kind_t yysymbol)
+{
+  return yytname[yysymbol];
+}
+#endif
+
+#define YYPACT_NINF (-1086)
+
+#define yypact_value_is_default(Yyn) \
+  ((Yyn) == YYPACT_NINF)
+
+#define YYTABLE_NINF (-786)
+
+#define yytable_value_is_error(Yyn) \
+  ((Yyn) == YYTABLE_NINF)
+
+/* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
+   STATE-NUM.  */
+static const yytype_int16 yypact[] =
+{
+   -1086,   168,  4730, -1086, 10445, -1086, -1086, -1086,  9903, -1086,
+   -1086, -1086, -1086, -1086, -1086, -1086, 10571, 10571, -1086, -1086,
+   -1086,  6363,  5922, -1086, -1086, -1086, -
