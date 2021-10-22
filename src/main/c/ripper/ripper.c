@@ -6207,4 +6207,254 @@ yy_location_print_ (FILE *yyo, YYLTYPE const * const yylocp)
 
 # define YY_SYMBOL_PRINT(Title, Kind, Value, Location)                    \
 do {                                                                      \
-  if (yydebug)       
+  if (yydebug)                                                            \
+    {                                                                     \
+      YYFPRINTF (p, "%s ", Title);                                   \
+      yy_symbol_print (stderr,                                            \
+                  Kind, Value, Location, p); \
+      YYFPRINTF (p, "\n");                                           \
+    }                                                                     \
+} while (0)
+
+
+/*-----------------------------------.
+| Print this symbol's value on YYO.  |
+`-----------------------------------*/
+
+static void
+yy_symbol_value_print (FILE *yyo,
+                       yysymbol_kind_t yykind, YYSTYPE const * const yyvaluep, YYLTYPE const * const yylocationp, struct parser_params *p)
+{
+  FILE *yyoutput = yyo;
+  YY_USE (yyoutput);
+  YY_USE (yylocationp);
+  YY_USE (p);
+  if (!yyvaluep)
+    return;
+  YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN
+  switch (yykind)
+    {
+    case YYSYMBOL_tIDENTIFIER: /* "local variable or method"  */
+#line 1090 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%"PRIsVALUE, rb_id2str(((*yyvaluep).val)));
+#else
+    rb_parser_printf(p, "%"PRIsVALUE, RNODE(((*yyvaluep).val))->nd_rval);
+#endif
+}
+#line 6241 "ripper.c"
+        break;
+
+    case YYSYMBOL_tFID: /* "method"  */
+#line 1090 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%"PRIsVALUE, rb_id2str(((*yyvaluep).val)));
+#else
+    rb_parser_printf(p, "%"PRIsVALUE, RNODE(((*yyvaluep).val))->nd_rval);
+#endif
+}
+#line 6253 "ripper.c"
+        break;
+
+    case YYSYMBOL_tGVAR: /* "global variable"  */
+#line 1090 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%"PRIsVALUE, rb_id2str(((*yyvaluep).val)));
+#else
+    rb_parser_printf(p, "%"PRIsVALUE, RNODE(((*yyvaluep).val))->nd_rval);
+#endif
+}
+#line 6265 "ripper.c"
+        break;
+
+    case YYSYMBOL_tIVAR: /* "instance variable"  */
+#line 1090 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%"PRIsVALUE, rb_id2str(((*yyvaluep).val)));
+#else
+    rb_parser_printf(p, "%"PRIsVALUE, RNODE(((*yyvaluep).val))->nd_rval);
+#endif
+}
+#line 6277 "ripper.c"
+        break;
+
+    case YYSYMBOL_tCONSTANT: /* "constant"  */
+#line 1090 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%"PRIsVALUE, rb_id2str(((*yyvaluep).val)));
+#else
+    rb_parser_printf(p, "%"PRIsVALUE, RNODE(((*yyvaluep).val))->nd_rval);
+#endif
+}
+#line 6289 "ripper.c"
+        break;
+
+    case YYSYMBOL_tCVAR: /* "class variable"  */
+#line 1090 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%"PRIsVALUE, rb_id2str(((*yyvaluep).val)));
+#else
+    rb_parser_printf(p, "%"PRIsVALUE, RNODE(((*yyvaluep).val))->nd_rval);
+#endif
+}
+#line 6301 "ripper.c"
+        break;
+
+    case YYSYMBOL_tLABEL: /* "label"  */
+#line 1090 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%"PRIsVALUE, rb_id2str(((*yyvaluep).val)));
+#else
+    rb_parser_printf(p, "%"PRIsVALUE, RNODE(((*yyvaluep).val))->nd_rval);
+#endif
+}
+#line 6313 "ripper.c"
+        break;
+
+    case YYSYMBOL_tINTEGER: /* "integer literal"  */
+#line 1097 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%+"PRIsVALUE, ((*yyvaluep).val)->nd_lit);
+#else
+    rb_parser_printf(p, "%+"PRIsVALUE, get_value(((*yyvaluep).val)));
+#endif
+}
+#line 6325 "ripper.c"
+        break;
+
+    case YYSYMBOL_tFLOAT: /* "float literal"  */
+#line 1097 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%+"PRIsVALUE, ((*yyvaluep).val)->nd_lit);
+#else
+    rb_parser_printf(p, "%+"PRIsVALUE, get_value(((*yyvaluep).val)));
+#endif
+}
+#line 6337 "ripper.c"
+        break;
+
+    case YYSYMBOL_tRATIONAL: /* "rational literal"  */
+#line 1097 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%+"PRIsVALUE, ((*yyvaluep).val)->nd_lit);
+#else
+    rb_parser_printf(p, "%+"PRIsVALUE, get_value(((*yyvaluep).val)));
+#endif
+}
+#line 6349 "ripper.c"
+        break;
+
+    case YYSYMBOL_tIMAGINARY: /* "imaginary literal"  */
+#line 1097 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%+"PRIsVALUE, ((*yyvaluep).val)->nd_lit);
+#else
+    rb_parser_printf(p, "%+"PRIsVALUE, get_value(((*yyvaluep).val)));
+#endif
+}
+#line 6361 "ripper.c"
+        break;
+
+    case YYSYMBOL_tCHAR: /* "char literal"  */
+#line 1097 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%+"PRIsVALUE, ((*yyvaluep).val)->nd_lit);
+#else
+    rb_parser_printf(p, "%+"PRIsVALUE, get_value(((*yyvaluep).val)));
+#endif
+}
+#line 6373 "ripper.c"
+        break;
+
+    case YYSYMBOL_tNTH_REF: /* "numbered reference"  */
+#line 1104 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "$%ld", ((*yyvaluep).val)->nd_nth);
+#else
+    rb_parser_printf(p, "%"PRIsVALUE, ((*yyvaluep).val));
+#endif
+}
+#line 6385 "ripper.c"
+        break;
+
+    case YYSYMBOL_tBACK_REF: /* "back reference"  */
+#line 1111 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "$%c", (int)((*yyvaluep).val)->nd_nth);
+#else
+    rb_parser_printf(p, "%"PRIsVALUE, ((*yyvaluep).val));
+#endif
+}
+#line 6397 "ripper.c"
+        break;
+
+    case YYSYMBOL_tSTRING_CONTENT: /* "literal content"  */
+#line 1097 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%+"PRIsVALUE, ((*yyvaluep).val)->nd_lit);
+#else
+    rb_parser_printf(p, "%+"PRIsVALUE, get_value(((*yyvaluep).val)));
+#endif
+}
+#line 6409 "ripper.c"
+        break;
+
+    case YYSYMBOL_tOP_ASGN: /* "operator-assignment"  */
+#line 1090 "ripper.y"
+         {
+#ifndef RIPPER
+    rb_parser_printf(p, "%"PRIsVALUE, rb_id2str(((*yyvaluep).val)));
+#else
+    rb_parser_printf(p, "%"PRIsVALUE, RNODE(((*yyvaluep).val))->nd_rval);
+#endif
+}
+#line 6421 "ripper.c"
+        break;
+
+      default:
+        break;
+    }
+  YY_IGNORE_MAYBE_UNINITIALIZED_END
+}
+
+
+/*---------------------------.
+| Print this symbol on YYO.  |
+`---------------------------*/
+
+static void
+yy_symbol_print (FILE *yyo,
+                 yysymbol_kind_t yykind, YYSTYPE const * const yyvaluep, YYLTYPE const * const yylocationp, struct parser_params *p)
+{
+  YYFPRINTF (p, "%s %s (",
+             yykind < YYNTOKENS ? "token" : "nterm", yysymbol_name (yykind));
+
+  YYLOCATION_PRINT (yyo, yylocationp);
+  YYFPRINTF (p, ": ");
+  yy_symbol_value_print (yyo, yykind, yyvaluep, yylocationp, p);
+  YYFPRINTF (p, ")");
+}
+
+/*------------------------------------------------------------------.
+| yy_stack_print -- Print the state stack from its BOTTOM up to its |
+| TOP (included).                                                   |
+`------------------------------------------------------------------*/
+
+static void
+ruby_parser_yy_stack_print (yy_state_t *yybottom, yy_state_t *yytop, struct parser_params *p)
+#define yy_stack_print(b, t) ruby_parser_yy_stack_print(b, t, p
