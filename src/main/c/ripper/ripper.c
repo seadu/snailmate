@@ -7561,4 +7561,150 @@ yyreduce:
 #line 1626 "ripper.y"
                     {
 #if 0
-			(yyval.val) = new_ary_op_assign(p, (yyvsp[-6].val), (yyvsp[-4].val), (yyvsp[-2].val), (yy
+			(yyval.val) = new_ary_op_assign(p, (yyvsp[-6].val), (yyvsp[-4].val), (yyvsp[-2].val), (yyvsp[0].val), &(yylsp[-4]), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4,v5,v6,v7;v1=(yyvsp[-6].val);v2=escape_Qundef((yyvsp[-4].val));v3=dispatch2(aref_field,v1,v2);v4=v3;v5=(yyvsp[-2].val);v6=(yyvsp[0].val);v7=dispatch3(opassign,v4,v5,v6);(yyval.val)=v7;}
+
+		    }
+#line 7561 "ripper.c"
+    break;
+
+  case 44: /* command_asgn: primary_value call_op "local variable or method" "operator-assignment" lex_ctxt command_rhs  */
+#line 1634 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = new_attr_op_assign(p, (yyvsp[-5].val), (yyvsp[-4].val), (yyvsp[-3].val), (yyvsp[-2].val), (yyvsp[0].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4,v5,v6,v7,v8;v1=(yyvsp[-5].val);v2=(yyvsp[-4].val);v3=(yyvsp[-3].val);v4=dispatch3(field,v1,v2,v3);v5=v4;v6=(yyvsp[-2].val);v7=(yyvsp[0].val);v8=dispatch3(opassign,v5,v6,v7);(yyval.val)=v8;}
+		    }
+#line 7572 "ripper.c"
+    break;
+
+  case 45: /* command_asgn: primary_value call_op "constant" "operator-assignment" lex_ctxt command_rhs  */
+#line 1641 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = new_attr_op_assign(p, (yyvsp[-5].val), (yyvsp[-4].val), (yyvsp[-3].val), (yyvsp[-2].val), (yyvsp[0].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4,v5,v6,v7,v8;v1=(yyvsp[-5].val);v2=(yyvsp[-4].val);v3=(yyvsp[-3].val);v4=dispatch3(field,v1,v2,v3);v5=v4;v6=(yyvsp[-2].val);v7=(yyvsp[0].val);v8=dispatch3(opassign,v5,v6,v7);(yyval.val)=v8;}
+		    }
+#line 7583 "ripper.c"
+    break;
+
+  case 46: /* command_asgn: primary_value "::" "constant" "operator-assignment" lex_ctxt command_rhs  */
+#line 1648 "ripper.y"
+                    {
+#if 0
+			YYLTYPE loc = code_loc_gen(&(yylsp[-5]), &(yylsp[-3]));
+			(yyval.val) = new_const_op_assign(p, NEW_COLON2((yyvsp[-5].val), (yyvsp[-3].val), &loc), (yyvsp[-2].val), (yyvsp[0].val), (yyvsp[-1].ctxt), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4,v5,v6,v7;v1=(yyvsp[-5].val);v2=(yyvsp[-3].val);v3=dispatch2(const_path_field,v1,v2);v4=v3;v5=(yyvsp[-2].val);v6=(yyvsp[0].val);v7=dispatch3(opassign,v4,v5,v6);(yyval.val)=v7;}
+		    }
+#line 7595 "ripper.c"
+    break;
+
+  case 47: /* command_asgn: primary_value "::" "local variable or method" "operator-assignment" lex_ctxt command_rhs  */
+#line 1656 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = new_attr_op_assign(p, (yyvsp[-5].val), ID2VAL(idCOLON2), (yyvsp[-3].val), (yyvsp[-2].val), (yyvsp[0].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4,v5,v6,v7,v8;v1=(yyvsp[-5].val);v2=ID2VAL(idCOLON2);v3=(yyvsp[-3].val);v4=dispatch3(field,v1,v2,v3);v5=v4;v6=(yyvsp[-2].val);v7=(yyvsp[0].val);v8=dispatch3(opassign,v5,v6,v7);(yyval.val)=v8;}
+		    }
+#line 7606 "ripper.c"
+    break;
+
+  case 48: /* command_asgn: defn_head f_opt_paren_args '=' command  */
+#line 1663 "ripper.y"
+                    {
+			endless_method_name(p, (yyvsp[-3].node), &(yylsp[-3]));
+			restore_defun(p, (yyvsp[-3].node)->nd_defn);
+#if 0
+			(yyval.val) = set_defun_body(p, (yyvsp[-3].val), (yyvsp[-2].val), (yyvsp[0].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4,v5;v1=(yyvsp[0].val);v2=Qnil;v3=Qnil;v4=Qnil;v5=dispatch4(bodystmt,v1,v2,v3,v4);(yyvsp[0].val)=v5;}
+			{VALUE v1,v2,v3,v4;v1=get_value((yyvsp[-3].val));v2=(yyvsp[-2].val);v3=(yyvsp[0].val);v4=dispatch3(def,v1,v2,v3);(yyval.val)=v4;}
+			local_pop(p);
+		    }
+#line 7621 "ripper.c"
+    break;
+
+  case 49: /* command_asgn: defn_head f_opt_paren_args '=' command "`rescue' modifier" arg  */
+#line 1674 "ripper.y"
+                    {
+			endless_method_name(p, (yyvsp[-5].node), &(yylsp[-5]));
+			restore_defun(p, (yyvsp[-5].node)->nd_defn);
+#if 0
+			(yyvsp[-2].val) = rescued_expr(p, (yyvsp[-2].val), (yyvsp[0].val), &(yylsp[-2]), &(yylsp[-1]), &(yylsp[0]));
+			(yyval.val) = set_defun_body(p, (yyvsp[-5].val), (yyvsp[-4].val), (yyvsp[-2].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4,v5,v6,v7,v8;v1=(yyvsp[-2].val);v2=(yyvsp[0].val);v3=dispatch2(rescue_mod,v1,v2);v4=v3;v5=Qnil;v6=Qnil;v7=Qnil;v8=dispatch4(bodystmt,v4,v5,v6,v7);(yyvsp[-2].val)=v8;}
+			{VALUE v1,v2,v3,v4;v1=get_value((yyvsp[-5].val));v2=(yyvsp[-4].val);v3=(yyvsp[-2].val);v4=dispatch3(def,v1,v2,v3);(yyval.val)=v4;}
+			local_pop(p);
+		    }
+#line 7637 "ripper.c"
+    break;
+
+  case 50: /* command_asgn: defs_head f_opt_paren_args '=' command  */
+#line 1686 "ripper.y"
+                    {
+			endless_method_name(p, (yyvsp[-3].node), &(yylsp[-3]));
+			restore_defun(p, (yyvsp[-3].node)->nd_defn);
+#if 0
+			(yyval.val) = set_defun_body(p, (yyvsp[-3].val), (yyvsp[-2].val), (yyvsp[0].val), &(yyloc));
+#endif
+			(yyvsp[-3].val) = get_value((yyvsp[-3].val));
+
+			{VALUE v1,v2,v3,v4,v5;v1=(yyvsp[0].val);v2=Qnil;v3=Qnil;v4=Qnil;v5=dispatch4(bodystmt,v1,v2,v3,v4);(yyvsp[0].val)=v5;}
+			{VALUE v1,v2,v3,v4,v5,v6;v1=AREF((yyvsp[-3].val), 0);v2=AREF((yyvsp[-3].val), 1);v3=AREF((yyvsp[-3].val), 2);v4=(yyvsp[-2].val);v5=(yyvsp[0].val);v6=dispatch5(defs,v1,v2,v3,v4,v5);(yyval.val)=v6;}
+			local_pop(p);
+		    }
+#line 7654 "ripper.c"
+    break;
+
+  case 51: /* command_asgn: defs_head f_opt_paren_args '=' command "`rescue' modifier" arg  */
+#line 1699 "ripper.y"
+                    {
+			endless_method_name(p, (yyvsp[-5].node), &(yylsp[-5]));
+			restore_defun(p, (yyvsp[-5].node)->nd_defn);
+#if 0
+			(yyvsp[-2].val) = rescued_expr(p, (yyvsp[-2].val), (yyvsp[0].val), &(yylsp[-2]), &(yylsp[-1]), &(yylsp[0]));
+			(yyval.val) = set_defun_body(p, (yyvsp[-5].val), (yyvsp[-4].val), (yyvsp[-2].val), &(yyloc));
+#endif
+			(yyvsp[-5].val) = get_value((yyvsp[-5].val));
+
+			{VALUE v1,v2,v3,v4,v5,v6,v7,v8;v1=(yyvsp[-2].val);v2=(yyvsp[0].val);v3=dispatch2(rescue_mod,v1,v2);v4=v3;v5=Qnil;v6=Qnil;v7=Qnil;v8=dispatch4(bodystmt,v4,v5,v6,v7);(yyvsp[-2].val)=v8;}
+			{VALUE v1,v2,v3,v4,v5,v6;v1=AREF((yyvsp[-5].val), 0);v2=AREF((yyvsp[-5].val), 1);v3=AREF((yyvsp[-5].val), 2);v4=(yyvsp[-4].val);v5=(yyvsp[-2].val);v6=dispatch5(defs,v1,v2,v3,v4,v5);(yyval.val)=v6;}
+			local_pop(p);
+		    }
+#line 7672 "ripper.c"
+    break;
+
+  case 52: /* command_asgn: backref "operator-assignment" lex_ctxt command_rhs  */
+#line 1713 "ripper.y"
+                    {
+#if 0
+			rb_backref_error(p, (yyvsp[-3].val));
+			(yyval.val) = NEW_BEGIN(0, &(yyloc));
+#endif
+			{VALUE v1,v2,v3;v1=var_field(p, (yyvsp[-3].val));v2=(yyvsp[0].val);v3=dispatch2(assign,v1,v2);(yyval.val)=backref_error(p, RNODE((yyvsp[-3].val)), v3);}ripper_error(p);
+		    }
+#line 7684 "ripper.c"
+    break;
+
+  case 53: /* command_rhs: command_call  */
+#line 1723 "ripper.y"
+                    {
+			value_expr((yyvsp[0].val));
+			(yyval.val) = (yyvsp[0].val);
+		    }
+#line 7693 "ripper.c"
+    break;
+
+  case 54: /* command_rhs: command_call "`rescue' modifier" stmt  */
+#line 1728 "ripper.y"
+                    {
+#if 0
+			YYLTYPE loc = code_loc_gen(&(yylsp[-1]), &(yylsp[0]));
+			value_expr((yyvsp[-2].val));
+			(yy
