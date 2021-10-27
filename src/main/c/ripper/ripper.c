@@ -8145,4 +8145,216 @@ yyreduce:
 #line 2038 "ripper.y"
                     {
 #if 0
-			(yyval.val) = NEW_MASGN((yyvsp
+			(yyval.val) = NEW_MASGN((yyvsp[-3].val), NEW_POSTARG(NODE_SPECIAL_NO_NAME_REST, (yyvsp[0].val), &(yyloc)), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4,v5,v6;v1=(yyvsp[-3].val);v2=Qnil;v3=dispatch2(mlhs_add_star,v1,v2);v4=v3;v5=(yyvsp[0].val);v6=dispatch2(mlhs_add_post,v4,v5);(yyval.val)=v6;}
+		    }
+#line 8144 "ripper.c"
+    break;
+
+  case 103: /* mlhs_basic: "*" mlhs_node  */
+#line 2045 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_MASGN(0, (yyvsp[0].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4;v1=dispatch0(mlhs_new);v2=v1;v3=(yyvsp[0].val);v4=dispatch2(mlhs_add_star,v2,v3);(yyval.val)=v4;}
+		    }
+#line 8155 "ripper.c"
+    break;
+
+  case 104: /* mlhs_basic: "*" mlhs_node ',' mlhs_post  */
+#line 2052 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_MASGN(0, NEW_POSTARG((yyvsp[-2].val),(yyvsp[0].val),&(yyloc)), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4,v5,v6,v7;v1=dispatch0(mlhs_new);v2=v1;v3=(yyvsp[-2].val);v4=dispatch2(mlhs_add_star,v2,v3);v5=v4;v6=(yyvsp[0].val);v7=dispatch2(mlhs_add_post,v5,v6);(yyval.val)=v7;}
+		    }
+#line 8166 "ripper.c"
+    break;
+
+  case 105: /* mlhs_basic: "*"  */
+#line 2059 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_MASGN(0, NODE_SPECIAL_NO_NAME_REST, &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4;v1=dispatch0(mlhs_new);v2=v1;v3=Qnil;v4=dispatch2(mlhs_add_star,v2,v3);(yyval.val)=v4;}
+		    }
+#line 8177 "ripper.c"
+    break;
+
+  case 106: /* mlhs_basic: "*" ',' mlhs_post  */
+#line 2066 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_MASGN(0, NEW_POSTARG(NODE_SPECIAL_NO_NAME_REST, (yyvsp[0].val), &(yyloc)), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4,v5,v6,v7;v1=dispatch0(mlhs_new);v2=v1;v3=Qnil;v4=dispatch2(mlhs_add_star,v2,v3);v5=v4;v6=(yyvsp[0].val);v7=dispatch2(mlhs_add_post,v5,v6);(yyval.val)=v7;}
+		    }
+#line 8188 "ripper.c"
+    break;
+
+  case 108: /* mlhs_item: "(" mlhs_inner rparen  */
+#line 2076 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = (yyvsp[-1].val);
+#endif
+			{VALUE v1,v2;v1=(yyvsp[-1].val);v2=dispatch1(mlhs_paren,v1);(yyval.val)=v2;}
+		    }
+#line 8199 "ripper.c"
+    break;
+
+  case 109: /* mlhs_head: mlhs_item ','  */
+#line 2085 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_LIST((yyvsp[-1].val), &(yylsp[-1]));
+#endif
+			{VALUE v1,v2,v3,v4;v1=dispatch0(mlhs_new);v2=v1;v3=(yyvsp[-1].val);v4=dispatch2(mlhs_add,v2,v3);(yyval.val)=v4;}
+		    }
+#line 8210 "ripper.c"
+    break;
+
+  case 110: /* mlhs_head: mlhs_head mlhs_item ','  */
+#line 2092 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = list_append(p, (yyvsp[-2].val), (yyvsp[-1].val));
+#endif
+			{VALUE v1,v2,v3;v1=(yyvsp[-2].val);v2=(yyvsp[-1].val);v3=dispatch2(mlhs_add,v1,v2);(yyval.val)=v3;}
+		    }
+#line 8221 "ripper.c"
+    break;
+
+  case 111: /* mlhs_post: mlhs_item  */
+#line 2101 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_LIST((yyvsp[0].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4;v1=dispatch0(mlhs_new);v2=v1;v3=(yyvsp[0].val);v4=dispatch2(mlhs_add,v2,v3);(yyval.val)=v4;}
+		    }
+#line 8232 "ripper.c"
+    break;
+
+  case 112: /* mlhs_post: mlhs_post ',' mlhs_item  */
+#line 2108 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = list_append(p, (yyvsp[-2].val), (yyvsp[0].val));
+#endif
+			{VALUE v1,v2,v3;v1=(yyvsp[-2].val);v2=(yyvsp[0].val);v3=dispatch2(mlhs_add,v1,v2);(yyval.val)=v3;}
+		    }
+#line 8243 "ripper.c"
+    break;
+
+  case 113: /* mlhs_node: user_variable  */
+#line 2117 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = assignable(p, (yyvsp[0].val), 0, &(yyloc));
+#endif
+			(yyval.val)=assignable(p, var_field(p, (yyvsp[0].val)));
+		    }
+#line 8254 "ripper.c"
+    break;
+
+  case 114: /* mlhs_node: keyword_variable  */
+#line 2124 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = assignable(p, (yyvsp[0].val), 0, &(yyloc));
+#endif
+			(yyval.val)=assignable(p, var_field(p, (yyvsp[0].val)));
+		    }
+#line 8265 "ripper.c"
+    break;
+
+  case 115: /* mlhs_node: primary_value '[' opt_call_args rbracket  */
+#line 2131 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = aryset(p, (yyvsp[-3].val), (yyvsp[-1].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3;v1=(yyvsp[-3].val);v2=escape_Qundef((yyvsp[-1].val));v3=dispatch2(aref_field,v1,v2);(yyval.val)=v3;}
+		    }
+#line 8276 "ripper.c"
+    break;
+
+  case 116: /* mlhs_node: primary_value call_op "local variable or method"  */
+#line 2138 "ripper.y"
+                    {
+			if ((yyvsp[-1].val) == tANDDOT) {
+			    yyerror1(&(yylsp[-1]), "&. inside multiple assignment destination");
+			}
+#if 0
+			(yyval.val) = attrset(p, (yyvsp[-2].val), (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4;v1=(yyvsp[-2].val);v2=(yyvsp[-1].val);v3=(yyvsp[0].val);v4=dispatch3(field,v1,v2,v3);(yyval.val)=v4;}
+		    }
+#line 8290 "ripper.c"
+    break;
+
+  case 117: /* mlhs_node: primary_value "::" "local variable or method"  */
+#line 2148 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = attrset(p, (yyvsp[-2].val), idCOLON2, (yyvsp[0].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3;v1=(yyvsp[-2].val);v2=(yyvsp[0].val);v3=dispatch2(const_path_field,v1,v2);(yyval.val)=v3;}
+		    }
+#line 8301 "ripper.c"
+    break;
+
+  case 118: /* mlhs_node: primary_value call_op "constant"  */
+#line 2155 "ripper.y"
+                    {
+			if ((yyvsp[-1].val) == tANDDOT) {
+			    yyerror1(&(yylsp[-1]), "&. inside multiple assignment destination");
+			}
+#if 0
+			(yyval.val) = attrset(p, (yyvsp[-2].val), (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4;v1=(yyvsp[-2].val);v2=(yyvsp[-1].val);v3=(yyvsp[0].val);v4=dispatch3(field,v1,v2,v3);(yyval.val)=v4;}
+		    }
+#line 8315 "ripper.c"
+    break;
+
+  case 119: /* mlhs_node: primary_value "::" "constant"  */
+#line 2165 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = const_decl(p, NEW_COLON2((yyvsp[-2].val), (yyvsp[0].val), &(yyloc)), &(yyloc));
+#endif
+			{VALUE v1,v2,v3;v1=(yyvsp[-2].val);v2=(yyvsp[0].val);v3=dispatch2(const_path_field,v1,v2);(yyval.val)=const_decl(p, v3);}
+		    }
+#line 8326 "ripper.c"
+    break;
+
+  case 120: /* mlhs_node: ":: at EXPR_BEG" "constant"  */
+#line 2172 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = const_decl(p, NEW_COLON3((yyvsp[0].val), &(yyloc)), &(yyloc));
+#endif
+			{VALUE v1,v2;v1=(yyvsp[0].val);v2=dispatch1(top_const_field,v1);(yyval.val)=const_decl(p, v2);}
+		    }
+#line 8337 "ripper.c"
+    break;
+
+  case 121: /* mlhs_node: backref  */
+#line 2179 "ripper.y"
+                    {
+#if 0
+			rb_backref_error(p, (yyvsp[0].val));
+			(yyval.val) = NEW_BEGIN(0, &(yyloc));
+#endif
+			(yyval.val)=backref_error(p, RNODE((yyvsp[0].val)), var_field(p, (yyvsp[0].val)));ripper_error(p);
+		    }
+#line 8349 "ripper.c"
+    break;
+
+  
