@@ -9030,4 +9030,202 @@ yyreduce:
   case 248: /* arg: arg "!=" arg  */
 #line 2550 "ripper.y"
                     {
-			(yyval.val) = call_bin_op(p, (yyvsp[-2].val), idNeq, (yyv
+			(yyval.val) = call_bin_op(p, (yyvsp[-2].val), idNeq, (yyvsp[0].val), &(yylsp[-1]), &(yyloc));
+		    }
+#line 9027 "ripper.c"
+    break;
+
+  case 249: /* arg: arg "=~" arg  */
+#line 2554 "ripper.y"
+                    {
+			(yyval.val) = match_op(p, (yyvsp[-2].val), (yyvsp[0].val), &(yylsp[-1]), &(yyloc));
+		    }
+#line 9035 "ripper.c"
+    break;
+
+  case 250: /* arg: arg "!~" arg  */
+#line 2558 "ripper.y"
+                    {
+			(yyval.val) = call_bin_op(p, (yyvsp[-2].val), idNeqTilde, (yyvsp[0].val), &(yylsp[-1]), &(yyloc));
+		    }
+#line 9043 "ripper.c"
+    break;
+
+  case 251: /* arg: '!' arg  */
+#line 2562 "ripper.y"
+                    {
+			(yyval.val) = call_uni_op(p, method_cond(p, (yyvsp[0].val), &(yylsp[0])), '!', &(yylsp[-1]), &(yyloc));
+		    }
+#line 9051 "ripper.c"
+    break;
+
+  case 252: /* arg: '~' arg  */
+#line 2566 "ripper.y"
+                    {
+			(yyval.val) = call_uni_op(p, (yyvsp[0].val), '~', &(yylsp[-1]), &(yyloc));
+		    }
+#line 9059 "ripper.c"
+    break;
+
+  case 253: /* arg: arg "<<" arg  */
+#line 2570 "ripper.y"
+                    {
+			(yyval.val) = call_bin_op(p, (yyvsp[-2].val), idLTLT, (yyvsp[0].val), &(yylsp[-1]), &(yyloc));
+		    }
+#line 9067 "ripper.c"
+    break;
+
+  case 254: /* arg: arg ">>" arg  */
+#line 2574 "ripper.y"
+                    {
+			(yyval.val) = call_bin_op(p, (yyvsp[-2].val), idGTGT, (yyvsp[0].val), &(yylsp[-1]), &(yyloc));
+		    }
+#line 9075 "ripper.c"
+    break;
+
+  case 255: /* arg: arg "&&" arg  */
+#line 2578 "ripper.y"
+                    {
+			(yyval.val) = logop(p, idANDOP, (yyvsp[-2].val), (yyvsp[0].val), &(yylsp[-1]), &(yyloc));
+		    }
+#line 9083 "ripper.c"
+    break;
+
+  case 256: /* arg: arg "||" arg  */
+#line 2582 "ripper.y"
+                    {
+			(yyval.val) = logop(p, idOROP, (yyvsp[-2].val), (yyvsp[0].val), &(yylsp[-1]), &(yyloc));
+		    }
+#line 9091 "ripper.c"
+    break;
+
+  case 257: /* $@13: %empty  */
+#line 2585 "ripper.y"
+                                         {p->ctxt.in_defined = 1;}
+#line 9097 "ripper.c"
+    break;
+
+  case 258: /* arg: "`defined?'" opt_nl $@13 arg  */
+#line 2586 "ripper.y"
+                    {
+			p->ctxt.in_defined = 0;
+			(yyval.val) = new_defined(p, (yyvsp[0].val), &(yyloc));
+		    }
+#line 9106 "ripper.c"
+    break;
+
+  case 259: /* arg: arg '?' arg opt_nl ':' arg  */
+#line 2591 "ripper.y"
+                    {
+#if 0
+			value_expr((yyvsp[-5].val));
+			(yyval.val) = new_if(p, (yyvsp[-5].val), (yyvsp[-3].val), (yyvsp[0].val), &(yyloc));
+			fixpos((yyval.val), (yyvsp[-5].val));
+#endif
+			{VALUE v1,v2,v3,v4;v1=(yyvsp[-5].val);v2=(yyvsp[-3].val);v3=(yyvsp[0].val);v4=dispatch3(ifop,v1,v2,v3);(yyval.val)=v4;}
+		    }
+#line 9119 "ripper.c"
+    break;
+
+  case 260: /* arg: defn_head f_opt_paren_args '=' arg  */
+#line 2600 "ripper.y"
+                    {
+			endless_method_name(p, (yyvsp[-3].node), &(yylsp[-3]));
+			restore_defun(p, (yyvsp[-3].node)->nd_defn);
+#if 0
+			(yyval.val) = set_defun_body(p, (yyvsp[-3].val), (yyvsp[-2].val), (yyvsp[0].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4,v5;v1=(yyvsp[0].val);v2=Qnil;v3=Qnil;v4=Qnil;v5=dispatch4(bodystmt,v1,v2,v3,v4);(yyvsp[0].val)=v5;}
+			{VALUE v1,v2,v3,v4;v1=get_value((yyvsp[-3].val));v2=(yyvsp[-2].val);v3=(yyvsp[0].val);v4=dispatch3(def,v1,v2,v3);(yyval.val)=v4;}
+			local_pop(p);
+		    }
+#line 9134 "ripper.c"
+    break;
+
+  case 261: /* arg: defn_head f_opt_paren_args '=' arg "`rescue' modifier" arg  */
+#line 2611 "ripper.y"
+                    {
+			endless_method_name(p, (yyvsp[-5].node), &(yylsp[-5]));
+			restore_defun(p, (yyvsp[-5].node)->nd_defn);
+#if 0
+			(yyvsp[-2].val) = rescued_expr(p, (yyvsp[-2].val), (yyvsp[0].val), &(yylsp[-2]), &(yylsp[-1]), &(yylsp[0]));
+			(yyval.val) = set_defun_body(p, (yyvsp[-5].val), (yyvsp[-4].val), (yyvsp[-2].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4,v5,v6,v7,v8;v1=(yyvsp[-2].val);v2=(yyvsp[0].val);v3=dispatch2(rescue_mod,v1,v2);v4=v3;v5=Qnil;v6=Qnil;v7=Qnil;v8=dispatch4(bodystmt,v4,v5,v6,v7);(yyvsp[-2].val)=v8;}
+			{VALUE v1,v2,v3,v4;v1=get_value((yyvsp[-5].val));v2=(yyvsp[-4].val);v3=(yyvsp[-2].val);v4=dispatch3(def,v1,v2,v3);(yyval.val)=v4;}
+			local_pop(p);
+		    }
+#line 9150 "ripper.c"
+    break;
+
+  case 262: /* arg: defs_head f_opt_paren_args '=' arg  */
+#line 2623 "ripper.y"
+                    {
+			endless_method_name(p, (yyvsp[-3].node), &(yylsp[-3]));
+			restore_defun(p, (yyvsp[-3].node)->nd_defn);
+#if 0
+			(yyval.val) = set_defun_body(p, (yyvsp[-3].val), (yyvsp[-2].val), (yyvsp[0].val), &(yyloc));
+#endif
+			(yyvsp[-3].val) = get_value((yyvsp[-3].val));
+
+			{VALUE v1,v2,v3,v4,v5;v1=(yyvsp[0].val);v2=Qnil;v3=Qnil;v4=Qnil;v5=dispatch4(bodystmt,v1,v2,v3,v4);(yyvsp[0].val)=v5;}
+			{VALUE v1,v2,v3,v4,v5,v6;v1=AREF((yyvsp[-3].val), 0);v2=AREF((yyvsp[-3].val), 1);v3=AREF((yyvsp[-3].val), 2);v4=(yyvsp[-2].val);v5=(yyvsp[0].val);v6=dispatch5(defs,v1,v2,v3,v4,v5);(yyval.val)=v6;}
+			local_pop(p);
+		    }
+#line 9167 "ripper.c"
+    break;
+
+  case 263: /* arg: defs_head f_opt_paren_args '=' arg "`rescue' modifier" arg  */
+#line 2636 "ripper.y"
+                    {
+			endless_method_name(p, (yyvsp[-5].node), &(yylsp[-5]));
+			restore_defun(p, (yyvsp[-5].node)->nd_defn);
+#if 0
+			(yyvsp[-2].val) = rescued_expr(p, (yyvsp[-2].val), (yyvsp[0].val), &(yylsp[-2]), &(yylsp[-1]), &(yylsp[0]));
+			(yyval.val) = set_defun_body(p, (yyvsp[-5].val), (yyvsp[-4].val), (yyvsp[-2].val), &(yyloc));
+#endif
+			(yyvsp[-5].val) = get_value((yyvsp[-5].val));
+
+			{VALUE v1,v2,v3,v4,v5,v6,v7,v8;v1=(yyvsp[-2].val);v2=(yyvsp[0].val);v3=dispatch2(rescue_mod,v1,v2);v4=v3;v5=Qnil;v6=Qnil;v7=Qnil;v8=dispatch4(bodystmt,v4,v5,v6,v7);(yyvsp[-2].val)=v8;}
+			{VALUE v1,v2,v3,v4,v5,v6;v1=AREF((yyvsp[-5].val), 0);v2=AREF((yyvsp[-5].val), 1);v3=AREF((yyvsp[-5].val), 2);v4=(yyvsp[-4].val);v5=(yyvsp[-2].val);v6=dispatch5(defs,v1,v2,v3,v4,v5);(yyval.val)=v6;}
+			local_pop(p);
+		    }
+#line 9185 "ripper.c"
+    break;
+
+  case 264: /* arg: primary  */
+#line 2650 "ripper.y"
+                    {
+			(yyval.val) = (yyvsp[0].val);
+		    }
+#line 9193 "ripper.c"
+    break;
+
+  case 265: /* relop: '>'  */
+#line 2655 "ripper.y"
+                       {(yyval.val) = '>';}
+#line 9199 "ripper.c"
+    break;
+
+  case 266: /* relop: '<'  */
+#line 2656 "ripper.y"
+                       {(yyval.val) = '<';}
+#line 9205 "ripper.c"
+    break;
+
+  case 267: /* relop: ">="  */
+#line 2657 "ripper.y"
+                       {(yyval.val) = idGE;}
+#line 9211 "ripper.c"
+    break;
+
+  case 268: /* relop: "<="  */
+#line 2658 "ripper.y"
+                       {(yyval.val) = idLE;}
+#line 9217 "ripper.c"
+    break;
+
+  case 269: /* rel_expr: arg relop arg  */
+#line 2662 "ripper.y"
+                    {
+			(yyval.val) = call_bin_op(p, (yyvsp[-2].val), (yyvsp[-1].val), (yy
