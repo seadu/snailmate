@@ -9902,4 +9902,197 @@ yyreduce:
     break;
 
   case 350: /* @20: %empty  */
-#line 
+#line 3147 "ripper.y"
+                    {
+			(yyval.val) = p->case_labels;
+			p->case_labels = 0;
+		    }
+#line 9902 "ripper.c"
+    break;
+
+  case 351: /* primary: k_case opt_terms @20 case_body k_end  */
+#line 3153 "ripper.y"
+                    {
+			if (RTEST(p->case_labels)) rb_hash_clear(p->case_labels);
+			p->case_labels = (yyvsp[-2].val);
+#if 0
+			(yyval.val) = NEW_CASE2((yyvsp[-1].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3;v1=Qnil;v2=(yyvsp[-1].val);v3=dispatch2(case,v1,v2);(yyval.val)=v3;}
+		    }
+#line 9915 "ripper.c"
+    break;
+
+  case 352: /* primary: k_case expr_value opt_terms p_case_body k_end  */
+#line 3164 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_CASE3((yyvsp[-3].val), (yyvsp[-1].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3;v1=(yyvsp[-3].val);v2=(yyvsp[-1].val);v3=dispatch2(case,v1,v2);(yyval.val)=v3;}
+		    }
+#line 9926 "ripper.c"
+    break;
+
+  case 353: /* primary: k_for for_var "`in'" expr_value_do compstmt k_end  */
+#line 3173 "ripper.y"
+                    {
+#if 0
+			/*
+			 *  for a, b, c in e
+			 *  #=>
+			 *  e.each{|*x| a, b, c = x}
+			 *
+			 *  for a in e
+			 *  #=>
+			 *  e.each{|x| a, = x}
+			 */
+			ID id = internal_id(p);
+			NODE *m = NEW_ARGS_AUX(0, 0, &NULL_LOC);
+			NODE *args, *scope, *internal_var = NEW_DVAR(id, &(yylsp[-4]));
+                        rb_ast_id_table_t *tbl = rb_ast_new_local_table(p->ast, 1);
+			tbl->ids[0] = id; /* internal id */
+
+			switch (nd_type((yyvsp[-4].val))) {
+			  case NODE_LASGN:
+			  case NODE_DASGN: /* e.each {|internal_var| a = internal_var; ... } */
+			    (yyvsp[-4].val)->nd_value = internal_var;
+			    id = 0;
+			    m->nd_plen = 1;
+			    m->nd_next = (yyvsp[-4].val);
+			    break;
+			  case NODE_MASGN: /* e.each {|*internal_var| a, b, c = (internal_var.length == 1 && Array === (tmp = internal_var[0]) ? tmp : internal_var); ... } */
+			    m->nd_next = node_assign(p, (yyvsp[-4].val), NEW_FOR_MASGN(internal_var, &(yylsp[-4])), NO_LEX_CTXT, &(yylsp[-4]));
+			    break;
+			  default: /* e.each {|*internal_var| @a, B, c[1], d.attr = internal_val; ... } */
+			    m->nd_next = node_assign(p, NEW_MASGN(NEW_LIST((yyvsp[-4].val), &(yylsp[-4])), 0, &(yylsp[-4])), internal_var, NO_LEX_CTXT, &(yylsp[-4]));
+			}
+			/* {|*internal_id| <m> = internal_id; ... } */
+			args = new_args(p, m, 0, id, 0, new_args_tail(p, 0, 0, 0, &(yylsp[-4])), &(yylsp[-4]));
+			scope = NEW_NODE(NODE_SCOPE, tbl, (yyvsp[-1].val), args, &(yyloc));
+			(yyval.val) = NEW_FOR((yyvsp[-2].val), scope, &(yyloc));
+			fixpos((yyval.val), (yyvsp[-4].val));
+#endif
+			{VALUE v1,v2,v3,v4;v1=(yyvsp[-4].val);v2=(yyvsp[-2].val);v3=(yyvsp[-1].val);v4=dispatch3(for,v1,v2,v3);(yyval.val)=v4;}
+		    }
+#line 9970 "ripper.c"
+    break;
+
+  case 354: /* $@21: %empty  */
+#line 3213 "ripper.y"
+                    {
+			if (p->ctxt.in_def) {
+			    YYLTYPE loc = code_loc_gen(&(yylsp[-2]), &(yylsp[-1]));
+			    yyerror1(&loc, "class definition in method body");
+			}
+			p->ctxt.in_class = 1;
+			local_push(p, 0);
+		    }
+#line 9983 "ripper.c"
+    break;
+
+  case 355: /* primary: k_class cpath superclass $@21 bodystmt k_end  */
+#line 3223 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_CLASS((yyvsp[-4].val), (yyvsp[-1].val), (yyvsp[-3].val), &(yyloc));
+			nd_set_line((yyval.val)->nd_body, (yylsp[0]).end_pos.lineno);
+			set_line_body((yyvsp[-1].val), (yylsp[-3]).end_pos.lineno);
+			nd_set_line((yyval.val), (yylsp[-3]).end_pos.lineno);
+#endif
+			{VALUE v1,v2,v3,v4;v1=(yyvsp[-4].val);v2=(yyvsp[-3].val);v3=(yyvsp[-1].val);v4=dispatch3(class,v1,v2,v3);(yyval.val)=v4;}
+			local_pop(p);
+			p->ctxt.in_class = (yyvsp[-5].ctxt).in_class;
+			p->ctxt.shareable_constant_value = (yyvsp[-5].ctxt).shareable_constant_value;
+		    }
+#line 10000 "ripper.c"
+    break;
+
+  case 356: /* $@22: %empty  */
+#line 3236 "ripper.y"
+                    {
+			p->ctxt.in_def = 0;
+			p->ctxt.in_class = 0;
+			local_push(p, 0);
+		    }
+#line 10010 "ripper.c"
+    break;
+
+  case 357: /* primary: k_class "<<" expr $@22 term bodystmt k_end  */
+#line 3244 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_SCLASS((yyvsp[-4].val), (yyvsp[-1].val), &(yyloc));
+			nd_set_line((yyval.val)->nd_body, (yylsp[0]).end_pos.lineno);
+			set_line_body((yyvsp[-1].val), nd_line((yyvsp[-4].val)));
+			fixpos((yyval.val), (yyvsp[-4].val));
+#endif
+			{VALUE v1,v2,v3;v1=(yyvsp[-4].val);v2=(yyvsp[-1].val);v3=dispatch2(sclass,v1,v2);(yyval.val)=v3;}
+			local_pop(p);
+			p->ctxt.in_def = (yyvsp[-6].ctxt).in_def;
+			p->ctxt.in_class = (yyvsp[-6].ctxt).in_class;
+			p->ctxt.shareable_constant_value = (yyvsp[-6].ctxt).shareable_constant_value;
+		    }
+#line 10028 "ripper.c"
+    break;
+
+  case 358: /* $@23: %empty  */
+#line 3258 "ripper.y"
+                    {
+			if (p->ctxt.in_def) {
+			    YYLTYPE loc = code_loc_gen(&(yylsp[-1]), &(yylsp[0]));
+			    yyerror1(&loc, "module definition in method body");
+			}
+			p->ctxt.in_class = 1;
+			local_push(p, 0);
+		    }
+#line 10041 "ripper.c"
+    break;
+
+  case 359: /* primary: k_module cpath $@23 bodystmt k_end  */
+#line 3268 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_MODULE((yyvsp[-3].val), (yyvsp[-1].val), &(yyloc));
+			nd_set_line((yyval.val)->nd_body, (yylsp[0]).end_pos.lineno);
+			set_line_body((yyvsp[-1].val), (yylsp[-3]).end_pos.lineno);
+			nd_set_line((yyval.val), (yylsp[-3]).end_pos.lineno);
+#endif
+			{VALUE v1,v2,v3;v1=(yyvsp[-3].val);v2=(yyvsp[-1].val);v3=dispatch2(module,v1,v2);(yyval.val)=v3;}
+			local_pop(p);
+			p->ctxt.in_class = (yyvsp[-4].ctxt).in_class;
+			p->ctxt.shareable_constant_value = (yyvsp[-4].ctxt).shareable_constant_value;
+		    }
+#line 10058 "ripper.c"
+    break;
+
+  case 360: /* primary: defn_head f_arglist bodystmt k_end  */
+#line 3284 "ripper.y"
+                    {
+			restore_defun(p, (yyvsp[-3].node)->nd_defn);
+#if 0
+			(yyval.val) = set_defun_body(p, (yyvsp[-3].val), (yyvsp[-2].val), (yyvsp[-1].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4;v1=get_value((yyvsp[-3].val));v2=(yyvsp[-2].val);v3=(yyvsp[-1].val);v4=dispatch3(def,v1,v2,v3);(yyval.val)=v4;}
+			local_pop(p);
+		    }
+#line 10071 "ripper.c"
+    break;
+
+  case 361: /* primary: defs_head f_arglist bodystmt k_end  */
+#line 3296 "ripper.y"
+                    {
+			restore_defun(p, (yyvsp[-3].node)->nd_defn);
+#if 0
+			(yyval.val) = set_defun_body(p, (yyvsp[-3].val), (yyvsp[-2].val), (yyvsp[-1].val), &(yyloc));
+#endif
+			(yyvsp[-3].val) = get_value((yyvsp[-3].val));
+
+			{VALUE v1,v2,v3,v4,v5,v6;v1=AREF((yyvsp[-3].val), 0);v2=AREF((yyvsp[-3].val), 1);v3=AREF((yyvsp[-3].val), 2);v4=(yyvsp[-2].val);v5=(yyvsp[-1].val);v6=dispatch5(defs,v1,v2,v3,v4,v5);(yyval.val)=v6;}
+			local_pop(p);
+		    }
+#line 10086 "ripper.c"
+    break;
+
+  case 362: /* primary: "`break'"  */
+#line 3307 "ripper
