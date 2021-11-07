@@ -10599,4 +10599,242 @@ yyreduce:
 #line 10591 "ripper.c"
     break;
 
-  case 426: /* block_param: f_arg opt_bl
+  case 426: /* block_param: f_arg opt_block_args_tail  */
+#line 3679 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, (yyvsp[-1].val), Qnone, Qnone, Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 10599 "ripper.c"
+    break;
+
+  case 427: /* block_param: f_block_optarg ',' f_rest_arg opt_block_args_tail  */
+#line 3683 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, (yyvsp[-3].val), (yyvsp[-1].val), Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 10607 "ripper.c"
+    break;
+
+  case 428: /* block_param: f_block_optarg ',' f_rest_arg ',' f_arg opt_block_args_tail  */
+#line 3687 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, (yyvsp[-5].val), (yyvsp[-3].val), (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+		    }
+#line 10615 "ripper.c"
+    break;
+
+  case 429: /* block_param: f_block_optarg opt_block_args_tail  */
+#line 3691 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, (yyvsp[-1].val), Qnone, Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 10623 "ripper.c"
+    break;
+
+  case 430: /* block_param: f_block_optarg ',' f_arg opt_block_args_tail  */
+#line 3695 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, (yyvsp[-3].val), Qnone, (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+		    }
+#line 10631 "ripper.c"
+    break;
+
+  case 431: /* block_param: f_rest_arg opt_block_args_tail  */
+#line 3699 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, Qnone, (yyvsp[-1].val), Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 10639 "ripper.c"
+    break;
+
+  case 432: /* block_param: f_rest_arg ',' f_arg opt_block_args_tail  */
+#line 3703 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, Qnone, (yyvsp[-3].val), (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+		    }
+#line 10647 "ripper.c"
+    break;
+
+  case 433: /* block_param: block_args_tail  */
+#line 3707 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, Qnone, Qnone, Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 10655 "ripper.c"
+    break;
+
+  case 435: /* opt_block_param: block_param_def  */
+#line 3714 "ripper.y"
+                    {
+			p->command_start = TRUE;
+		    }
+#line 10663 "ripper.c"
+    break;
+
+  case 436: /* block_param_def: '|' opt_bv_decl '|'  */
+#line 3720 "ripper.y"
+                    {
+			p->cur_arg = 0;
+			p->max_numparam = ORDINAL_PARAM;
+			p->ctxt.in_argdef = 0;
+#if 0
+			(yyval.val) = 0;
+#endif
+			{VALUE v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11;v1=Qnil;v2=Qnil;v3=Qnil;v4=Qnil;v5=Qnil;v6=Qnil;v7=Qnil;v8=dispatch7(params,v1,v2,v3,v4,v5,v6,v7);v9=v8;v10=escape_Qundef((yyvsp[-1].val));v11=dispatch2(block_var,v9,v10);(yyval.val)=v11;}
+		    }
+#line 10677 "ripper.c"
+    break;
+
+  case 437: /* block_param_def: '|' block_param opt_bv_decl '|'  */
+#line 3730 "ripper.y"
+                    {
+			p->cur_arg = 0;
+			p->max_numparam = ORDINAL_PARAM;
+			p->ctxt.in_argdef = 0;
+#if 0
+			(yyval.val) = (yyvsp[-2].val);
+#endif
+			{VALUE v1,v2,v3;v1=escape_Qundef((yyvsp[-2].val));v2=escape_Qundef((yyvsp[-1].val));v3=dispatch2(block_var,v1,v2);(yyval.val)=v3;}
+		    }
+#line 10691 "ripper.c"
+    break;
+
+  case 438: /* opt_bv_decl: opt_nl  */
+#line 3743 "ripper.y"
+                    {
+			(yyval.val) = 0;
+		    }
+#line 10699 "ripper.c"
+    break;
+
+  case 439: /* opt_bv_decl: opt_nl ';' bv_decls opt_nl  */
+#line 3747 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = 0;
+#endif
+			(yyval.val)=(yyvsp[-1].val);
+		    }
+#line 10710 "ripper.c"
+    break;
+
+  case 440: /* bv_decls: bvar  */
+#line 3756 "ripper.y"
+                        {(yyval.val)=rb_ary_new3(1, get_value((yyvsp[0].val)));}
+#line 10716 "ripper.c"
+    break;
+
+  case 441: /* bv_decls: bv_decls ',' bvar  */
+#line 3758 "ripper.y"
+                        {(yyval.val)=rb_ary_push((yyvsp[-2].val), get_value((yyvsp[0].val)));}
+#line 10722 "ripper.c"
+    break;
+
+  case 442: /* bvar: "local variable or method"  */
+#line 3762 "ripper.y"
+                    {
+			new_bv(p, get_id((yyvsp[0].val)));
+			(yyval.val)=get_value((yyvsp[0].val));
+		    }
+#line 10731 "ripper.c"
+    break;
+
+  case 443: /* bvar: f_bad_arg  */
+#line 3767 "ripper.y"
+                    {
+			(yyval.val) = 0;
+		    }
+#line 10739 "ripper.c"
+    break;
+
+  case 444: /* @25: %empty  */
+#line 3773 "ripper.y"
+                    {
+			token_info_push(p, "->", &(yylsp[0]));
+			(yyvsp[0].vars) = dyna_push(p);
+			(yyval.num) = p->lex.lpar_beg;
+			p->lex.lpar_beg = p->lex.paren_nest;
+		    }
+#line 10750 "ripper.c"
+    break;
+
+  case 445: /* @26: %empty  */
+#line 3779 "ripper.y"
+                    {
+			(yyval.num) = p->max_numparam;
+			p->max_numparam = 0;
+		    }
+#line 10759 "ripper.c"
+    break;
+
+  case 446: /* @27: %empty  */
+#line 3783 "ripper.y"
+                    {
+			(yyval.node) = numparam_push(p);
+		    }
+#line 10767 "ripper.c"
+    break;
+
+  case 447: /* $@28: %empty  */
+#line 3787 "ripper.y"
+                    {
+			CMDARG_PUSH(0);
+		    }
+#line 10775 "ripper.c"
+    break;
+
+  case 448: /* lambda: "->" @25 @26 @27 f_larglist $@28 lambda_body  */
+#line 3791 "ripper.y"
+                    {
+			int max_numparam = p->max_numparam;
+			p->lex.lpar_beg = (yyvsp[-5].num);
+			p->max_numparam = (yyvsp[-4].num);
+			CMDARG_POP();
+			(yyvsp[-2].val) = args_with_numbered(p, (yyvsp[-2].val), max_numparam);
+#if 0
+                        {
+                            YYLTYPE loc = code_loc_gen(&(yylsp[-2]), &(yylsp[0]));
+                            (yyval.val) = NEW_LAMBDA((yyvsp[-2].val), (yyvsp[0].val), &loc);
+                            nd_set_line((yyval.val)->nd_body, (yylsp[0]).end_pos.lineno);
+                            nd_set_line((yyval.val), (yylsp[-2]).end_pos.lineno);
+			    nd_set_first_loc((yyval.val), (yylsp[-6]).beg_pos);
+                        }
+#endif
+			{VALUE v1,v2,v3;v1=(yyvsp[-2].val);v2=(yyvsp[0].val);v3=dispatch2(lambda,v1,v2);(yyval.val)=v3;}
+			numparam_pop(p, (yyvsp[-3].node));
+			dyna_pop(p, (yyvsp[-6].vars));
+		    }
+#line 10799 "ripper.c"
+    break;
+
+  case 449: /* f_larglist: '(' f_args opt_bv_decl ')'  */
+#line 3813 "ripper.y"
+                    {
+			p->ctxt.in_argdef = 0;
+#if 0
+			(yyval.val) = (yyvsp[-2].val);
+			p->max_numparam = ORDINAL_PARAM;
+#endif
+			{VALUE v1,v2;v1=(yyvsp[-2].val);v2=dispatch1(paren,v1);(yyval.val)=v2;}
+		    }
+#line 10812 "ripper.c"
+    break;
+
+  case 450: /* f_larglist: f_args  */
+#line 3822 "ripper.y"
+                    {
+			p->ctxt.in_argdef = 0;
+#if 0
+			if (!args_info_empty_p((yyvsp[0].val)->nd_ainfo))
+			    p->max_numparam = ORDINAL_PARAM;
+#endif
+			(yyval.val) = (yyvsp[0].val);
+		    }
+#line 10825 "ripper.c"
+    break;
+
+  case 451: /* lambda_body: tLAMBEG compstmt '}'  */
+#line 3833 "ripper.y"
+                    {
+			token_info_pop(p, "}", &(yylsp[0]));
+			(yyval.val) = (
