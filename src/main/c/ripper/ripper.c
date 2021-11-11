@@ -11249,4 +11249,242 @@ yyreduce:
 #line 11241 "ripper.c"
     break;
 
-  case 494: /* p_top_ex
+  case 494: /* p_top_expr_body: p_expr ','  */
+#line 4129 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern_tail(p, Qnone, 1, 0, Qnone, &(yyloc));
+			(yyval.val) = new_array_pattern(p, Qnone, get_value((yyvsp[-1].val)), (yyval.val), &(yyloc));
+		    }
+#line 11250 "ripper.c"
+    break;
+
+  case 495: /* p_top_expr_body: p_expr ',' p_args  */
+#line 4134 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern(p, Qnone, get_value((yyvsp[-2].val)), (yyvsp[0].val), &(yyloc));
+#if 0
+			nd_set_first_loc((yyval.val), (yylsp[-2]).beg_pos);
+#endif
+
+		    }
+#line 11262 "ripper.c"
+    break;
+
+  case 496: /* p_top_expr_body: p_find  */
+#line 4142 "ripper.y"
+                    {
+			(yyval.val) = new_find_pattern(p, Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 11270 "ripper.c"
+    break;
+
+  case 497: /* p_top_expr_body: p_args_tail  */
+#line 4146 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern(p, Qnone, Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 11278 "ripper.c"
+    break;
+
+  case 498: /* p_top_expr_body: p_kwargs  */
+#line 4150 "ripper.y"
+                    {
+			(yyval.val) = new_hash_pattern(p, Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 11286 "ripper.c"
+    break;
+
+  case 500: /* p_as: p_expr "=>" p_variable  */
+#line 4159 "ripper.y"
+                    {
+#if 0
+			NODE *n = NEW_LIST((yyvsp[-2].val), &(yyloc));
+			n = list_append(p, n, (yyvsp[0].val));
+			(yyval.val) = new_hash(p, n, &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4;v1=(yyvsp[-2].val);v2=STATIC_ID2SYM(id_assoc);v3=(yyvsp[0].val);v4=dispatch3(binary,v1,v2,v3);(yyval.val)=v4;}
+		    }
+#line 11299 "ripper.c"
+    break;
+
+  case 502: /* p_alt: p_alt '|' p_expr_basic  */
+#line 4171 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_NODE(NODE_OR, (yyvsp[-2].val), (yyvsp[0].val), 0, &(yyloc));
+#endif
+			{VALUE v1,v2,v3,v4;v1=(yyvsp[-2].val);v2=STATIC_ID2SYM(idOr);v3=(yyvsp[0].val);v4=dispatch3(binary,v1,v2,v3);(yyval.val)=v4;}
+		    }
+#line 11310 "ripper.c"
+    break;
+
+  case 504: /* p_lparen: '('  */
+#line 4180 "ripper.y"
+                      {(yyval.tbl) = push_pktbl(p);}
+#line 11316 "ripper.c"
+    break;
+
+  case 505: /* p_lbracket: '['  */
+#line 4181 "ripper.y"
+                      {(yyval.tbl) = push_pktbl(p);}
+#line 11322 "ripper.c"
+    break;
+
+  case 508: /* p_expr_basic: p_const p_lparen p_args rparen  */
+#line 4186 "ripper.y"
+                    {
+			pop_pktbl(p, (yyvsp[-2].tbl));
+			(yyval.val) = new_array_pattern(p, (yyvsp[-3].val), Qnone, (yyvsp[-1].val), &(yyloc));
+#if 0
+			nd_set_first_loc((yyval.val), (yylsp[-3]).beg_pos);
+#endif
+
+		    }
+#line 11335 "ripper.c"
+    break;
+
+  case 509: /* p_expr_basic: p_const p_lparen p_find rparen  */
+#line 4195 "ripper.y"
+                    {
+			pop_pktbl(p, (yyvsp[-2].tbl));
+			(yyval.val) = new_find_pattern(p, (yyvsp[-3].val), (yyvsp[-1].val), &(yyloc));
+#if 0
+			nd_set_first_loc((yyval.val), (yylsp[-3]).beg_pos);
+#endif
+
+		    }
+#line 11348 "ripper.c"
+    break;
+
+  case 510: /* p_expr_basic: p_const p_lparen p_kwargs rparen  */
+#line 4204 "ripper.y"
+                    {
+			pop_pktbl(p, (yyvsp[-2].tbl));
+			(yyval.val) = new_hash_pattern(p, (yyvsp[-3].val), (yyvsp[-1].val), &(yyloc));
+#if 0
+			nd_set_first_loc((yyval.val), (yylsp[-3]).beg_pos);
+#endif
+
+		    }
+#line 11361 "ripper.c"
+    break;
+
+  case 511: /* p_expr_basic: p_const '(' rparen  */
+#line 4213 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern_tail(p, Qnone, 0, 0, Qnone, &(yyloc));
+			(yyval.val) = new_array_pattern(p, (yyvsp[-2].val), Qnone, (yyval.val), &(yyloc));
+		    }
+#line 11370 "ripper.c"
+    break;
+
+  case 512: /* p_expr_basic: p_const p_lbracket p_args rbracket  */
+#line 4218 "ripper.y"
+                    {
+			pop_pktbl(p, (yyvsp[-2].tbl));
+			(yyval.val) = new_array_pattern(p, (yyvsp[-3].val), Qnone, (yyvsp[-1].val), &(yyloc));
+#if 0
+			nd_set_first_loc((yyval.val), (yylsp[-3]).beg_pos);
+#endif
+
+		    }
+#line 11383 "ripper.c"
+    break;
+
+  case 513: /* p_expr_basic: p_const p_lbracket p_find rbracket  */
+#line 4227 "ripper.y"
+                    {
+			pop_pktbl(p, (yyvsp[-2].tbl));
+			(yyval.val) = new_find_pattern(p, (yyvsp[-3].val), (yyvsp[-1].val), &(yyloc));
+#if 0
+			nd_set_first_loc((yyval.val), (yylsp[-3]).beg_pos);
+#endif
+
+		    }
+#line 11396 "ripper.c"
+    break;
+
+  case 514: /* p_expr_basic: p_const p_lbracket p_kwargs rbracket  */
+#line 4236 "ripper.y"
+                    {
+			pop_pktbl(p, (yyvsp[-2].tbl));
+			(yyval.val) = new_hash_pattern(p, (yyvsp[-3].val), (yyvsp[-1].val), &(yyloc));
+#if 0
+			nd_set_first_loc((yyval.val), (yylsp[-3]).beg_pos);
+#endif
+
+		    }
+#line 11409 "ripper.c"
+    break;
+
+  case 515: /* p_expr_basic: p_const '[' rbracket  */
+#line 4245 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern_tail(p, Qnone, 0, 0, Qnone, &(yyloc));
+			(yyval.val) = new_array_pattern(p, (yyvsp[-2].val), Qnone, (yyval.val), &(yyloc));
+		    }
+#line 11418 "ripper.c"
+    break;
+
+  case 516: /* p_expr_basic: "[" p_args rbracket  */
+#line 4250 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern(p, Qnone, Qnone, (yyvsp[-1].val), &(yyloc));
+		    }
+#line 11426 "ripper.c"
+    break;
+
+  case 517: /* p_expr_basic: "[" p_find rbracket  */
+#line 4254 "ripper.y"
+                    {
+			(yyval.val) = new_find_pattern(p, Qnone, (yyvsp[-1].val), &(yyloc));
+		    }
+#line 11434 "ripper.c"
+    break;
+
+  case 518: /* p_expr_basic: "[" rbracket  */
+#line 4258 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern_tail(p, Qnone, 0, 0, Qnone, &(yyloc));
+			(yyval.val) = new_array_pattern(p, Qnone, Qnone, (yyval.val), &(yyloc));
+		    }
+#line 11443 "ripper.c"
+    break;
+
+  case 519: /* @38: %empty  */
+#line 4263 "ripper.y"
+                    {
+			(yyval.tbl) = push_pktbl(p);
+			(yyvsp[0].ctxt) = p->ctxt;
+			p->ctxt.in_kwarg = 0;
+		    }
+#line 11453 "ripper.c"
+    break;
+
+  case 520: /* p_expr_basic: "{" @38 p_kwargs rbrace  */
+#line 4269 "ripper.y"
+                    {
+			pop_pktbl(p, (yyvsp[-2].tbl));
+			p->ctxt.in_kwarg = (yyvsp[-3].ctxt).in_kwarg;
+			(yyval.val) = new_hash_pattern(p, Qnone, (yyvsp[-1].val), &(yyloc));
+		    }
+#line 11463 "ripper.c"
+    break;
+
+  case 521: /* p_expr_basic: "{" rbrace  */
+#line 4275 "ripper.y"
+                    {
+			(yyval.val) = new_hash_pattern_tail(p, Qnone, 0, &(yyloc));
+			(yyval.val) = new_hash_pattern(p, Qnone, (yyval.val), &(yyloc));
+		    }
+#line 11472 "ripper.c"
+    break;
+
+  case 522: /* @39: %empty  */
+#line 4279 "ripper.y"
+                          {(yyval.tbl) = push_pktbl(p);}
+#line 11478 "ripper.c"
+    break;
+
+  case 523: /* p_expr_basic: "(" @39 p_expr rparen  */
+#line 
