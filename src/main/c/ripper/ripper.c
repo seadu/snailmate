@@ -11487,4 +11487,232 @@ yyreduce:
     break;
 
   case 523: /* p_expr_basic: "(" @39 p_expr rparen  */
-#line 
+#line 4280 "ripper.y"
+                    {
+			pop_pktbl(p, (yyvsp[-2].tbl));
+			(yyval.val) = (yyvsp[-1].val);
+		    }
+#line 11487 "ripper.c"
+    break;
+
+  case 524: /* p_args: p_expr  */
+#line 4287 "ripper.y"
+                    {
+#if 0
+			NODE *pre_args = NEW_LIST((yyvsp[0].val), &(yyloc));
+			(yyval.val) = new_array_pattern_tail(p, pre_args, 0, 0, Qnone, &(yyloc));
+#endif
+			(yyval.val) = new_array_pattern_tail(p, rb_ary_new_from_args(1, get_value((yyvsp[0].val))), 0, 0, Qnone, &(yyloc));
+
+		    }
+#line 11500 "ripper.c"
+    break;
+
+  case 525: /* p_args: p_args_head  */
+#line 4296 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern_tail(p, (yyvsp[0].val), 1, 0, Qnone, &(yyloc));
+		    }
+#line 11508 "ripper.c"
+    break;
+
+  case 526: /* p_args: p_args_head p_arg  */
+#line 4300 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = new_array_pattern_tail(p, list_concat((yyvsp[-1].val), (yyvsp[0].val)), 0, 0, Qnone, &(yyloc));
+#endif
+			VALUE pre_args = rb_ary_concat((yyvsp[-1].val), get_value((yyvsp[0].val)));
+			(yyval.val) = new_array_pattern_tail(p, pre_args, 0, 0, Qnone, &(yyloc));
+
+		    }
+#line 11521 "ripper.c"
+    break;
+
+  case 527: /* p_args: p_args_head "*" "local variable or method"  */
+#line 4309 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern_tail(p, (yyvsp[-2].val), 1, (yyvsp[0].val), Qnone, &(yyloc));
+		    }
+#line 11529 "ripper.c"
+    break;
+
+  case 528: /* p_args: p_args_head "*" "local variable or method" ',' p_args_post  */
+#line 4313 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern_tail(p, (yyvsp[-4].val), 1, (yyvsp[-2].val), (yyvsp[0].val), &(yyloc));
+		    }
+#line 11537 "ripper.c"
+    break;
+
+  case 529: /* p_args: p_args_head "*"  */
+#line 4317 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern_tail(p, (yyvsp[-1].val), 1, 0, Qnone, &(yyloc));
+		    }
+#line 11545 "ripper.c"
+    break;
+
+  case 530: /* p_args: p_args_head "*" ',' p_args_post  */
+#line 4321 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern_tail(p, (yyvsp[-3].val), 1, 0, (yyvsp[0].val), &(yyloc));
+		    }
+#line 11553 "ripper.c"
+    break;
+
+  case 532: /* p_args_head: p_arg ','  */
+#line 4328 "ripper.y"
+                    {
+			(yyval.val) = (yyvsp[-1].val);
+		    }
+#line 11561 "ripper.c"
+    break;
+
+  case 533: /* p_args_head: p_args_head p_arg ','  */
+#line 4332 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = list_concat((yyvsp[-2].val), (yyvsp[-1].val));
+#endif
+			(yyval.val)=rb_ary_concat((yyvsp[-2].val), get_value((yyvsp[-1].val)));
+		    }
+#line 11572 "ripper.c"
+    break;
+
+  case 534: /* p_args_tail: p_rest  */
+#line 4341 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern_tail(p, Qnone, 1, (yyvsp[0].val), Qnone, &(yyloc));
+		    }
+#line 11580 "ripper.c"
+    break;
+
+  case 535: /* p_args_tail: p_rest ',' p_args_post  */
+#line 4345 "ripper.y"
+                    {
+			(yyval.val) = new_array_pattern_tail(p, Qnone, 1, (yyvsp[-2].val), (yyvsp[0].val), &(yyloc));
+		    }
+#line 11588 "ripper.c"
+    break;
+
+  case 536: /* p_find: p_rest ',' p_args_post ',' p_rest  */
+#line 4351 "ripper.y"
+                    {
+			(yyval.val) = new_find_pattern_tail(p, (yyvsp[-4].val), (yyvsp[-2].val), (yyvsp[0].val), &(yyloc));
+
+			if (rb_warning_category_enabled_p(RB_WARN_CATEGORY_EXPERIMENTAL))
+			    rb_warn0L_experimental(nd_line((yyval.val)), "Find pattern is experimental, and the behavior may change in future versions of Ruby!");
+		    }
+#line 11599 "ripper.c"
+    break;
+
+  case 537: /* p_rest: "*" "local variable or method"  */
+#line 4361 "ripper.y"
+                    {
+			(yyval.val) = (yyvsp[0].val);
+		    }
+#line 11607 "ripper.c"
+    break;
+
+  case 538: /* p_rest: "*"  */
+#line 4365 "ripper.y"
+                    {
+			(yyval.val) = 0;
+		    }
+#line 11615 "ripper.c"
+    break;
+
+  case 540: /* p_args_post: p_args_post ',' p_arg  */
+#line 4372 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = list_concat((yyvsp[-2].val), (yyvsp[0].val));
+#endif
+			(yyval.val)=rb_ary_concat((yyvsp[-2].val), get_value((yyvsp[0].val)));
+		    }
+#line 11626 "ripper.c"
+    break;
+
+  case 541: /* p_arg: p_expr  */
+#line 4381 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_LIST((yyvsp[0].val), &(yyloc));
+#endif
+			(yyval.val)=rb_ary_new_from_args(1, get_value((yyvsp[0].val)));
+		    }
+#line 11637 "ripper.c"
+    break;
+
+  case 542: /* p_kwargs: p_kwarg ',' p_any_kwrest  */
+#line 4390 "ripper.y"
+                    {
+			(yyval.val) =  new_hash_pattern_tail(p, new_unique_key_hash(p, (yyvsp[-2].val), &(yyloc)), (yyvsp[0].val), &(yyloc));
+		    }
+#line 11645 "ripper.c"
+    break;
+
+  case 543: /* p_kwargs: p_kwarg  */
+#line 4394 "ripper.y"
+                    {
+			(yyval.val) =  new_hash_pattern_tail(p, new_unique_key_hash(p, (yyvsp[0].val), &(yyloc)), 0, &(yyloc));
+		    }
+#line 11653 "ripper.c"
+    break;
+
+  case 544: /* p_kwargs: p_kwarg ','  */
+#line 4398 "ripper.y"
+                    {
+			(yyval.val) =  new_hash_pattern_tail(p, new_unique_key_hash(p, (yyvsp[-1].val), &(yyloc)), 0, &(yyloc));
+		    }
+#line 11661 "ripper.c"
+    break;
+
+  case 545: /* p_kwargs: p_any_kwrest  */
+#line 4402 "ripper.y"
+                    {
+			(yyval.val) =  new_hash_pattern_tail(p, new_hash(p, Qnone, &(yyloc)), (yyvsp[0].val), &(yyloc));
+		    }
+#line 11669 "ripper.c"
+    break;
+
+  case 546: /* p_kwarg: p_kw  */
+#line 4408 "ripper.y"
+                        {(yyval.val)=rb_ary_new_from_args(1, (yyvsp[0].val));}
+#line 11675 "ripper.c"
+    break;
+
+  case 547: /* p_kwarg: p_kwarg ',' p_kw  */
+#line 4410 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = list_concat((yyvsp[-2].val), (yyvsp[0].val));
+#endif
+			(yyval.val)=rb_ary_push((yyvsp[-2].val), (yyvsp[0].val));
+		    }
+#line 11686 "ripper.c"
+    break;
+
+  case 548: /* p_kw: p_kw_label p_expr  */
+#line 4419 "ripper.y"
+                    {
+			error_duplicate_pattern_key(p, get_id((yyvsp[-1].val)), &(yylsp[-1]));
+#if 0
+			(yyval.val) = list_append(p, NEW_LIST(NEW_LIT(ID2SYM((yyvsp[-1].val)), &(yyloc)), &(yyloc)), (yyvsp[0].val));
+#endif
+			(yyval.val)=rb_ary_new_from_args(2, get_value((yyvsp[-1].val)), get_value((yyvsp[0].val)));
+		    }
+#line 11698 "ripper.c"
+    break;
+
+  case 549: /* p_kw: p_kw_label  */
+#line 4427 "ripper.y"
+                    {
+			error_duplicate_pattern_key(p, get_id((yyvsp[0].val)), &(yylsp[0]));
+			if ((yyvsp[0].val) && !is_local_id(get_id((yyvsp[0].val)))) {
+			    yyerror1(&(yylsp[0]), "key must be valid as local variables");
+			}
+			error_duplicate_pattern_variable(p, get_id((yyvsp[0].val)), &(yylsp[0]));
+#if 0
+			(yyval.val) = list_append(p, NEW_LIST(NEW_LI
