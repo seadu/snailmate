@@ -11939,4 +11939,245 @@ yyreduce:
 #if 0
 			(yyval.val) = gettable(p, (yyvsp[0].val), &(yyloc));
 #endif
-			{VALUE v1,v2;v1=(yyvsp[0].val);v2=dispatch1(var_ref,v1);(yyv
+			{VALUE v1,v2;v1=(yyvsp[0].val);v2=dispatch1(var_ref,v1);(yyval.val)=v2;}
+		   }
+#line 11936 "ripper.c"
+    break;
+
+  case 584: /* opt_rescue: k_rescue exc_list exc_var then compstmt opt_rescue  */
+#line 4623 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_RESBODY((yyvsp[-4].val),
+					 (yyvsp[-3].val) ? block_append(p, node_assign(p, (yyvsp[-3].val), NEW_ERRINFO(&(yylsp[-3])), NO_LEX_CTXT, &(yylsp[-3])), (yyvsp[-1].val)) : (yyvsp[-1].val),
+					 (yyvsp[0].val), &(yyloc));
+			fixpos((yyval.val), (yyvsp[-4].val)?(yyvsp[-4].val):(yyvsp[-1].val));
+#endif
+			{VALUE v1,v2,v3,v4,v5;v1=escape_Qundef((yyvsp[-4].val));v2=escape_Qundef((yyvsp[-3].val));v3=escape_Qundef((yyvsp[-1].val));v4=escape_Qundef((yyvsp[0].val));v5=dispatch4(rescue,v1,v2,v3,v4);(yyval.val)=v5;}
+		    }
+#line 11950 "ripper.c"
+    break;
+
+  case 586: /* exc_list: arg_value  */
+#line 4636 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = NEW_LIST((yyvsp[0].val), &(yyloc));
+#endif
+			(yyval.val)=rb_ary_new3(1, get_value((yyvsp[0].val)));
+		    }
+#line 11961 "ripper.c"
+    break;
+
+  case 587: /* exc_list: mrhs  */
+#line 4643 "ripper.y"
+                    {
+#if 0
+			if (!((yyval.val) = splat_array((yyvsp[0].val)))) (yyval.val) = (yyvsp[0].val);
+#endif
+			(yyval.val)=(yyvsp[0].val);
+		    }
+#line 11972 "ripper.c"
+    break;
+
+  case 589: /* exc_var: "=>" lhs  */
+#line 4653 "ripper.y"
+                    {
+			(yyval.val) = (yyvsp[0].val);
+		    }
+#line 11980 "ripper.c"
+    break;
+
+  case 591: /* opt_ensure: k_ensure compstmt  */
+#line 4660 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = (yyvsp[0].val);
+#endif
+			{VALUE v1,v2;v1=(yyvsp[0].val);v2=dispatch1(ensure,v1);(yyval.val)=v2;}
+		    }
+#line 11991 "ripper.c"
+    break;
+
+  case 595: /* strings: string  */
+#line 4674 "ripper.y"
+                    {
+#if 0
+			NODE *node = (yyvsp[0].val);
+			if (!node) {
+			    node = NEW_STR(STR_NEW0(), &(yyloc));
+                            RB_OBJ_WRITTEN(p->ast, Qnil, node->nd_lit);
+			}
+			else {
+			    node = evstr2dstr(p, node);
+			}
+			(yyval.val) = node;
+#endif
+			(yyval.val)=(yyvsp[0].val);
+		    }
+#line 12010 "ripper.c"
+    break;
+
+  case 598: /* string: string string1  */
+#line 4693 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = literal_concat(p, (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3;v1=(yyvsp[-1].val);v2=(yyvsp[0].val);v3=dispatch2(string_concat,v1,v2);(yyval.val)=v3;}
+		    }
+#line 12021 "ripper.c"
+    break;
+
+  case 599: /* string1: "string literal" string_contents "terminator"  */
+#line 4702 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = heredoc_dedent(p, (yyvsp[-1].val));
+			if ((yyval.val)) nd_set_loc((yyval.val), &(yyloc));
+#endif
+			{VALUE v1,v2;v1=heredoc_dedent(p, (yyvsp[-1].val));v2=dispatch1(string_literal,v1);(yyval.val)=v2;}
+		    }
+#line 12033 "ripper.c"
+    break;
+
+  case 600: /* xstring: "backtick literal" xstring_contents "terminator"  */
+#line 4712 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = new_xstring(p, heredoc_dedent(p, (yyvsp[-1].val)), &(yyloc));
+#endif
+			{VALUE v1,v2;v1=heredoc_dedent(p, (yyvsp[-1].val));v2=dispatch1(xstring_literal,v1);(yyval.val)=v2;}
+		    }
+#line 12044 "ripper.c"
+    break;
+
+  case 601: /* regexp: "regexp literal" regexp_contents tREGEXP_END  */
+#line 4721 "ripper.y"
+                    {
+			(yyval.val) = new_regexp(p, (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+		    }
+#line 12052 "ripper.c"
+    break;
+
+  case 602: /* words: "word list" ' ' word_list "terminator"  */
+#line 4727 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = make_list((yyvsp[-1].val), &(yyloc));
+#endif
+			{VALUE v1,v2;v1=(yyvsp[-1].val);v2=dispatch1(array,v1);(yyval.val)=v2;}
+		    }
+#line 12063 "ripper.c"
+    break;
+
+  case 603: /* word_list: %empty  */
+#line 4736 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = 0;
+#endif
+			{VALUE v1;v1=dispatch0(words_new);(yyval.val)=v1;}
+		    }
+#line 12074 "ripper.c"
+    break;
+
+  case 604: /* word_list: word_list word ' '  */
+#line 4743 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = list_append(p, (yyvsp[-2].val), evstr2dstr(p, (yyvsp[-1].val)));
+#endif
+			{VALUE v1,v2,v3;v1=(yyvsp[-2].val);v2=(yyvsp[-1].val);v3=dispatch2(words_add,v1,v2);(yyval.val)=v3;}
+		    }
+#line 12085 "ripper.c"
+    break;
+
+  case 605: /* word: string_content  */
+#line 4752 "ripper.y"
+                        {{VALUE v1,v2,v3,v4;v1=dispatch0(word_new);v2=v1;v3=(yyvsp[0].val);v4=dispatch2(word_add,v2,v3);(yyval.val)=v4;}}
+#line 12091 "ripper.c"
+    break;
+
+  case 606: /* word: word string_content  */
+#line 4754 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = literal_concat(p, (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+#endif
+			{VALUE v1,v2,v3;v1=(yyvsp[-1].val);v2=(yyvsp[0].val);v3=dispatch2(word_add,v1,v2);(yyval.val)=v3;}
+		    }
+#line 12102 "ripper.c"
+    break;
+
+  case 607: /* symbols: "symbol list" ' ' symbol_list "terminator"  */
+#line 4763 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = make_list((yyvsp[-1].val), &(yyloc));
+#endif
+			{VALUE v1,v2;v1=(yyvsp[-1].val);v2=dispatch1(array,v1);(yyval.val)=v2;}
+		    }
+#line 12113 "ripper.c"
+    break;
+
+  case 608: /* symbol_list: %empty  */
+#line 4772 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = 0;
+#endif
+			{VALUE v1;v1=dispatch0(symbols_new);(yyval.val)=v1;}
+		    }
+#line 12124 "ripper.c"
+    break;
+
+  case 609: /* symbol_list: symbol_list word ' '  */
+#line 4779 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = symbol_append(p, (yyvsp[-2].val), evstr2dstr(p, (yyvsp[-1].val)));
+#endif
+			{VALUE v1,v2,v3;v1=(yyvsp[-2].val);v2=(yyvsp[-1].val);v3=dispatch2(symbols_add,v1,v2);(yyval.val)=v3;}
+		    }
+#line 12135 "ripper.c"
+    break;
+
+  case 610: /* qwords: "verbatim word list" ' ' qword_list "terminator"  */
+#line 4788 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = make_list((yyvsp[-1].val), &(yyloc));
+#endif
+			{VALUE v1,v2;v1=(yyvsp[-1].val);v2=dispatch1(array,v1);(yyval.val)=v2;}
+		    }
+#line 12146 "ripper.c"
+    break;
+
+  case 611: /* qsymbols: "verbatim symbol list" ' ' qsym_list "terminator"  */
+#line 4797 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = make_list((yyvsp[-1].val), &(yyloc));
+#endif
+			{VALUE v1,v2;v1=(yyvsp[-1].val);v2=dispatch1(array,v1);(yyval.val)=v2;}
+		    }
+#line 12157 "ripper.c"
+    break;
+
+  case 612: /* qword_list: %empty  */
+#line 4806 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = 0;
+#endif
+			{VALUE v1;v1=dispatch0(qwords_new);(yyval.val)=v1;}
+		    }
+#line 12168 "ripper.c"
+    break;
+
+  case 613: /* qword_list: qword_list "literal content" ' '  */
+#line 4813 "ripper.y"
+                    {
+#if 0
+			(yyval.
