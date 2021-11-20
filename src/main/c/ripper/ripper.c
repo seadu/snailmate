@@ -12687,4 +12687,226 @@ yyreduce:
 #line 12679 "ripper.c"
     break;
 
-  case 683: /* args_tail: args_forward 
+  case 683: /* args_tail: args_forward  */
+#line 5198 "ripper.y"
+                    {
+			add_forwarding_args(p);
+			(yyval.val) = new_args_tail(p, Qnone, (yyvsp[0].val), ID2VAL(idFWD_BLOCK), &(yylsp[0]));
+		    }
+#line 12688 "ripper.c"
+    break;
+
+  case 684: /* opt_args_tail: ',' args_tail  */
+#line 5205 "ripper.y"
+                    {
+			(yyval.val) = (yyvsp[0].val);
+		    }
+#line 12696 "ripper.c"
+    break;
+
+  case 685: /* opt_args_tail: %empty  */
+#line 5209 "ripper.y"
+                    {
+			(yyval.val) = new_args_tail(p, Qnone, Qnone, Qnone, &(yylsp[0]));
+		    }
+#line 12704 "ripper.c"
+    break;
+
+  case 686: /* f_args: f_arg ',' f_optarg ',' f_rest_arg opt_args_tail  */
+#line 5215 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, (yyvsp[-5].val), (yyvsp[-3].val), (yyvsp[-1].val), Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 12712 "ripper.c"
+    break;
+
+  case 687: /* f_args: f_arg ',' f_optarg ',' f_rest_arg ',' f_arg opt_args_tail  */
+#line 5219 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, (yyvsp[-7].val), (yyvsp[-5].val), (yyvsp[-3].val), (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+		    }
+#line 12720 "ripper.c"
+    break;
+
+  case 688: /* f_args: f_arg ',' f_optarg opt_args_tail  */
+#line 5223 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, (yyvsp[-3].val), (yyvsp[-1].val), Qnone, Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 12728 "ripper.c"
+    break;
+
+  case 689: /* f_args: f_arg ',' f_optarg ',' f_arg opt_args_tail  */
+#line 5227 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, (yyvsp[-5].val), (yyvsp[-3].val), Qnone, (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+		    }
+#line 12736 "ripper.c"
+    break;
+
+  case 690: /* f_args: f_arg ',' f_rest_arg opt_args_tail  */
+#line 5231 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, (yyvsp[-3].val), Qnone, (yyvsp[-1].val), Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 12744 "ripper.c"
+    break;
+
+  case 691: /* f_args: f_arg ',' f_rest_arg ',' f_arg opt_args_tail  */
+#line 5235 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, (yyvsp[-5].val), Qnone, (yyvsp[-3].val), (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+		    }
+#line 12752 "ripper.c"
+    break;
+
+  case 692: /* f_args: f_arg opt_args_tail  */
+#line 5239 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, (yyvsp[-1].val), Qnone, Qnone, Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 12760 "ripper.c"
+    break;
+
+  case 693: /* f_args: f_optarg ',' f_rest_arg opt_args_tail  */
+#line 5243 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, (yyvsp[-3].val), (yyvsp[-1].val), Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 12768 "ripper.c"
+    break;
+
+  case 694: /* f_args: f_optarg ',' f_rest_arg ',' f_arg opt_args_tail  */
+#line 5247 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, (yyvsp[-5].val), (yyvsp[-3].val), (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+		    }
+#line 12776 "ripper.c"
+    break;
+
+  case 695: /* f_args: f_optarg opt_args_tail  */
+#line 5251 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, (yyvsp[-1].val), Qnone, Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 12784 "ripper.c"
+    break;
+
+  case 696: /* f_args: f_optarg ',' f_arg opt_args_tail  */
+#line 5255 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, (yyvsp[-3].val), Qnone, (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+		    }
+#line 12792 "ripper.c"
+    break;
+
+  case 697: /* f_args: f_rest_arg opt_args_tail  */
+#line 5259 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, Qnone, (yyvsp[-1].val), Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 12800 "ripper.c"
+    break;
+
+  case 698: /* f_args: f_rest_arg ',' f_arg opt_args_tail  */
+#line 5263 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, Qnone, (yyvsp[-3].val), (yyvsp[-1].val), (yyvsp[0].val), &(yyloc));
+		    }
+#line 12808 "ripper.c"
+    break;
+
+  case 699: /* f_args: args_tail  */
+#line 5267 "ripper.y"
+                    {
+			(yyval.val) = new_args(p, Qnone, Qnone, Qnone, Qnone, (yyvsp[0].val), &(yyloc));
+		    }
+#line 12816 "ripper.c"
+    break;
+
+  case 700: /* f_args: %empty  */
+#line 5271 "ripper.y"
+                    {
+			(yyval.val) = new_args_tail(p, Qnone, Qnone, Qnone, &(yylsp[0]));
+			(yyval.val) = new_args(p, Qnone, Qnone, Qnone, Qnone, (yyval.val), &(yylsp[0]));
+		    }
+#line 12825 "ripper.c"
+    break;
+
+  case 701: /* args_forward: "(..."  */
+#line 5278 "ripper.y"
+                    {
+#if 0
+			(yyval.val) = idFWD_KWREST;
+#endif
+			{VALUE v1;v1=dispatch0(args_forward);(yyval.val)=v1;}
+		    }
+#line 12836 "ripper.c"
+    break;
+
+  case 702: /* f_bad_arg: "constant"  */
+#line 5287 "ripper.y"
+                    {
+			static const char mesg[] = "formal argument cannot be a constant";
+#if 0
+			yyerror1(&(yylsp[0]), mesg);
+			(yyval.val) = 0;
+#endif
+			{VALUE v1,v2,v3;v1=ERR_MESG();v2=(yyvsp[0].val);v3=dispatch2(param_error,v1,v2);(yyval.val)=v3;}ripper_error(p);
+		    }
+#line 12849 "ripper.c"
+    break;
+
+  case 703: /* f_bad_arg: "instance variable"  */
+#line 5296 "ripper.y"
+                    {
+			static const char mesg[] = "formal argument cannot be an instance variable";
+#if 0
+			yyerror1(&(yylsp[0]), mesg);
+			(yyval.val) = 0;
+#endif
+			{VALUE v1,v2,v3;v1=ERR_MESG();v2=(yyvsp[0].val);v3=dispatch2(param_error,v1,v2);(yyval.val)=v3;}ripper_error(p);
+		    }
+#line 12862 "ripper.c"
+    break;
+
+  case 704: /* f_bad_arg: "global variable"  */
+#line 5305 "ripper.y"
+                    {
+			static const char mesg[] = "formal argument cannot be a global variable";
+#if 0
+			yyerror1(&(yylsp[0]), mesg);
+			(yyval.val) = 0;
+#endif
+			{VALUE v1,v2,v3;v1=ERR_MESG();v2=(yyvsp[0].val);v3=dispatch2(param_error,v1,v2);(yyval.val)=v3;}ripper_error(p);
+		    }
+#line 12875 "ripper.c"
+    break;
+
+  case 705: /* f_bad_arg: "class variable"  */
+#line 5314 "ripper.y"
+                    {
+			static const char mesg[] = "formal argument cannot be a class variable";
+#if 0
+			yyerror1(&(yylsp[0]), mesg);
+			(yyval.val) = 0;
+#endif
+			{VALUE v1,v2,v3;v1=ERR_MESG();v2=(yyvsp[0].val);v3=dispatch2(param_error,v1,v2);(yyval.val)=v3;}ripper_error(p);
+		    }
+#line 12888 "ripper.c"
+    break;
+
+  case 707: /* f_norm_arg: "local variable or method"  */
+#line 5326 "ripper.y"
+                    {
+			formal_argument(p, (yyvsp[0].val));
+			p->max_numparam = ORDINAL_PARAM;
+			(yyval.val) = (yyvsp[0].val);
+		    }
+#line 12898 "ripper.c"
+    break;
+
+  case 708: /* f_arg_asgn: f_norm_arg  */
+#line 5334 "ripper.y"
+                    {
+			ID id = get_id((yyvsp[0].
