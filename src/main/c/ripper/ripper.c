@@ -14093,4 +14093,269 @@ vtable_alloc_gen(struct parser_params *p, int line, struct vtable *prev)
 #define vtable_alloc(prev) vtable_alloc_gen(p, __LINE__, prev)
 
 static void
-vtable_free_gen(struct parser_params *p, int line, const ch
+vtable_free_gen(struct parser_params *p, int line, const char *name,
+		struct vtable *tbl)
+{
+#ifndef RIPPER
+    if (p->debug) {
+	rb_parser_printf(p, "vtable_free:%d: %s(%p)\n", line, name, (void *)tbl);
+    }
+#endif
+    if (!DVARS_TERMINAL_P(tbl)) {
+	if (tbl->tbl) {
+	    ruby_sized_xfree(tbl->tbl, tbl->capa * sizeof(ID));
+	}
+	ruby_sized_xfree(tbl, sizeof(*tbl));
+    }
+}
+#define vtable_free(tbl) vtable_free_gen(p, __LINE__, #tbl, tbl)
+
+static void
+vtable_add_gen(struct parser_params *p, int line, const char *name,
+	       struct vtable *tbl, ID id)
+{
+#ifndef RIPPER
+    if (p->debug) {
+	rb_parser_printf(p, "vtable_add:%d: %s(%p), %s\n",
+			 line, name, (void *)tbl, rb_id2name(id));
+    }
+#endif
+    if (DVARS_TERMINAL_P(tbl)) {
+	rb_parser_fatal(p, "vtable_add: vtable is not allocated (%p)", (void *)tbl);
+	return;
+    }
+    if (tbl->pos == tbl->capa) {
+	tbl->capa = tbl->capa * 2;
+	SIZED_REALLOC_N(tbl->tbl, ID, tbl->capa, tbl->pos);
+    }
+    tbl->tbl[tbl->pos++] = id;
+}
+#define vtable_add(tbl, id) vtable_add_gen(p, __LINE__, #tbl, tbl, id)
+
+#ifndef RIPPER
+static void
+vtable_pop_gen(struct parser_params *p, int line, const char *name,
+	       struct vtable *tbl, int n)
+{
+    if (p->debug) {
+	rb_parser_printf(p, "vtable_pop:%d: %s(%p), %d\n",
+			 line, name, (void *)tbl, n);
+    }
+    if (tbl->pos < n) {
+	rb_parser_fatal(p, "vtable_pop: unreachable (%d < %d)", tbl->pos, n);
+	return;
+    }
+    tbl->pos -= n;
+}
+#define vtable_pop(tbl, n) vtable_pop_gen(p, __LINE__, #tbl, tbl, n)
+#endif
+
+static int
+vtable_included(const struct vtable * tbl, ID id)
+{
+    int i;
+
+    if (!DVARS_TERMINAL_P(tbl)) {
+	for (i = 0; i < tbl->pos; i++) {
+	    if (tbl->tbl[i] == id) {
+		return i+1;
+	    }
+	}
+    }
+    return 0;
+}
+
+static void parser_prepare(struct parser_params *p);
+
+#ifndef RIPPER
+static NODE *parser_append_options(struct parser_params *p, NODE *node);
+
+static VALUE
+debug_lines(VALUE fname)
+{
+    ID script_lines;
+    CONST_ID(script_lines, "SCRIPT_LINES__");
+    if (rb_const_defined_at(rb_cObject, script_lines)) {
+	VALUE hash = rb_const_get_at(rb_cObject, script_lines);
+	if (RB_TYPE_P(hash, T_HASH)) {
+	    VALUE lines = rb_ary_new();
+	    rb_hash_aset(hash, fname, lines);
+	    return lines;
+	}
+    }
+    return 0;
+}
+
+static int
+e_option_supplied(struct parser_params *p)
+{
+    return strcmp(p->ruby_sourcefile, "-e") == 0;
+}
+
+static VALUE
+yycompile0(VALUE arg)
+{
+    int n;
+    NODE *tree;
+    struct parser_params *p = (struct parser_params *)arg;
+    VALUE cov = Qfalse;
+
+    if (!compile_for_eval && !NIL_P(p->ruby_sourcefile_string)) {
+	p->debug_lines = debug_lines(p->ruby_sourcefile_string);
+	if (p->debug_lines && p->ruby_sourceline > 0) {
+	    VALUE str = rb_default_rs;
+	    n = p->ruby_sourceline;
+	    do {
+		rb_ary_push(p->debug_lines, str);
+	    } while (--n);
+	}
+
+	if (!e_option_supplied(p)) {
+	    cov = Qtrue;
+	}
+    }
+
+    if (p->keep_script_lines || ruby_vm_keep_script_lines) {
+        if (!p->debug_lines) {
+            p->debug_lines = rb_ary_new();
+        }
+
+        RB_OBJ_WRITE(p->ast, &p->ast->body.script_lines, p->debug_lines);
+    }
+
+    parser_prepare(p);
+#define RUBY_DTRACE_PARSE_HOOK(name) \
+    if (RUBY_DTRACE_PARSE_##name##_ENABLED()) { \
+	RUBY_DTRACE_PARSE_##name(p->ruby_sourcefile, p->ruby_sourceline); \
+    }
+    RUBY_DTRACE_PARSE_HOOK(BEGIN);
+    n = yyparse(p);
+    RUBY_DTRACE_PARSE_HOOK(END);
+    p->debug_lines = 0;
+
+    p->lex.strterm = 0;
+    p->lex.pcur = p->lex.pbeg = p->lex.pend = 0;
+    p->lex.prevline = p->lex.lastline = p->lex.nextline = 0;
+    if (n || p->error_p) {
+	VALUE mesg = p->error_buffer;
+	if (!mesg) {
+	    mesg = rb_class_new_instance(0, 0, rb_eSyntaxError);
+	}
+	rb_set_errinfo(mesg);
+	return FALSE;
+    }
+    tree = p->eval_tree;
+    if (!tree) {
+	tree = NEW_NIL(&NULL_LOC);
+    }
+    else {
+	VALUE opt = p->compile_option;
+	NODE *prelude;
+	NODE *body = parser_append_options(p, tree->nd_body);
+	if (!opt) opt = rb_obj_hide(rb_ident_hash_new());
+	rb_hash_aset(opt, rb_sym_intern_ascii_cstr("coverage_enabled"), cov);
+	prelude = block_append(p, p->eval_tree_begin, body);
+	tree->nd_body = prelude;
+        RB_OBJ_WRITE(p->ast, &p->ast->body.compile_option, opt);
+    }
+    p->ast->body.root = tree;
+    if (!p->ast->body.script_lines) p->ast->body.script_lines = INT2FIX(p->line_count);
+    return TRUE;
+}
+
+static rb_ast_t *
+yycompile(VALUE vparser, struct parser_params *p, VALUE fname, int line)
+{
+    rb_ast_t *ast;
+    if (NIL_P(fname)) {
+	p->ruby_sourcefile_string = Qnil;
+	p->ruby_sourcefile = "(none)";
+    }
+    else {
+	p->ruby_sourcefile_string = rb_fstring(fname);
+	p->ruby_sourcefile = StringValueCStr(fname);
+    }
+    p->ruby_sourceline = line - 1;
+
+    p->lvtbl = NULL;
+
+    p->ast = ast = rb_ast_new();
+    rb_suppress_tracing(yycompile0, (VALUE)p);
+    p->ast = 0;
+    RB_GC_GUARD(vparser); /* prohibit tail call optimization */
+
+    while (p->lvtbl) {
+        local_pop(p);
+    }
+
+    return ast;
+}
+#endif /* !RIPPER */
+
+static rb_encoding *
+must_be_ascii_compatible(VALUE s)
+{
+    rb_encoding *enc = rb_enc_get(s);
+    if (!rb_enc_asciicompat(enc)) {
+	rb_raise(rb_eArgError, "invalid source encoding");
+    }
+    return enc;
+}
+
+static VALUE
+lex_get_str(struct parser_params *p, VALUE s)
+{
+    char *beg, *end, *start;
+    long len;
+
+    beg = RSTRING_PTR(s);
+    len = RSTRING_LEN(s);
+    start = beg;
+    if (p->lex.gets_.ptr) {
+	if (len == p->lex.gets_.ptr) return Qnil;
+	beg += p->lex.gets_.ptr;
+	len -= p->lex.gets_.ptr;
+    }
+    end = memchr(beg, '\n', len);
+    if (end) len = ++end - beg;
+    p->lex.gets_.ptr += len;
+    return rb_str_subseq(s, beg - start, len);
+}
+
+static VALUE
+lex_getline(struct parser_params *p)
+{
+    VALUE line = (*p->lex.gets)(p, p->lex.input);
+    if (NIL_P(line)) return line;
+    must_be_ascii_compatible(line);
+    if (RB_OBJ_FROZEN(line)) line = rb_str_dup(line); // needed for RubyVM::AST.of because script_lines in iseq is deep-frozen
+#ifndef RIPPER
+    if (p->debug_lines) {
+	rb_enc_associate(line, p->enc);
+	rb_ary_push(p->debug_lines, line);
+    }
+#endif
+    p->line_count++;
+    return line;
+}
+
+static const rb_data_type_t parser_data_type;
+
+#ifndef RIPPER
+static rb_ast_t*
+parser_compile_string(VALUE vparser, VALUE fname, VALUE s, int line)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(vparser, struct parser_params, &parser_data_type, p);
+
+    p->lex.gets = lex_get_str;
+    p->lex.gets_.ptr = 0;
+    p->lex.input = rb_str_new_frozen(s);
+    p->lex.pbeg = p->lex.pcur = p->lex.pend = 0;
+
+    return yycompile(vparser, p, fname, line);
+}
+
+rb_ast_t*
+rb_parser_compile_string(VALUE vparser, const char *f, VALUE s, int l
