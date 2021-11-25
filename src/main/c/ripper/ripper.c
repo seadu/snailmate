@@ -13837,4 +13837,260 @@ token_info_drop(struct parser_params *p, const char *token, rb_code_position_t b
     token_info *ptinfo_beg = p->token_info;
 
     if (!ptinfo_beg) return;
-    p->token_info =
+    p->token_info = ptinfo_beg->next;
+
+    if (ptinfo_beg->beg.lineno != beg_pos.lineno ||
+	ptinfo_beg->beg.column != beg_pos.column ||
+	strcmp(ptinfo_beg->token, token)) {
+	compile_error(p, "token position mismatch: %d:%d:%s expected but %d:%d:%s",
+		      beg_pos.lineno, beg_pos.column, token,
+		      ptinfo_beg->beg.lineno, ptinfo_beg->beg.column,
+		      ptinfo_beg->token);
+    }
+
+    ruby_sized_xfree(ptinfo_beg, sizeof(*ptinfo_beg));
+}
+
+static void
+token_info_warn(struct parser_params *p, const char *token, token_info *ptinfo_beg, int same, const rb_code_location_t *loc)
+{
+    token_info ptinfo_end_body, *ptinfo_end = &ptinfo_end_body;
+    if (!p->token_info_enabled) return;
+    if (!ptinfo_beg) return;
+    token_info_setup(ptinfo_end, p->lex.pbeg, loc);
+    if (ptinfo_beg->beg.lineno == ptinfo_end->beg.lineno) return; /* ignore one-line block */
+    if (ptinfo_beg->nonspc || ptinfo_end->nonspc) return; /* ignore keyword in the middle of a line */
+    if (ptinfo_beg->indent == ptinfo_end->indent) return; /* the indents are matched */
+    if (!same && ptinfo_beg->indent < ptinfo_end->indent) return;
+    rb_warn3L(ptinfo_end->beg.lineno,
+	      "mismatched indentations at '%s' with '%s' at %d",
+	      WARN_S(token), WARN_S(ptinfo_beg->token), WARN_I(ptinfo_beg->beg.lineno));
+}
+
+static int
+parser_precise_mbclen(struct parser_params *p, const char *ptr)
+{
+    int len = rb_enc_precise_mbclen(ptr, p->lex.pend, p->enc);
+    if (!MBCLEN_CHARFOUND_P(len)) {
+	compile_error(p, "invalid multibyte char (%s)", rb_enc_name(p->enc));
+	return -1;
+    }
+    return len;
+}
+
+#ifndef RIPPER
+static void ruby_show_error_line(VALUE errbuf, const YYLTYPE *yylloc, int lineno, VALUE str);
+
+static inline void
+parser_show_error_line(struct parser_params *p, const YYLTYPE *yylloc)
+{
+    VALUE str;
+    int lineno = p->ruby_sourceline;
+    if (!yylloc) {
+	return;
+    }
+    else if (yylloc->beg_pos.lineno == lineno) {
+	str = p->lex.lastline;
+    }
+    else {
+	return;
+    }
+    ruby_show_error_line(p->error_buffer, yylloc, lineno, str);
+}
+
+static int
+parser_yyerror(struct parser_params *p, const YYLTYPE *yylloc, const char *msg)
+{
+#if 0
+    YYLTYPE current;
+
+    if (!yylloc) {
+	yylloc = RUBY_SET_YYLLOC(current);
+    }
+    else if ((p->ruby_sourceline != yylloc->beg_pos.lineno &&
+	      p->ruby_sourceline != yylloc->end_pos.lineno)) {
+	yylloc = 0;
+    }
+#endif
+    compile_error(p, "%s", msg);
+    parser_show_error_line(p, yylloc);
+    return 0;
+}
+
+static int
+parser_yyerror0(struct parser_params *p, const char *msg)
+{
+    YYLTYPE current;
+    return parser_yyerror(p, RUBY_SET_YYLLOC(current), msg);
+}
+
+static void
+ruby_show_error_line(VALUE errbuf, const YYLTYPE *yylloc, int lineno, VALUE str)
+{
+    VALUE mesg;
+    const int max_line_margin = 30;
+    const char *ptr, *ptr_end, *pt, *pb;
+    const char *pre = "", *post = "", *pend;
+    const char *code = "", *caret = "";
+    const char *lim;
+    const char *const pbeg = RSTRING_PTR(str);
+    char *buf;
+    long len;
+    int i;
+
+    if (!yylloc) return;
+    pend = RSTRING_END(str);
+    if (pend > pbeg && pend[-1] == '\n') {
+	if (--pend > pbeg && pend[-1] == '\r') --pend;
+    }
+
+    pt = pend;
+    if (lineno == yylloc->end_pos.lineno &&
+	(pend - pbeg) > yylloc->end_pos.column) {
+	pt = pbeg + yylloc->end_pos.column;
+    }
+
+    ptr = ptr_end = pt;
+    lim = ptr - pbeg > max_line_margin ? ptr - max_line_margin : pbeg;
+    while ((lim < ptr) && (*(ptr-1) != '\n')) ptr--;
+
+    lim = pend - ptr_end > max_line_margin ? ptr_end + max_line_margin : pend;
+    while ((ptr_end < lim) && (*ptr_end != '\n') && (*ptr_end != '\r')) ptr_end++;
+
+    len = ptr_end - ptr;
+    if (len > 4) {
+	if (ptr > pbeg) {
+	    ptr = rb_enc_prev_char(pbeg, ptr, pt, rb_enc_get(str));
+	    if (ptr > pbeg) pre = "...";
+	}
+	if (ptr_end < pend) {
+	    ptr_end = rb_enc_prev_char(pt, ptr_end, pend, rb_enc_get(str));
+	    if (ptr_end < pend) post = "...";
+	}
+    }
+    pb = pbeg;
+    if (lineno == yylloc->beg_pos.lineno) {
+	pb += yylloc->beg_pos.column;
+	if (pb > pt) pb = pt;
+    }
+    if (pb < ptr) pb = ptr;
+    if (len <= 4 && yylloc->beg_pos.lineno == yylloc->end_pos.lineno) {
+	return;
+    }
+    if (RTEST(errbuf)) {
+	mesg = rb_attr_get(errbuf, idMesg);
+	if (RSTRING_LEN(mesg) > 0 && *(RSTRING_END(mesg)-1) != '\n')
+	    rb_str_cat_cstr(mesg, "\n");
+    }
+    else {
+	mesg = rb_enc_str_new(0, 0, rb_enc_get(str));
+    }
+    if (!errbuf && rb_stderr_tty_p()) {
+#define CSI_BEGIN "\033["
+#define CSI_SGR "m"
+	rb_str_catf(mesg,
+		    CSI_BEGIN""CSI_SGR"%s" /* pre */
+		    CSI_BEGIN"1"CSI_SGR"%.*s"
+		    CSI_BEGIN"1;4"CSI_SGR"%.*s"
+		    CSI_BEGIN";1"CSI_SGR"%.*s"
+		    CSI_BEGIN""CSI_SGR"%s" /* post */
+		    "\n",
+		    pre,
+		    (int)(pb - ptr), ptr,
+		    (int)(pt - pb), pb,
+		    (int)(ptr_end - pt), pt,
+		    post);
+    }
+    else {
+	char *p2;
+
+	len = ptr_end - ptr;
+	lim = pt < pend ? pt : pend;
+	i = (int)(lim - ptr);
+	buf = ALLOCA_N(char, i+2);
+	code = ptr;
+	caret = p2 = buf;
+	if (ptr <= pb) {
+	    while (ptr < pb) {
+		*p2++ = *ptr++ == '\t' ? '\t' : ' ';
+	    }
+	    *p2++ = '^';
+	    ptr++;
+	}
+	if (lim > ptr) {
+	    memset(p2, '~', (lim - ptr));
+	    p2 += (lim - ptr);
+	}
+	*p2 = '\0';
+	rb_str_catf(mesg, "%s%.*s%s\n""%s%s\n",
+		    pre, (int)len, code, post,
+		    pre, caret);
+    }
+    if (!errbuf) rb_write_error_str(mesg);
+}
+#else
+static int
+parser_yyerror(struct parser_params *p, const YYLTYPE *yylloc, const char *msg)
+{
+    const char *pcur = 0, *ptok = 0;
+    if (p->ruby_sourceline == yylloc->beg_pos.lineno &&
+	p->ruby_sourceline == yylloc->end_pos.lineno) {
+	pcur = p->lex.pcur;
+	ptok = p->lex.ptok;
+	p->lex.ptok = p->lex.pbeg + yylloc->beg_pos.column;
+	p->lex.pcur = p->lex.pbeg + yylloc->end_pos.column;
+    }
+    parser_yyerror0(p, msg);
+    if (pcur) {
+	p->lex.ptok = ptok;
+	p->lex.pcur = pcur;
+    }
+    return 0;
+}
+
+static int
+parser_yyerror0(struct parser_params *p, const char *msg)
+{
+    dispatch1(parse_error, STR_NEW2(msg));
+    ripper_error(p);
+    return 0;
+}
+
+static inline void
+parser_show_error_line(struct parser_params *p, const YYLTYPE *yylloc)
+{
+}
+#endif /* !RIPPER */
+
+#ifndef RIPPER
+static int
+vtable_size(const struct vtable *tbl)
+{
+    if (!DVARS_TERMINAL_P(tbl)) {
+	return tbl->pos;
+    }
+    else {
+	return 0;
+    }
+}
+#endif
+
+static struct vtable *
+vtable_alloc_gen(struct parser_params *p, int line, struct vtable *prev)
+{
+    struct vtable *tbl = ALLOC(struct vtable);
+    tbl->pos = 0;
+    tbl->capa = 8;
+    tbl->tbl = ALLOC_N(ID, tbl->capa);
+    tbl->prev = prev;
+#ifndef RIPPER
+    if (p->debug) {
+	rb_parser_printf(p, "vtable_alloc:%d: %p\n", line, (void *)tbl);
+    }
+#endif
+    return tbl;
+}
+#define vtable_alloc(prev) vtable_alloc_gen(p, __LINE__, prev)
+
+static void
+vtable_free_gen(struct parser_params *p, int line, const ch
