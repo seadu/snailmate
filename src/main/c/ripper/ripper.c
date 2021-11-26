@@ -14358,4 +14358,298 @@ parser_compile_string(VALUE vparser, VALUE fname, VALUE s, int line)
 }
 
 rb_ast_t*
-rb_parser_compile_string(VALUE vparser, const char *f, VALUE s, int l
+rb_parser_compile_string(VALUE vparser, const char *f, VALUE s, int line)
+{
+    return rb_parser_compile_string_path(vparser, rb_filesystem_str_new_cstr(f), s, line);
+}
+
+rb_ast_t*
+rb_parser_compile_string_path(VALUE vparser, VALUE f, VALUE s, int line)
+{
+    must_be_ascii_compatible(s);
+    return parser_compile_string(vparser, f, s, line);
+}
+
+VALUE rb_io_gets_internal(VALUE io);
+
+static VALUE
+lex_io_gets(struct parser_params *p, VALUE io)
+{
+    return rb_io_gets_internal(io);
+}
+
+rb_ast_t*
+rb_parser_compile_file_path(VALUE vparser, VALUE fname, VALUE file, int start)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(vparser, struct parser_params, &parser_data_type, p);
+
+    p->lex.gets = lex_io_gets;
+    p->lex.input = file;
+    p->lex.pbeg = p->lex.pcur = p->lex.pend = 0;
+
+    return yycompile(vparser, p, fname, start);
+}
+
+static VALUE
+lex_generic_gets(struct parser_params *p, VALUE input)
+{
+    return (*p->lex.gets_.call)(input, p->line_count);
+}
+
+rb_ast_t*
+rb_parser_compile_generic(VALUE vparser, VALUE (*lex_gets)(VALUE, int), VALUE fname, VALUE input, int start)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(vparser, struct parser_params, &parser_data_type, p);
+
+    p->lex.gets = lex_generic_gets;
+    p->lex.gets_.call = lex_gets;
+    p->lex.input = input;
+    p->lex.pbeg = p->lex.pcur = p->lex.pend = 0;
+
+    return yycompile(vparser, p, fname, start);
+}
+#endif  /* !RIPPER */
+
+#define STR_FUNC_ESCAPE 0x01
+#define STR_FUNC_EXPAND 0x02
+#define STR_FUNC_REGEXP 0x04
+#define STR_FUNC_QWORDS 0x08
+#define STR_FUNC_SYMBOL 0x10
+#define STR_FUNC_INDENT 0x20
+#define STR_FUNC_LABEL  0x40
+#define STR_FUNC_LIST   0x4000
+#define STR_FUNC_TERM   0x8000
+
+enum string_type {
+    str_label  = STR_FUNC_LABEL,
+    str_squote = (0),
+    str_dquote = (STR_FUNC_EXPAND),
+    str_xquote = (STR_FUNC_EXPAND),
+    str_regexp = (STR_FUNC_REGEXP|STR_FUNC_ESCAPE|STR_FUNC_EXPAND),
+    str_sword  = (STR_FUNC_QWORDS|STR_FUNC_LIST),
+    str_dword  = (STR_FUNC_QWORDS|STR_FUNC_EXPAND|STR_FUNC_LIST),
+    str_ssym   = (STR_FUNC_SYMBOL),
+    str_dsym   = (STR_FUNC_SYMBOL|STR_FUNC_EXPAND)
+};
+
+static VALUE
+parser_str_new(const char *ptr, long len, rb_encoding *enc, int func, rb_encoding *enc0)
+{
+    VALUE str;
+
+    str = rb_enc_str_new(ptr, len, enc);
+    if (!(func & STR_FUNC_REGEXP) && rb_enc_asciicompat(enc)) {
+	if (rb_enc_str_coderange(str) == ENC_CODERANGE_7BIT) {
+	}
+	else if (enc0 == rb_usascii_encoding() && enc != rb_utf8_encoding()) {
+	    rb_enc_associate(str, rb_ascii8bit_encoding());
+	}
+    }
+
+    return str;
+}
+
+#define lex_goto_eol(p) ((p)->lex.pcur = (p)->lex.pend)
+#define lex_eol_p(p) ((p)->lex.pcur >= (p)->lex.pend)
+#define lex_eol_n_p(p,n) ((p)->lex.pcur+(n) >= (p)->lex.pend)
+#define peek(p,c) peek_n(p, (c), 0)
+#define peek_n(p,c,n) (!lex_eol_n_p(p, n) && (c) == (unsigned char)(p)->lex.pcur[n])
+#define peekc(p) peekc_n(p, 0)
+#define peekc_n(p,n) (lex_eol_n_p(p, n) ? -1 : (unsigned char)(p)->lex.pcur[n])
+
+#ifdef RIPPER
+static void
+add_delayed_token(struct parser_params *p, const char *tok, const char *end)
+{
+    if (tok < end) {
+	if (!has_delayed_token(p)) {
+	    p->delayed.token = rb_str_buf_new(end - tok);
+	    rb_enc_associate(p->delayed.token, p->enc);
+	    p->delayed.line = p->ruby_sourceline;
+	    p->delayed.col = rb_long2int(tok - p->lex.pbeg);
+	}
+	rb_str_buf_cat(p->delayed.token, tok, end - tok);
+	p->lex.ptok = end;
+    }
+}
+#else
+#define add_delayed_token(p, tok, end) ((void)(tok), (void)(end))
+#endif
+
+static int
+nextline(struct parser_params *p)
+{
+    VALUE v = p->lex.nextline;
+    p->lex.nextline = 0;
+    if (!v) {
+	if (p->eofp)
+	    return -1;
+
+	if (p->lex.pend > p->lex.pbeg && *(p->lex.pend-1) != '\n') {
+	    goto end_of_input;
+	}
+
+	if (!p->lex.input || NIL_P(v = lex_getline(p))) {
+	  end_of_input:
+	    p->eofp = 1;
+	    lex_goto_eol(p);
+	    return -1;
+	}
+	p->cr_seen = FALSE;
+    }
+    else if (NIL_P(v)) {
+	/* after here-document without terminator */
+	goto end_of_input;
+    }
+    add_delayed_token(p, p->lex.ptok, p->lex.pend);
+    if (p->heredoc_end > 0) {
+	p->ruby_sourceline = p->heredoc_end;
+	p->heredoc_end = 0;
+    }
+    p->ruby_sourceline++;
+    p->lex.pbeg = p->lex.pcur = RSTRING_PTR(v);
+    p->lex.pend = p->lex.pcur + RSTRING_LEN(v);
+    token_flush(p);
+    p->lex.prevline = p->lex.lastline;
+    p->lex.lastline = v;
+    return 0;
+}
+
+static int
+parser_cr(struct parser_params *p, int c)
+{
+    if (peek(p, '\n')) {
+	p->lex.pcur++;
+	c = '\n';
+    }
+    return c;
+}
+
+static inline int
+nextc(struct parser_params *p)
+{
+    int c;
+
+    if (UNLIKELY((p->lex.pcur == p->lex.pend) || p->eofp || RTEST(p->lex.nextline))) {
+	if (nextline(p)) return -1;
+    }
+    c = (unsigned char)*p->lex.pcur++;
+    if (UNLIKELY(c == '\r')) {
+	c = parser_cr(p, c);
+    }
+
+    return c;
+}
+
+static void
+pushback(struct parser_params *p, int c)
+{
+    if (c == -1) return;
+    p->lex.pcur--;
+    if (p->lex.pcur > p->lex.pbeg && p->lex.pcur[0] == '\n' && p->lex.pcur[-1] == '\r') {
+	p->lex.pcur--;
+    }
+}
+
+#define was_bol(p) ((p)->lex.pcur == (p)->lex.pbeg + 1)
+
+#define tokfix(p) ((p)->tokenbuf[(p)->tokidx]='\0')
+#define tok(p) (p)->tokenbuf
+#define toklen(p) (p)->tokidx
+
+static int
+looking_at_eol_p(struct parser_params *p)
+{
+    const char *ptr = p->lex.pcur;
+    while (ptr < p->lex.pend) {
+	int c = (unsigned char)*ptr++;
+	int eol = (c == '\n' || c == '#');
+	if (eol || !ISSPACE(c)) {
+	    return eol;
+	}
+    }
+    return TRUE;
+}
+
+static char*
+newtok(struct parser_params *p)
+{
+    p->tokidx = 0;
+    p->tokline = p->ruby_sourceline;
+    if (!p->tokenbuf) {
+	p->toksiz = 60;
+	p->tokenbuf = ALLOC_N(char, 60);
+    }
+    if (p->toksiz > 4096) {
+	p->toksiz = 60;
+	REALLOC_N(p->tokenbuf, char, 60);
+    }
+    return p->tokenbuf;
+}
+
+static char *
+tokspace(struct parser_params *p, int n)
+{
+    p->tokidx += n;
+
+    if (p->tokidx >= p->toksiz) {
+	do {p->toksiz *= 2;} while (p->toksiz < p->tokidx);
+	REALLOC_N(p->tokenbuf, char, p->toksiz);
+    }
+    return &p->tokenbuf[p->tokidx-n];
+}
+
+static void
+tokadd(struct parser_params *p, int c)
+{
+    p->tokenbuf[p->tokidx++] = (char)c;
+    if (p->tokidx >= p->toksiz) {
+	p->toksiz *= 2;
+	REALLOC_N(p->tokenbuf, char, p->toksiz);
+    }
+}
+
+static int
+tok_hex(struct parser_params *p, size_t *numlen)
+{
+    int c;
+
+    c = scan_hex(p->lex.pcur, 2, numlen);
+    if (!*numlen) {
+	yyerror0("invalid hex escape");
+	token_flush(p);
+	return 0;
+    }
+    p->lex.pcur += *numlen;
+    return c;
+}
+
+#define tokcopy(p, n) memcpy(tokspace(p, n), (p)->lex.pcur - (n), (n))
+
+static int
+escaped_control_code(int c)
+{
+    int c2 = 0;
+    switch (c) {
+      case ' ':
+	c2 = 's';
+	break;
+      case '\n':
+	c2 = 'n';
+	break;
+      case '\t':
+	c2 = 't';
+	break;
+      case '\v':
+	c2 = 'v';
+	break;
+      case '\r':
+	c2 = 'r';
+	break;
+      case '\f':
+	c2 = 'f';
+	b
