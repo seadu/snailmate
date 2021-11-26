@@ -14652,4 +14652,299 @@ escaped_control_code(int c)
 	break;
       case '\f':
 	c2 = 'f';
-	b
+	break;
+    }
+    return c2;
+}
+
+#define WARN_SPACE_CHAR(c, prefix) \
+    rb_warn1("invalid character syntax; use "prefix"\\%c", WARN_I(c2))
+
+static int
+tokadd_codepoint(struct parser_params *p, rb_encoding **encp,
+		 int regexp_literal, int wide)
+{
+    size_t numlen;
+    int codepoint = scan_hex(p->lex.pcur, wide ? p->lex.pend - p->lex.pcur : 4, &numlen);
+    literal_flush(p, p->lex.pcur);
+    p->lex.pcur += numlen;
+    if (wide ? (numlen == 0 || numlen > 6) : (numlen < 4))  {
+	yyerror0("invalid Unicode escape");
+	return wide && numlen > 0;
+    }
+    if (codepoint > 0x10ffff) {
+	yyerror0("invalid Unicode codepoint (too large)");
+	return wide;
+    }
+    if ((codepoint & 0xfffff800) == 0xd800) {
+	yyerror0("invalid Unicode codepoint");
+	return wide;
+    }
+    if (regexp_literal) {
+	tokcopy(p, (int)numlen);
+    }
+    else if (codepoint >= 0x80) {
+	rb_encoding *utf8 = rb_utf8_encoding();
+	if (*encp && utf8 != *encp) {
+	    YYLTYPE loc = RUBY_INIT_YYLLOC();
+	    compile_error(p, "UTF-8 mixed within %s source", rb_enc_name(*encp));
+	    parser_show_error_line(p, &loc);
+	    return wide;
+	}
+	*encp = utf8;
+	tokaddmbc(p, codepoint, *encp);
+    }
+    else {
+	tokadd(p, codepoint);
+    }
+    return TRUE;
+}
+
+/* return value is for ?\u3042 */
+static void
+tokadd_utf8(struct parser_params *p, rb_encoding **encp,
+	    int term, int symbol_literal, int regexp_literal)
+{
+    /*
+     * If `term` is not -1, then we allow multiple codepoints in \u{}
+     * upto `term` byte, otherwise we're parsing a character literal.
+     * And then add the codepoints to the current token.
+     */
+    static const char multiple_codepoints[] = "Multiple codepoints at single character literal";
+
+    const int open_brace = '{', close_brace = '}';
+
+    if (regexp_literal) { tokadd(p, '\\'); tokadd(p, 'u'); }
+
+    if (peek(p, open_brace)) {  /* handle \u{...} form */
+	const char *second = NULL;
+	int c, last = nextc(p);
+	if (p->lex.pcur >= p->lex.pend) goto unterminated;
+	while (ISSPACE(c = *p->lex.pcur) && ++p->lex.pcur < p->lex.pend);
+	while (c != close_brace) {
+	    if (c == term) goto unterminated;
+	    if (second == multiple_codepoints)
+		second = p->lex.pcur;
+	    if (regexp_literal) tokadd(p, last);
+	    if (!tokadd_codepoint(p, encp, regexp_literal, TRUE)) {
+		break;
+	    }
+	    while (ISSPACE(c = *p->lex.pcur)) {
+		if (++p->lex.pcur >= p->lex.pend) goto unterminated;
+		last = c;
+	    }
+	    if (term == -1 && !second)
+		second = multiple_codepoints;
+	}
+
+	if (c != close_brace) {
+	  unterminated:
+	    token_flush(p);
+	    yyerror0("unterminated Unicode escape");
+	    return;
+	}
+	if (second && second != multiple_codepoints) {
+	    const char *pcur = p->lex.pcur;
+	    p->lex.pcur = second;
+	    dispatch_scan_event(p, tSTRING_CONTENT);
+	    token_flush(p);
+	    p->lex.pcur = pcur;
+	    yyerror0(multiple_codepoints);
+	    token_flush(p);
+	}
+
+	if (regexp_literal) tokadd(p, close_brace);
+	nextc(p);
+    }
+    else {			/* handle \uxxxx form */
+	if (!tokadd_codepoint(p, encp, regexp_literal, FALSE)) {
+	    token_flush(p);
+	    return;
+	}
+    }
+}
+
+#define ESCAPE_CONTROL 1
+#define ESCAPE_META    2
+
+static int
+read_escape(struct parser_params *p, int flags, rb_encoding **encp)
+{
+    int c;
+    size_t numlen;
+
+    switch (c = nextc(p)) {
+      case '\\':	/* Backslash */
+	return c;
+
+      case 'n':	/* newline */
+	return '\n';
+
+      case 't':	/* horizontal tab */
+	return '\t';
+
+      case 'r':	/* carriage-return */
+	return '\r';
+
+      case 'f':	/* form-feed */
+	return '\f';
+
+      case 'v':	/* vertical tab */
+	return '\13';
+
+      case 'a':	/* alarm(bell) */
+	return '\007';
+
+      case 'e':	/* escape */
+	return 033;
+
+      case '0': case '1': case '2': case '3': /* octal constant */
+      case '4': case '5': case '6': case '7':
+	pushback(p, c);
+	c = scan_oct(p->lex.pcur, 3, &numlen);
+	p->lex.pcur += numlen;
+	return c;
+
+      case 'x':	/* hex constant */
+	c = tok_hex(p, &numlen);
+	if (numlen == 0) return 0;
+	return c;
+
+      case 'b':	/* backspace */
+	return '\010';
+
+      case 's':	/* space */
+	return ' ';
+
+      case 'M':
+	if (flags & ESCAPE_META) goto eof;
+	if ((c = nextc(p)) != '-') {
+	    goto eof;
+	}
+	if ((c = nextc(p)) == '\\') {
+	    switch (peekc(p)) {
+	      case 'u': case 'U':
+		nextc(p);
+		goto eof;
+	    }
+	    return read_escape(p, flags|ESCAPE_META, encp) | 0x80;
+	}
+	else if (c == -1 || !ISASCII(c)) goto eof;
+	else {
+	    int c2 = escaped_control_code(c);
+	    if (c2) {
+		if (ISCNTRL(c) || !(flags & ESCAPE_CONTROL)) {
+		    WARN_SPACE_CHAR(c2, "\\M-");
+		}
+		else {
+		    WARN_SPACE_CHAR(c2, "\\C-\\M-");
+		}
+	    }
+	    else if (ISCNTRL(c)) goto eof;
+	    return ((c & 0xff) | 0x80);
+	}
+
+      case 'C':
+	if ((c = nextc(p)) != '-') {
+	    goto eof;
+	}
+      case 'c':
+	if (flags & ESCAPE_CONTROL) goto eof;
+	if ((c = nextc(p))== '\\') {
+	    switch (peekc(p)) {
+	      case 'u': case 'U':
+		nextc(p);
+		goto eof;
+	    }
+	    c = read_escape(p, flags|ESCAPE_CONTROL, encp);
+	}
+	else if (c == '?')
+	    return 0177;
+	else if (c == -1 || !ISASCII(c)) goto eof;
+	else {
+	    int c2 = escaped_control_code(c);
+	    if (c2) {
+		if (ISCNTRL(c)) {
+		    if (flags & ESCAPE_META) {
+			WARN_SPACE_CHAR(c2, "\\M-");
+		    }
+		    else {
+			WARN_SPACE_CHAR(c2, "");
+		    }
+		}
+		else {
+		    if (flags & ESCAPE_META) {
+			WARN_SPACE_CHAR(c2, "\\M-\\C-");
+		    }
+		    else {
+			WARN_SPACE_CHAR(c2, "\\C-");
+		    }
+		}
+	    }
+	    else if (ISCNTRL(c)) goto eof;
+	}
+	return c & 0x9f;
+
+      eof:
+      case -1:
+        yyerror0("Invalid escape character syntax");
+	token_flush(p);
+	return '\0';
+
+      default:
+	return c;
+    }
+}
+
+static void
+tokaddmbc(struct parser_params *p, int c, rb_encoding *enc)
+{
+    int len = rb_enc_codelen(c, enc);
+    rb_enc_mbcput(c, tokspace(p, len), enc);
+}
+
+static int
+tokadd_escape(struct parser_params *p, rb_encoding **encp)
+{
+    int c;
+    size_t numlen;
+
+    switch (c = nextc(p)) {
+      case '\n':
+	return 0;		/* just ignore */
+
+      case '0': case '1': case '2': case '3': /* octal constant */
+      case '4': case '5': case '6': case '7':
+	{
+	    ruby_scan_oct(--p->lex.pcur, 3, &numlen);
+	    if (numlen == 0) goto eof;
+	    p->lex.pcur += numlen;
+	    tokcopy(p, (int)numlen + 1);
+	}
+	return 0;
+
+      case 'x':	/* hex constant */
+	{
+	    tok_hex(p, &numlen);
+	    if (numlen == 0) return -1;
+	    tokcopy(p, (int)numlen + 2);
+	}
+	return 0;
+
+      eof:
+      case -1:
+        yyerror0("Invalid escape character syntax");
+	token_flush(p);
+	return -1;
+
+      default:
+	tokadd(p, '\\');
+	tokadd(p, c);
+    }
+    return 0;
+}
+
+static int
+regx_options(struct parser_params *p)
+{
+    i
