@@ -15229,4 +15229,253 @@ flush_string_content(struct parser_params *p, rb_encoding *enc)
 	content = ripper_new_yylval(p, 0, 0, content);
     if (has_delayed_token(p)) {
 	ptrdiff_t len = p->lex.pcur - p->lex.ptok;
-	if (
+	if (len > 0) {
+	    rb_enc_str_buf_cat(p->delayed.token, p->lex.ptok, len, enc);
+	}
+	dispatch_delayed_token(p, tSTRING_CONTENT);
+	p->lex.ptok = p->lex.pcur;
+	RNODE(content)->nd_rval = yylval.val;
+    }
+    dispatch_scan_event(p, tSTRING_CONTENT);
+    if (yylval.val != content)
+	RNODE(content)->nd_rval = yylval.val;
+    yylval.val = content;
+}
+#else
+#define flush_string_content(p, enc) ((void)(enc))
+#endif
+
+RUBY_FUNC_EXPORTED const unsigned int ruby_global_name_punct_bits[(0x7e - 0x20 + 31) / 32];
+/* this can be shared with ripper, since it's independent from struct
+ * parser_params. */
+#ifndef RIPPER
+#define BIT(c, idx) (((c) / 32 - 1 == idx) ? (1U << ((c) % 32)) : 0)
+#define SPECIAL_PUNCT(idx) ( \
+	BIT('~', idx) | BIT('*', idx) | BIT('$', idx) | BIT('?', idx) | \
+	BIT('!', idx) | BIT('@', idx) | BIT('/', idx) | BIT('\\', idx) | \
+	BIT(';', idx) | BIT(',', idx) | BIT('.', idx) | BIT('=', idx) | \
+	BIT(':', idx) | BIT('<', idx) | BIT('>', idx) | BIT('\"', idx) | \
+	BIT('&', idx) | BIT('`', idx) | BIT('\'', idx) | BIT('+', idx) | \
+	BIT('0', idx))
+const unsigned int ruby_global_name_punct_bits[] = {
+    SPECIAL_PUNCT(0),
+    SPECIAL_PUNCT(1),
+    SPECIAL_PUNCT(2),
+};
+#undef BIT
+#undef SPECIAL_PUNCT
+#endif
+
+static enum yytokentype
+parser_peek_variable_name(struct parser_params *p)
+{
+    int c;
+    const char *ptr = p->lex.pcur;
+
+    if (ptr + 1 >= p->lex.pend) return 0;
+    c = *ptr++;
+    switch (c) {
+      case '$':
+	if ((c = *ptr) == '-') {
+	    if (++ptr >= p->lex.pend) return 0;
+	    c = *ptr;
+	}
+	else if (is_global_name_punct(c) || ISDIGIT(c)) {
+	    return tSTRING_DVAR;
+	}
+	break;
+      case '@':
+	if ((c = *ptr) == '@') {
+	    if (++ptr >= p->lex.pend) return 0;
+	    c = *ptr;
+	}
+	break;
+      case '{':
+	p->lex.pcur = ptr;
+	p->command_start = TRUE;
+	return tSTRING_DBEG;
+      default:
+	return 0;
+    }
+    if (!ISASCII(c) || c == '_' || ISALPHA(c))
+	return tSTRING_DVAR;
+    return 0;
+}
+
+#define IS_ARG() IS_lex_state(EXPR_ARG_ANY)
+#define IS_END() IS_lex_state(EXPR_END_ANY)
+#define IS_BEG() (IS_lex_state(EXPR_BEG_ANY) || IS_lex_state_all(EXPR_ARG|EXPR_LABELED))
+#define IS_SPCARG(c) (IS_ARG() && space_seen && !ISSPACE(c))
+#define IS_LABEL_POSSIBLE() (\
+	(IS_lex_state(EXPR_LABEL|EXPR_ENDFN) && !cmd_state) || \
+	IS_ARG())
+#define IS_LABEL_SUFFIX(n) (peek_n(p, ':',(n)) && !peek_n(p, ':', (n)+1))
+#define IS_AFTER_OPERATOR() IS_lex_state(EXPR_FNAME | EXPR_DOT)
+
+static inline enum yytokentype
+parser_string_term(struct parser_params *p, int func)
+{
+    p->lex.strterm = 0;
+    if (func & STR_FUNC_REGEXP) {
+	set_yylval_num(regx_options(p));
+	dispatch_scan_event(p, tREGEXP_END);
+	SET_LEX_STATE(EXPR_END);
+	return tREGEXP_END;
+    }
+    if ((func & STR_FUNC_LABEL) && IS_LABEL_SUFFIX(0)) {
+	nextc(p);
+	SET_LEX_STATE(EXPR_BEG|EXPR_LABEL);
+	return tLABEL_END;
+    }
+    SET_LEX_STATE(EXPR_END);
+    return tSTRING_END;
+}
+
+static enum yytokentype
+parse_string(struct parser_params *p, rb_strterm_literal_t *quote)
+{
+    int func = (int)quote->u1.func;
+    int term = (int)quote->u3.term;
+    int paren = (int)quote->u2.paren;
+    int c, space = 0;
+    rb_encoding *enc = p->enc;
+    rb_encoding *base_enc = 0;
+    VALUE lit;
+
+    if (func & STR_FUNC_TERM) {
+	if (func & STR_FUNC_QWORDS) nextc(p); /* delayed term */
+	SET_LEX_STATE(EXPR_END);
+	p->lex.strterm = 0;
+	return func & STR_FUNC_REGEXP ? tREGEXP_END : tSTRING_END;
+    }
+    c = nextc(p);
+    if ((func & STR_FUNC_QWORDS) && ISSPACE(c)) {
+	do {c = nextc(p);} while (ISSPACE(c));
+	space = 1;
+    }
+    if (func & STR_FUNC_LIST) {
+	quote->u1.func &= ~STR_FUNC_LIST;
+	space = 1;
+    }
+    if (c == term && !quote->u0.nest) {
+	if (func & STR_FUNC_QWORDS) {
+	    quote->u1.func |= STR_FUNC_TERM;
+	    pushback(p, c); /* dispatch the term at tSTRING_END */
+	    add_delayed_token(p, p->lex.ptok, p->lex.pcur);
+	    return ' ';
+	}
+	return parser_string_term(p, func);
+    }
+    if (space) {
+	pushback(p, c);
+	add_delayed_token(p, p->lex.ptok, p->lex.pcur);
+	return ' ';
+    }
+    newtok(p);
+    if ((func & STR_FUNC_EXPAND) && c == '#') {
+	int t = parser_peek_variable_name(p);
+	if (t) return t;
+	tokadd(p, '#');
+	c = nextc(p);
+    }
+    pushback(p, c);
+    if (tokadd_string(p, func, term, paren, &quote->u0.nest,
+		      &enc, &base_enc) == -1) {
+	if (p->eofp) {
+#ifndef RIPPER
+# define unterminated_literal(mesg) yyerror0(mesg)
+#else
+# define unterminated_literal(mesg) compile_error(p,  mesg)
+#endif
+	    literal_flush(p, p->lex.pcur);
+	    if (func & STR_FUNC_QWORDS) {
+		/* no content to add, bailing out here */
+		unterminated_literal("unterminated list meets end of file");
+		p->lex.strterm = 0;
+		return tSTRING_END;
+	    }
+	    if (func & STR_FUNC_REGEXP) {
+		unterminated_literal("unterminated regexp meets end of file");
+	    }
+	    else {
+		unterminated_literal("unterminated string meets end of file");
+	    }
+	    quote->u1.func |= STR_FUNC_TERM;
+	}
+    }
+
+    tokfix(p);
+    lit = STR_NEW3(tok(p), toklen(p), enc, func);
+    set_yylval_str(lit);
+    flush_string_content(p, enc);
+
+    return tSTRING_CONTENT;
+}
+
+static enum yytokentype
+heredoc_identifier(struct parser_params *p)
+{
+    /*
+     * term_len is length of `<<"END"` except `END`,
+     * in this case term_len is 4 (<, <, " and ").
+     */
+    long len, offset = p->lex.pcur - p->lex.pbeg;
+    int c = nextc(p), term, func = 0, quote = 0;
+    enum yytokentype token = tSTRING_BEG;
+    int indent = 0;
+
+    if (c == '-') {
+	c = nextc(p);
+	func = STR_FUNC_INDENT;
+	offset++;
+    }
+    else if (c == '~') {
+	c = nextc(p);
+	func = STR_FUNC_INDENT;
+	offset++;
+	indent = INT_MAX;
+    }
+    switch (c) {
+      case '\'':
+	func |= str_squote; goto quoted;
+      case '"':
+	func |= str_dquote; goto quoted;
+      case '`':
+	token = tXSTRING_BEG;
+	func |= str_xquote; goto quoted;
+
+      quoted:
+	quote++;
+	offset++;
+	term = c;
+	len = 0;
+	while ((c = nextc(p)) != term) {
+	    if (c == -1 || c == '\r' || c == '\n') {
+		yyerror0("unterminated here document identifier");
+		return -1;
+	    }
+	}
+	break;
+
+      default:
+	if (!parser_is_identchar(p)) {
+	    pushback(p, c);
+	    if (func & STR_FUNC_INDENT) {
+		pushback(p, indent > 0 ? '~' : '-');
+	    }
+	    return 0;
+	}
+	func |= str_dquote;
+	do {
+	    int n = parser_precise_mbclen(p, p->lex.pcur-1);
+	    if (n < 0) return 0;
+	    p->lex.pcur += --n;
+	} while ((c = nextc(p)) != -1 && parser_is_identchar(p));
+	pushback(p, c);
+	break;
+    }
+
+    len = p->lex.pcur - (p->lex.pbeg + offset) - quote;
+    if ((unsigned long)len >= HERETERM_LENGTH_MAX)
+	yyerror0("too long here document identifier");
+    dispatch_scan_e
