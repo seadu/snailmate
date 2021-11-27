@@ -14947,4 +14947,286 @@ tokadd_escape(struct parser_params *p, rb_encoding **encp)
 static int
 regx_options(struct parser_params *p)
 {
-    i
+    int kcode = 0;
+    int kopt = 0;
+    int options = 0;
+    int c, opt, kc;
+
+    newtok(p);
+    while (c = nextc(p), ISALPHA(c)) {
+        if (c == 'o') {
+            options |= RE_OPTION_ONCE;
+        }
+        else if (rb_char_to_option_kcode(c, &opt, &kc)) {
+	    if (kc >= 0) {
+		if (kc != rb_ascii8bit_encindex()) kcode = c;
+		kopt = opt;
+	    }
+	    else {
+		options |= opt;
+	    }
+        }
+        else {
+	    tokadd(p, c);
+        }
+    }
+    options |= kopt;
+    pushback(p, c);
+    if (toklen(p)) {
+	YYLTYPE loc = RUBY_INIT_YYLLOC();
+	tokfix(p);
+	compile_error(p, "unknown regexp option%s - %*s",
+		      toklen(p) > 1 ? "s" : "", toklen(p), tok(p));
+	parser_show_error_line(p, &loc);
+    }
+    return options | RE_OPTION_ENCODING(kcode);
+}
+
+static int
+tokadd_mbchar(struct parser_params *p, int c)
+{
+    int len = parser_precise_mbclen(p, p->lex.pcur-1);
+    if (len < 0) return -1;
+    tokadd(p, c);
+    p->lex.pcur += --len;
+    if (len > 0) tokcopy(p, len);
+    return c;
+}
+
+static inline int
+simple_re_meta(int c)
+{
+    switch (c) {
+      case '$': case '*': case '+': case '.':
+      case '?': case '^': case '|':
+      case ')': case ']': case '}': case '>':
+	return TRUE;
+      default:
+	return FALSE;
+    }
+}
+
+static int
+parser_update_heredoc_indent(struct parser_params *p, int c)
+{
+    if (p->heredoc_line_indent == -1) {
+	if (c == '\n') p->heredoc_line_indent = 0;
+    }
+    else {
+	if (c == ' ') {
+	    p->heredoc_line_indent++;
+	    return TRUE;
+	}
+	else if (c == '\t') {
+	    int w = (p->heredoc_line_indent / TAB_WIDTH) + 1;
+	    p->heredoc_line_indent = w * TAB_WIDTH;
+	    return TRUE;
+	}
+	else if (c != '\n') {
+	    if (p->heredoc_indent > p->heredoc_line_indent) {
+		p->heredoc_indent = p->heredoc_line_indent;
+	    }
+	    p->heredoc_line_indent = -1;
+	}
+    }
+    return FALSE;
+}
+
+static void
+parser_mixed_error(struct parser_params *p, rb_encoding *enc1, rb_encoding *enc2)
+{
+    YYLTYPE loc = RUBY_INIT_YYLLOC();
+    const char *n1 = rb_enc_name(enc1), *n2 = rb_enc_name(enc2);
+    compile_error(p, "%s mixed within %s source", n1, n2);
+    parser_show_error_line(p, &loc);
+}
+
+static void
+parser_mixed_escape(struct parser_params *p, const char *beg, rb_encoding *enc1, rb_encoding *enc2)
+{
+    const char *pos = p->lex.pcur;
+    p->lex.pcur = beg;
+    parser_mixed_error(p, enc1, enc2);
+    p->lex.pcur = pos;
+}
+
+static int
+tokadd_string(struct parser_params *p,
+	      int func, int term, int paren, long *nest,
+	      rb_encoding **encp, rb_encoding **enc)
+{
+    int c;
+    bool erred = false;
+
+#define mixed_error(enc1, enc2) \
+    (void)(erred || (parser_mixed_error(p, enc1, enc2), erred = true))
+#define mixed_escape(beg, enc1, enc2) \
+    (void)(erred || (parser_mixed_escape(p, beg, enc1, enc2), erred = true))
+
+    while ((c = nextc(p)) != -1) {
+	if (p->heredoc_indent > 0) {
+	    parser_update_heredoc_indent(p, c);
+	}
+
+	if (paren && c == paren) {
+	    ++*nest;
+	}
+	else if (c == term) {
+	    if (!nest || !*nest) {
+		pushback(p, c);
+		break;
+	    }
+	    --*nest;
+	}
+	else if ((func & STR_FUNC_EXPAND) && c == '#' && p->lex.pcur < p->lex.pend) {
+	    int c2 = *p->lex.pcur;
+	    if (c2 == '$' || c2 == '@' || c2 == '{') {
+		pushback(p, c);
+		break;
+	    }
+	}
+	else if (c == '\\') {
+	    literal_flush(p, p->lex.pcur - 1);
+	    c = nextc(p);
+	    switch (c) {
+	      case '\n':
+		if (func & STR_FUNC_QWORDS) break;
+		if (func & STR_FUNC_EXPAND) {
+		    if (!(func & STR_FUNC_INDENT) || (p->heredoc_indent < 0))
+			continue;
+		    if (c == term) {
+			c = '\\';
+			goto terminate;
+		    }
+		}
+		tokadd(p, '\\');
+		break;
+
+	      case '\\':
+		if (func & STR_FUNC_ESCAPE) tokadd(p, c);
+		break;
+
+	      case 'u':
+		if ((func & STR_FUNC_EXPAND) == 0) {
+		    tokadd(p, '\\');
+		    break;
+		}
+		tokadd_utf8(p, enc, term,
+			    func & STR_FUNC_SYMBOL,
+			    func & STR_FUNC_REGEXP);
+		continue;
+
+	      default:
+		if (c == -1) return -1;
+		if (!ISASCII(c)) {
+		    if ((func & STR_FUNC_EXPAND) == 0) tokadd(p, '\\');
+		    goto non_ascii;
+		}
+		if (func & STR_FUNC_REGEXP) {
+                    switch (c) {
+                      case 'c':
+                      case 'C':
+                      case 'M': {
+                        pushback(p, c);
+                        c = read_escape(p, 0, enc);
+
+                        int i;
+                        char escbuf[5];
+                        snprintf(escbuf, sizeof(escbuf), "\\x%02X", c);
+                        for (i = 0; i < 4; i++) {
+                            tokadd(p, escbuf[i]);
+                        }
+                        continue;
+                      }
+                    }
+
+		    if (c == term && !simple_re_meta(c)) {
+			tokadd(p, c);
+			continue;
+		    }
+		    pushback(p, c);
+		    if ((c = tokadd_escape(p, enc)) < 0)
+			return -1;
+		    if (*enc && *enc != *encp) {
+			mixed_escape(p->lex.ptok+2, *enc, *encp);
+		    }
+		    continue;
+		}
+		else if (func & STR_FUNC_EXPAND) {
+		    pushback(p, c);
+		    if (func & STR_FUNC_ESCAPE) tokadd(p, '\\');
+		    c = read_escape(p, 0, enc);
+		}
+		else if ((func & STR_FUNC_QWORDS) && ISSPACE(c)) {
+		    /* ignore backslashed spaces in %w */
+		}
+		else if (c != term && !(paren && c == paren)) {
+		    tokadd(p, '\\');
+		    pushback(p, c);
+		    continue;
+		}
+	    }
+	}
+	else if (!parser_isascii(p)) {
+	  non_ascii:
+	    if (!*enc) {
+		*enc = *encp;
+	    }
+	    else if (*enc != *encp) {
+		mixed_error(*enc, *encp);
+		continue;
+	    }
+	    if (tokadd_mbchar(p, c) == -1) return -1;
+	    continue;
+	}
+	else if ((func & STR_FUNC_QWORDS) && ISSPACE(c)) {
+	    pushback(p, c);
+	    break;
+	}
+        if (c & 0x80) {
+	    if (!*enc) {
+		*enc = *encp;
+	    }
+	    else if (*enc != *encp) {
+		mixed_error(*enc, *encp);
+		continue;
+	    }
+        }
+	tokadd(p, c);
+    }
+  terminate:
+    if (*enc) *encp = *enc;
+    return c;
+}
+
+static inline rb_strterm_t *
+new_strterm(VALUE v1, VALUE v2, VALUE v3, VALUE v0)
+{
+#ifdef TRUFFLERUBY
+    rb_strterm_t *term = xmalloc(sizeof(rb_strterm_t));
+    VALUE flags = T_IMEMO | (imemo_parser_strterm << FL_USHIFT);
+    term->flags = flags;
+    term->u.literal.u0.dummy = v0;
+    term->u.literal.u1.func = v1;
+    term->u.literal.u2.paren = v2;
+    term->u.literal.u3.term = v3;
+    return term;
+#else
+    return (rb_strterm_t*)rb_imemo_new(imemo_parser_strterm, v1, v2, v3, v0);
+#endif
+}
+
+/* imemo_parser_strterm for literal */
+#define NEW_STRTERM(func, term, paren) \
+    new_strterm((VALUE)(func), (VALUE)(paren), (VALUE)(term), 0)
+
+#ifdef RIPPER
+static void
+flush_string_content(struct parser_params *p, rb_encoding *enc)
+{
+    VALUE content = yylval.val;
+    if (!ripper_is_node_yylval(content))
+	content = ripper_new_yylval(p, 0, 0, content);
+    if (has_delayed_token(p)) {
+	ptrdiff_t len = p->lex.pcur - p->lex.ptok;
+	if (
