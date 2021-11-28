@@ -15478,4 +15478,284 @@ heredoc_identifier(struct parser_params *p)
     len = p->lex.pcur - (p->lex.pbeg + offset) - quote;
     if ((unsigned long)len >= HERETERM_LENGTH_MAX)
 	yyerror0("too long here document identifier");
-    dispatch_scan_e
+    dispatch_scan_event(p, tHEREDOC_BEG);
+    lex_goto_eol(p);
+
+    p->lex.strterm = new_strterm(0, 0, 0, p->lex.lastline);
+    p->lex.strterm->flags |= STRTERM_HEREDOC;
+    rb_strterm_heredoc_t *here = &p->lex.strterm->u.heredoc;
+    here->offset = offset;
+    here->sourceline = p->ruby_sourceline;
+    here->length = (int)len;
+    here->quote = quote;
+    here->func = func;
+
+    token_flush(p);
+    p->heredoc_indent = indent;
+    p->heredoc_line_indent = 0;
+    return token;
+}
+
+static void
+heredoc_restore(struct parser_params *p, rb_strterm_heredoc_t *here)
+{
+    VALUE line;
+
+    p->lex.strterm = 0;
+    line = here->lastline;
+    p->lex.lastline = line;
+    p->lex.pbeg = RSTRING_PTR(line);
+    p->lex.pend = p->lex.pbeg + RSTRING_LEN(line);
+    p->lex.pcur = p->lex.pbeg + here->offset + here->length + here->quote;
+    p->lex.ptok = p->lex.pbeg + here->offset - here->quote;
+    p->heredoc_end = p->ruby_sourceline;
+    p->ruby_sourceline = (int)here->sourceline;
+    if (p->eofp) p->lex.nextline = Qnil;
+    p->eofp = 0;
+}
+
+static int
+dedent_string(VALUE string, int width)
+{
+    char *str;
+    long len;
+    int i, col = 0;
+
+    RSTRING_GETMEM(string, str, len);
+    for (i = 0; i < len && col < width; i++) {
+	if (str[i] == ' ') {
+	    col++;
+	}
+	else if (str[i] == '\t') {
+	    int n = TAB_WIDTH * (col / TAB_WIDTH + 1);
+	    if (n > width) break;
+	    col = n;
+	}
+	else {
+	    break;
+	}
+    }
+    if (!i) return 0;
+    rb_str_modify(string);
+    str = RSTRING_PTR(string);
+    if (RSTRING_LEN(string) != len)
+	rb_fatal("literal string changed: %+"PRIsVALUE, string);
+    MEMMOVE(str, str + i, char, len - i);
+    rb_str_set_len(string, len - i);
+    return i;
+}
+
+#ifndef RIPPER
+static NODE *
+heredoc_dedent(struct parser_params *p, NODE *root)
+{
+    NODE *node, *str_node, *prev_node;
+    int indent = p->heredoc_indent;
+    VALUE prev_lit = 0;
+
+    if (indent <= 0) return root;
+    p->heredoc_indent = 0;
+    if (!root) return root;
+
+    prev_node = node = str_node = root;
+    if (nd_type_p(root, NODE_LIST)) str_node = root->nd_head;
+
+    while (str_node) {
+	VALUE lit = str_node->nd_lit;
+	if (str_node->flags & NODE_FL_NEWLINE) {
+	    dedent_string(lit, indent);
+	}
+	if (!prev_lit) {
+	    prev_lit = lit;
+	}
+	else if (!literal_concat0(p, prev_lit, lit)) {
+	    return 0;
+	}
+	else {
+	    NODE *end = node->nd_end;
+	    node = prev_node->nd_next = node->nd_next;
+	    if (!node) {
+		if (nd_type_p(prev_node, NODE_DSTR))
+		    nd_set_type(prev_node, NODE_STR);
+		break;
+	    }
+	    node->nd_end = end;
+	    goto next_str;
+	}
+
+	str_node = 0;
+	while ((node = (prev_node = node)->nd_next) != 0) {
+	  next_str:
+	    if (!nd_type_p(node, NODE_LIST)) break;
+	    if ((str_node = node->nd_head) != 0) {
+		enum node_type type = nd_type(str_node);
+		if (type == NODE_STR || type == NODE_DSTR) break;
+		prev_lit = 0;
+		str_node = 0;
+	    }
+	}
+    }
+    return root;
+}
+#else /* RIPPER */
+static VALUE
+heredoc_dedent(struct parser_params *p, VALUE array)
+{
+    int indent = p->heredoc_indent;
+
+    if (indent <= 0) return array;
+    p->heredoc_indent = 0;
+    dispatch2(heredoc_dedent, array, INT2NUM(indent));
+    return array;
+}
+
+/*
+ *  call-seq:
+ *    Ripper.dedent_string(input, width)   -> Integer
+ *
+ *  USE OF RIPPER LIBRARY ONLY.
+ *
+ *  Strips up to +width+ leading whitespaces from +input+,
+ *  and returns the stripped column width.
+ */
+static VALUE
+parser_dedent_string(VALUE self, VALUE input, VALUE width)
+{
+    int wid, col;
+
+    StringValue(input);
+    wid = NUM2UINT(width);
+    col = dedent_string(input, wid);
+    return INT2NUM(col);
+}
+#endif
+
+static int
+whole_match_p(struct parser_params *p, const char *eos, long len, int indent)
+{
+    const char *ptr = p->lex.pbeg;
+    long n;
+
+    if (indent) {
+	while (*ptr && ISSPACE(*ptr)) ptr++;
+    }
+    n = p->lex.pend - (ptr + len);
+    if (n < 0) return FALSE;
+    if (n > 0 && ptr[len] != '\n') {
+	if (ptr[len] != '\r') return FALSE;
+	if (n <= 1 || ptr[len+1] != '\n') return FALSE;
+    }
+    return strncmp(eos, ptr, len) == 0;
+}
+
+static int
+word_match_p(struct parser_params *p, const char *word, long len)
+{
+    if (strncmp(p->lex.pcur, word, len)) return 0;
+    if (p->lex.pcur + len == p->lex.pend) return 1;
+    int c = (unsigned char)p->lex.pcur[len];
+    if (ISSPACE(c)) return 1;
+    switch (c) {
+      case '\0': case '\004': case '\032': return 1;
+    }
+    return 0;
+}
+
+#define NUM_SUFFIX_R   (1<<0)
+#define NUM_SUFFIX_I   (1<<1)
+#define NUM_SUFFIX_ALL 3
+
+static int
+number_literal_suffix(struct parser_params *p, int mask)
+{
+    int c, result = 0;
+    const char *lastp = p->lex.pcur;
+
+    while ((c = nextc(p)) != -1) {
+	if ((mask & NUM_SUFFIX_I) && c == 'i') {
+	    result |= (mask & NUM_SUFFIX_I);
+	    mask &= ~NUM_SUFFIX_I;
+	    /* r after i, rational of complex is disallowed */
+	    mask &= ~NUM_SUFFIX_R;
+	    continue;
+	}
+	if ((mask & NUM_SUFFIX_R) && c == 'r') {
+	    result |= (mask & NUM_SUFFIX_R);
+	    mask &= ~NUM_SUFFIX_R;
+	    continue;
+	}
+	if (!ISASCII(c) || ISALPHA(c) || c == '_') {
+	    p->lex.pcur = lastp;
+	    literal_flush(p, p->lex.pcur);
+	    return 0;
+	}
+	pushback(p, c);
+	break;
+    }
+    return result;
+}
+
+static enum yytokentype
+set_number_literal(struct parser_params *p, VALUE v,
+		   enum yytokentype type, int suffix)
+{
+    if (suffix & NUM_SUFFIX_I) {
+	v = rb_complex_raw(INT2FIX(0), v);
+	type = tIMAGINARY;
+    }
+    set_yylval_literal(v);
+    SET_LEX_STATE(EXPR_END);
+    return type;
+}
+
+static enum yytokentype
+set_integer_literal(struct parser_params *p, VALUE v, int suffix)
+{
+    enum yytokentype type = tINTEGER;
+    if (suffix & NUM_SUFFIX_R) {
+	v = rb_rational_raw1(v);
+	type = tRATIONAL;
+    }
+    return set_number_literal(p, v, type, suffix);
+}
+
+#ifdef RIPPER
+static void
+dispatch_heredoc_end(struct parser_params *p)
+{
+    VALUE str;
+    if (has_delayed_token(p))
+	dispatch_delayed_token(p, tSTRING_CONTENT);
+    str = STR_NEW(p->lex.ptok, p->lex.pend - p->lex.ptok);
+    ripper_dispatch1(p, ripper_token2eventid(tHEREDOC_END), str);
+    lex_goto_eol(p);
+    token_flush(p);
+}
+
+#else
+#define dispatch_heredoc_end(p) ((void)0)
+#endif
+
+static enum yytokentype
+here_document(struct parser_params *p, rb_strterm_heredoc_t *here)
+{
+    int c, func, indent = 0;
+    const char *eos, *ptr, *ptr_end;
+    long len;
+    VALUE str = 0;
+    rb_encoding *enc = p->enc;
+    rb_encoding *base_enc = 0;
+    int bol;
+
+    eos = RSTRING_PTR(here->lastline) + here->offset;
+    len = here->length;
+    indent = (func = here->func) & STR_FUNC_INDENT;
+
+    if ((c = nextc(p)) == -1) {
+      error:
+#ifdef RIPPER
+	if (!has_delayed_token(p)) {
+	    dispatch_scan_event(p, tSTRING_CONTENT);
+	}
+	else {
+	    if ((len = p->lex.pcur - p
