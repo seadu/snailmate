@@ -15758,4 +15758,256 @@ here_document(struct parser_params *p, rb_strterm_heredoc_t *here)
 	    dispatch_scan_event(p, tSTRING_CONTENT);
 	}
 	else {
-	    if ((len = p->lex.pcur - p
+	    if ((len = p->lex.pcur - p->lex.ptok) > 0) {
+		if (!(func & STR_FUNC_REGEXP) && rb_enc_asciicompat(enc)) {
+		    int cr = ENC_CODERANGE_UNKNOWN;
+		    rb_str_coderange_scan_restartable(p->lex.ptok, p->lex.pcur, enc, &cr);
+		    if (cr != ENC_CODERANGE_7BIT &&
+			p->enc == rb_usascii_encoding() &&
+			enc != rb_utf8_encoding()) {
+			enc = rb_ascii8bit_encoding();
+		    }
+		}
+		rb_enc_str_buf_cat(p->delayed.token, p->lex.ptok, len, enc);
+	    }
+	    dispatch_delayed_token(p, tSTRING_CONTENT);
+	}
+	lex_goto_eol(p);
+#endif
+	heredoc_restore(p, &p->lex.strterm->u.heredoc);
+	compile_error(p, "can't find string \"%.*s\" anywhere before EOF",
+		      (int)len, eos);
+	token_flush(p);
+	p->lex.strterm = 0;
+	SET_LEX_STATE(EXPR_END);
+	return tSTRING_END;
+    }
+    bol = was_bol(p);
+    if (!bol) {
+	/* not beginning of line, cannot be the terminator */
+    }
+    else if (p->heredoc_line_indent == -1) {
+	/* `heredoc_line_indent == -1` means
+	 * - "after an interpolation in the same line", or
+	 * - "in a continuing line"
+	 */
+	p->heredoc_line_indent = 0;
+    }
+    else if (whole_match_p(p, eos, len, indent)) {
+	dispatch_heredoc_end(p);
+      restore:
+	heredoc_restore(p, &p->lex.strterm->u.heredoc);
+	token_flush(p);
+	p->lex.strterm = 0;
+	SET_LEX_STATE(EXPR_END);
+	return tSTRING_END;
+    }
+
+    if (!(func & STR_FUNC_EXPAND)) {
+	do {
+	    ptr = RSTRING_PTR(p->lex.lastline);
+	    ptr_end = p->lex.pend;
+	    if (ptr_end > ptr) {
+		switch (ptr_end[-1]) {
+		  case '\n':
+		    if (--ptr_end == ptr || ptr_end[-1] != '\r') {
+			ptr_end++;
+			break;
+		    }
+		  case '\r':
+		    --ptr_end;
+		}
+	    }
+
+	    if (p->heredoc_indent > 0) {
+		long i = 0;
+		while (ptr + i < ptr_end && parser_update_heredoc_indent(p, ptr[i]))
+		    i++;
+		p->heredoc_line_indent = 0;
+	    }
+
+	    if (str)
+		rb_str_cat(str, ptr, ptr_end - ptr);
+	    else
+		str = STR_NEW(ptr, ptr_end - ptr);
+	    if (ptr_end < p->lex.pend) rb_str_cat(str, "\n", 1);
+	    lex_goto_eol(p);
+	    if (p->heredoc_indent > 0) {
+		goto flush_str;
+	    }
+	    if (nextc(p) == -1) {
+		if (str) {
+		    str = 0;
+		}
+		goto error;
+	    }
+	} while (!whole_match_p(p, eos, len, indent));
+    }
+    else {
+	/*	int mb = ENC_CODERANGE_7BIT, *mbp = &mb;*/
+	newtok(p);
+	if (c == '#') {
+	    int t = parser_peek_variable_name(p);
+	    if (p->heredoc_line_indent != -1) {
+		if (p->heredoc_indent > p->heredoc_line_indent) {
+		    p->heredoc_indent = p->heredoc_line_indent;
+		}
+		p->heredoc_line_indent = -1;
+	    }
+	    if (t) return t;
+	    tokadd(p, '#');
+	    c = nextc(p);
+	}
+	do {
+	    pushback(p, c);
+	    enc = p->enc;
+	    if ((c = tokadd_string(p, func, '\n', 0, NULL, &enc, &base_enc)) == -1) {
+		if (p->eofp) goto error;
+		goto restore;
+	    }
+	    if (c != '\n') {
+		if (c == '\\') p->heredoc_line_indent = -1;
+	      flush:
+		str = STR_NEW3(tok(p), toklen(p), enc, func);
+	      flush_str:
+		set_yylval_str(str);
+#ifndef RIPPER
+		if (bol) yylval.node->flags |= NODE_FL_NEWLINE;
+#endif
+		flush_string_content(p, enc);
+		return tSTRING_CONTENT;
+	    }
+	    tokadd(p, nextc(p));
+	    if (p->heredoc_indent > 0) {
+		lex_goto_eol(p);
+		goto flush;
+	    }
+	    /*	    if (mbp && mb == ENC_CODERANGE_UNKNOWN) mbp = 0;*/
+	    if ((c = nextc(p)) == -1) goto error;
+	} while (!whole_match_p(p, eos, len, indent));
+	str = STR_NEW3(tok(p), toklen(p), enc, func);
+    }
+    dispatch_heredoc_end(p);
+#ifdef RIPPER
+    str = ripper_new_yylval(p, ripper_token2eventid(tSTRING_CONTENT),
+			    yylval.val, str);
+#endif
+    heredoc_restore(p, &p->lex.strterm->u.heredoc);
+    token_flush(p);
+    p->lex.strterm = NEW_STRTERM(func | STR_FUNC_TERM, 0, 0);
+    set_yylval_str(str);
+#ifndef RIPPER
+    if (bol) yylval.node->flags |= NODE_FL_NEWLINE;
+#endif
+    return tSTRING_CONTENT;
+}
+
+#include "lex.c"
+
+static int
+arg_ambiguous(struct parser_params *p, char c)
+{
+#ifndef RIPPER
+    if (c == '/') {
+        rb_warning1("ambiguity between regexp and two divisions: wrap regexp in parentheses or add a space after `%c' operator", WARN_I(c));
+    }
+    else {
+        rb_warning1("ambiguous first argument; put parentheses or a space even after `%c' operator", WARN_I(c));
+    }
+#else
+    dispatch1(arg_ambiguous, rb_usascii_str_new(&c, 1));
+#endif
+    return TRUE;
+}
+
+static ID
+#ifndef RIPPER
+formal_argument(struct parser_params *p, ID lhs)
+#else
+formal_argument(struct parser_params *p, VALUE lhs)
+#endif
+{
+    ID id = get_id(lhs);
+
+    switch (id_type(id)) {
+      case ID_LOCAL:
+	break;
+#ifndef RIPPER
+# define ERR(mesg) yyerror0(mesg)
+#else
+# define ERR(mesg) (dispatch2(param_error, WARN_S(mesg), lhs), ripper_error(p))
+#endif
+      case ID_CONST:
+	ERR("formal argument cannot be a constant");
+	return 0;
+      case ID_INSTANCE:
+	ERR("formal argument cannot be an instance variable");
+	return 0;
+      case ID_GLOBAL:
+	ERR("formal argument cannot be a global variable");
+	return 0;
+      case ID_CLASS:
+	ERR("formal argument cannot be a class variable");
+	return 0;
+      default:
+	ERR("formal argument must be local variable");
+	return 0;
+#undef ERR
+    }
+    shadowing_lvar(p, id);
+#ifdef TRUFFLERUBY
+    return id;
+#else
+    return lhs;
+#endif
+}
+
+static int
+lvar_defined(struct parser_params *p, ID id)
+{
+    return (dyna_in_block(p) && dvar_defined(p, id)) || local_id(p, id);
+}
+
+/* emacsen -*- hack */
+static long
+parser_encode_length(struct parser_params *p, const char *name, long len)
+{
+    long nlen;
+
+    if (len > 5 && name[nlen = len - 5] == '-') {
+	if (rb_memcicmp(name + nlen + 1, "unix", 4) == 0)
+	    return nlen;
+    }
+    if (len > 4 && name[nlen = len - 4] == '-') {
+	if (rb_memcicmp(name + nlen + 1, "dos", 3) == 0)
+	    return nlen;
+	if (rb_memcicmp(name + nlen + 1, "mac", 3) == 0 &&
+	    !(len == 8 && rb_memcicmp(name, "utf8-mac", len) == 0))
+	    /* exclude UTF8-MAC because the encoding named "UTF8" doesn't exist in Ruby */
+	    return nlen;
+    }
+    return len;
+}
+
+static void
+parser_set_encode(struct parser_params *p, const char *name)
+{
+    int idx = rb_enc_find_index(name);
+    rb_encoding *enc;
+    VALUE excargs[3];
+
+    if (idx < 0) {
+	excargs[1] = rb_sprintf("unknown encoding name: %s", name);
+      error:
+	excargs[0] = rb_eArgError;
+	excargs[2] = rb_make_backtrace();
+	rb_ary_unshift(excargs[2], rb_sprintf("%"PRIsVALUE":%d", p->ruby_sourcefile_string, p->ruby_sourceline));
+	rb_exc_raise(rb_make_exception(3, excargs));
+    }
+    enc = rb_enc_from_index(idx);
+    if (!rb_enc_asciicompat(enc)) {
+	excargs[1] = rb_sprintf("%s is not ASCII compatible", rb_enc_name(enc));
+	goto error;
+    }
+    p->enc = enc;
+#if
