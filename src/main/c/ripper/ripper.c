@@ -16010,4 +16010,279 @@ parser_set_encode(struct parser_params *p, const char *name)
 	goto error;
     }
     p->enc = enc;
-#if
+#ifndef RIPPER
+    if (p->debug_lines) {
+	VALUE lines = p->debug_lines;
+	long i, n = RARRAY_LEN(lines);
+	for (i = 0; i < n; ++i) {
+	    rb_enc_associate_index(RARRAY_AREF(lines, i), idx);
+	}
+    }
+#endif
+}
+
+static int
+comment_at_top(struct parser_params *p)
+{
+    const char *ptr = p->lex.pbeg, *ptr_end = p->lex.pcur - 1;
+    if (p->line_count != (p->has_shebang ? 2 : 1)) return 0;
+    while (ptr < ptr_end) {
+	if (!ISSPACE(*ptr)) return 0;
+	ptr++;
+    }
+    return 1;
+}
+
+typedef long (*rb_magic_comment_length_t)(struct parser_params *p, const char *name, long len);
+typedef void (*rb_magic_comment_setter_t)(struct parser_params *p, const char *name, const char *val);
+
+static int parser_invalid_pragma_value(struct parser_params *p, const char *name, const char *val);
+
+static void
+magic_comment_encoding(struct parser_params *p, const char *name, const char *val)
+{
+    if (!comment_at_top(p)) {
+	return;
+    }
+    parser_set_encode(p, val);
+}
+
+static int
+parser_get_bool(struct parser_params *p, const char *name, const char *val)
+{
+    switch (*val) {
+      case 't': case 'T':
+	if (STRCASECMP(val, "true") == 0) {
+	    return TRUE;
+	}
+	break;
+      case 'f': case 'F':
+	if (STRCASECMP(val, "false") == 0) {
+	    return FALSE;
+	}
+	break;
+    }
+    return parser_invalid_pragma_value(p, name, val);
+}
+
+static int
+parser_invalid_pragma_value(struct parser_params *p, const char *name, const char *val)
+{
+    rb_warning2("invalid value for %s: %s", WARN_S(name), WARN_S(val));
+    return -1;
+}
+
+static void
+parser_set_token_info(struct parser_params *p, const char *name, const char *val)
+{
+    int b = parser_get_bool(p, name, val);
+    if (b >= 0) p->token_info_enabled = b;
+}
+
+static void
+parser_set_compile_option_flag(struct parser_params *p, const char *name, const char *val)
+{
+    int b;
+
+    if (p->token_seen) {
+	rb_warning1("`%s' is ignored after any tokens", WARN_S(name));
+	return;
+    }
+
+    b = parser_get_bool(p, name, val);
+    if (b < 0) return;
+
+    if (!p->compile_option)
+	p->compile_option = rb_obj_hide(rb_ident_hash_new());
+    rb_hash_aset(p->compile_option, ID2SYM(rb_intern(name)),
+		 RBOOL(b));
+}
+
+static void
+parser_set_shareable_constant_value(struct parser_params *p, const char *name, const char *val)
+{
+    for (const char *s = p->lex.pbeg, *e = p->lex.pcur; s < e; ++s) {
+	if (*s == ' ' || *s == '\t') continue;
+	if (*s == '#') break;
+	rb_warning1("`%s' is ignored unless in comment-only line", WARN_S(name));
+	return;
+    }
+
+    switch (*val) {
+      case 'n': case 'N':
+	if (STRCASECMP(val, "none") == 0) {
+	    p->ctxt.shareable_constant_value = shareable_none;
+	    return;
+	}
+	break;
+      case 'l': case 'L':
+	if (STRCASECMP(val, "literal") == 0) {
+	    p->ctxt.shareable_constant_value = shareable_literal;
+	    return;
+	}
+	break;
+      case 'e': case 'E':
+	if (STRCASECMP(val, "experimental_copy") == 0) {
+	    p->ctxt.shareable_constant_value = shareable_copy;
+	    return;
+	}
+	if (STRCASECMP(val, "experimental_everything") == 0) {
+	    p->ctxt.shareable_constant_value = shareable_everything;
+	    return;
+	}
+	break;
+    }
+    parser_invalid_pragma_value(p, name, val);
+}
+
+# if WARN_PAST_SCOPE
+static void
+parser_set_past_scope(struct parser_params *p, const char *name, const char *val)
+{
+    int b = parser_get_bool(p, name, val);
+    if (b >= 0) p->past_scope_enabled = b;
+}
+# endif
+
+struct magic_comment {
+    const char *name;
+    rb_magic_comment_setter_t func;
+    rb_magic_comment_length_t length;
+};
+
+static const struct magic_comment magic_comments[] = {
+    {"coding", magic_comment_encoding, parser_encode_length},
+    {"encoding", magic_comment_encoding, parser_encode_length},
+    {"frozen_string_literal", parser_set_compile_option_flag},
+    {"shareable_constant_value", parser_set_shareable_constant_value},
+    {"warn_indent", parser_set_token_info},
+# if WARN_PAST_SCOPE
+    {"warn_past_scope", parser_set_past_scope},
+# endif
+};
+
+static const char *
+magic_comment_marker(const char *str, long len)
+{
+    long i = 2;
+
+    while (i < len) {
+	switch (str[i]) {
+	  case '-':
+	    if (str[i-1] == '*' && str[i-2] == '-') {
+		return str + i + 1;
+	    }
+	    i += 2;
+	    break;
+	  case '*':
+	    if (i + 1 >= len) return 0;
+	    if (str[i+1] != '-') {
+		i += 4;
+	    }
+	    else if (str[i-1] != '-') {
+		i += 2;
+	    }
+	    else {
+		return str + i + 2;
+	    }
+	    break;
+	  default:
+	    i += 3;
+	    break;
+	}
+    }
+    return 0;
+}
+
+static int
+parser_magic_comment(struct parser_params *p, const char *str, long len)
+{
+    int indicator = 0;
+    VALUE name = 0, val = 0;
+    const char *beg, *end, *vbeg, *vend;
+#define str_copy(_s, _p, _n) ((_s) \
+	? (void)(rb_str_resize((_s), (_n)), \
+	   MEMCPY(RSTRING_PTR(_s), (_p), char, (_n)), (_s)) \
+	: (void)((_s) = STR_NEW((_p), (_n))))
+
+    if (len <= 7) return FALSE;
+    if (!!(beg = magic_comment_marker(str, len))) {
+	if (!(end = magic_comment_marker(beg, str + len - beg)))
+	    return FALSE;
+	indicator = TRUE;
+	str = beg;
+	len = end - beg - 3;
+    }
+
+    /* %r"([^\\s\'\":;]+)\\s*:\\s*(\"(?:\\\\.|[^\"])*\"|[^\"\\s;]+)[\\s;]*" */
+    while (len > 0) {
+	const struct magic_comment *mc = magic_comments;
+	char *s;
+	int i;
+	long n = 0;
+
+	for (; len > 0 && *str; str++, --len) {
+	    switch (*str) {
+	      case '\'': case '"': case ':': case ';':
+		continue;
+	    }
+	    if (!ISSPACE(*str)) break;
+	}
+	for (beg = str; len > 0; str++, --len) {
+	    switch (*str) {
+	      case '\'': case '"': case ':': case ';':
+		break;
+	      default:
+		if (ISSPACE(*str)) break;
+		continue;
+	    }
+	    break;
+	}
+	for (end = str; len > 0 && ISSPACE(*str); str++, --len);
+	if (!len) break;
+	if (*str != ':') {
+	    if (!indicator) return FALSE;
+	    continue;
+	}
+
+	do str++; while (--len > 0 && ISSPACE(*str));
+	if (!len) break;
+	if (*str == '"') {
+	    for (vbeg = ++str; --len > 0 && *str != '"'; str++) {
+		if (*str == '\\') {
+		    --len;
+		    ++str;
+		}
+	    }
+	    vend = str;
+	    if (len) {
+		--len;
+		++str;
+	    }
+	}
+	else {
+	    for (vbeg = str; len > 0 && *str != '"' && *str != ';' && !ISSPACE(*str); --len, str++);
+	    vend = str;
+	}
+	if (indicator) {
+	    while (len > 0 && (*str == ';' || ISSPACE(*str))) --len, str++;
+	}
+	else {
+	    while (len > 0 && (ISSPACE(*str))) --len, str++;
+	    if (len) return FALSE;
+	}
+
+	n = end - beg;
+	str_copy(name, beg, n);
+	s = RSTRING_PTR(name);
+	for (i = 0; i < n; ++i) {
+	    if (s[i] == '-') s[i] = '_';
+	}
+	do {
+	    if (STRNCASECMP(mc->name, s, n) == 0 && !mc->name[n]) {
+		n = vend - vbeg;
+		if (mc->length) {
+		    n = (*mc->length)(p, vbeg, n);
+		}
+		str_copy(val, vbeg, n);
+		(*mc->func)(p, mc->name, RSTRING
