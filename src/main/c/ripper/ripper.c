@@ -16285,4 +16285,275 @@ parser_magic_comment(struct parser_params *p, const char *str, long len)
 		    n = (*mc->length)(p, vbeg, n);
 		}
 		str_copy(val, vbeg, n);
-		(*mc->func)(p, mc->name, RSTRING
+		(*mc->func)(p, mc->name, RSTRING_PTR(val));
+		break;
+	    }
+	} while (++mc < magic_comments + numberof(magic_comments));
+#ifdef RIPPER
+	str_copy(val, vbeg, vend - vbeg);
+	dispatch2(magic_comment, name, val);
+#endif
+    }
+
+    return TRUE;
+}
+
+static void
+set_file_encoding(struct parser_params *p, const char *str, const char *send)
+{
+    int sep = 0;
+    const char *beg = str;
+    VALUE s;
+
+    for (;;) {
+	if (send - str <= 6) return;
+	switch (str[6]) {
+	  case 'C': case 'c': str += 6; continue;
+	  case 'O': case 'o': str += 5; continue;
+	  case 'D': case 'd': str += 4; continue;
+	  case 'I': case 'i': str += 3; continue;
+	  case 'N': case 'n': str += 2; continue;
+	  case 'G': case 'g': str += 1; continue;
+	  case '=': case ':':
+	    sep = 1;
+	    str += 6;
+	    break;
+	  default:
+	    str += 6;
+	    if (ISSPACE(*str)) break;
+	    continue;
+	}
+	if (STRNCASECMP(str-6, "coding", 6) == 0) break;
+	sep = 0;
+    }
+    for (;;) {
+	do {
+	    if (++str >= send) return;
+	} while (ISSPACE(*str));
+	if (sep) break;
+	if (*str != '=' && *str != ':') return;
+	sep = 1;
+	str++;
+    }
+    beg = str;
+    while ((*str == '-' || *str == '_' || ISALNUM(*str)) && ++str < send);
+    s = rb_str_new(beg, parser_encode_length(p, beg, str - beg));
+    parser_set_encode(p, RSTRING_PTR(s));
+    rb_str_resize(s, 0);
+}
+
+static void
+parser_prepare(struct parser_params *p)
+{
+    int c = nextc(p);
+    p->token_info_enabled = !compile_for_eval && RTEST(ruby_verbose);
+    switch (c) {
+      case '#':
+	if (peek(p, '!')) p->has_shebang = 1;
+	break;
+      case 0xef:		/* UTF-8 BOM marker */
+	if (p->lex.pend - p->lex.pcur >= 2 &&
+	    (unsigned char)p->lex.pcur[0] == 0xbb &&
+	    (unsigned char)p->lex.pcur[1] == 0xbf) {
+	    p->enc = rb_utf8_encoding();
+	    p->lex.pcur += 2;
+	    p->lex.pbeg = p->lex.pcur;
+	    return;
+	}
+	break;
+      case EOF:
+	return;
+    }
+    pushback(p, c);
+    p->enc = rb_enc_get(p->lex.lastline);
+}
+
+#ifndef RIPPER
+#define ambiguous_operator(tok, op, syn) ( \
+    rb_warning0("`"op"' after local variable or literal is interpreted as binary operator"), \
+    rb_warning0("even though it seems like "syn""))
+#else
+#define ambiguous_operator(tok, op, syn) \
+    dispatch2(operator_ambiguous, TOKEN2VAL(tok), rb_str_new_cstr(syn))
+#endif
+#define warn_balanced(tok, op, syn) ((void) \
+    (!IS_lex_state_for(last_state, EXPR_CLASS|EXPR_DOT|EXPR_FNAME|EXPR_ENDFN) && \
+     space_seen && !ISSPACE(c) && \
+     (ambiguous_operator(tok, op, syn), 0)), \
+     (enum yytokentype)(tok))
+
+static VALUE
+parse_rational(struct parser_params *p, char *str, int len, int seen_point)
+{
+    VALUE v;
+    char *point = &str[seen_point];
+    size_t fraclen = len-seen_point-1;
+    memmove(point, point+1, fraclen+1);
+    v = rb_cstr_to_inum(str, 10, FALSE);
+    return rb_rational_new(v, rb_int_positive_pow(10, fraclen));
+}
+
+static enum yytokentype
+no_digits(struct parser_params *p)
+{
+    yyerror0("numeric literal without digits");
+    if (peek(p, '_')) nextc(p);
+    /* dummy 0, for tUMINUS_NUM at numeric */
+    return set_integer_literal(p, INT2FIX(0), 0);
+}
+
+static enum yytokentype
+parse_numeric(struct parser_params *p, int c)
+{
+    int is_float, seen_point, seen_e, nondigit;
+    int suffix;
+
+    is_float = seen_point = seen_e = nondigit = 0;
+    SET_LEX_STATE(EXPR_END);
+    newtok(p);
+    if (c == '-' || c == '+') {
+	tokadd(p, c);
+	c = nextc(p);
+    }
+    if (c == '0') {
+	int start = toklen(p);
+	c = nextc(p);
+	if (c == 'x' || c == 'X') {
+	    /* hexadecimal */
+	    c = nextc(p);
+	    if (c != -1 && ISXDIGIT(c)) {
+		do {
+		    if (c == '_') {
+			if (nondigit) break;
+			nondigit = c;
+			continue;
+		    }
+		    if (!ISXDIGIT(c)) break;
+		    nondigit = 0;
+		    tokadd(p, c);
+		} while ((c = nextc(p)) != -1);
+	    }
+	    pushback(p, c);
+	    tokfix(p);
+	    if (toklen(p) == start) {
+		return no_digits(p);
+	    }
+	    else if (nondigit) goto trailing_uc;
+	    suffix = number_literal_suffix(p, NUM_SUFFIX_ALL);
+	    return set_integer_literal(p, rb_cstr_to_inum(tok(p), 16, FALSE), suffix);
+	}
+	if (c == 'b' || c == 'B') {
+	    /* binary */
+	    c = nextc(p);
+	    if (c == '0' || c == '1') {
+		do {
+		    if (c == '_') {
+			if (nondigit) break;
+			nondigit = c;
+			continue;
+		    }
+		    if (c != '0' && c != '1') break;
+		    nondigit = 0;
+		    tokadd(p, c);
+		} while ((c = nextc(p)) != -1);
+	    }
+	    pushback(p, c);
+	    tokfix(p);
+	    if (toklen(p) == start) {
+		return no_digits(p);
+	    }
+	    else if (nondigit) goto trailing_uc;
+	    suffix = number_literal_suffix(p, NUM_SUFFIX_ALL);
+	    return set_integer_literal(p, rb_cstr_to_inum(tok(p), 2, FALSE), suffix);
+	}
+	if (c == 'd' || c == 'D') {
+	    /* decimal */
+	    c = nextc(p);
+	    if (c != -1 && ISDIGIT(c)) {
+		do {
+		    if (c == '_') {
+			if (nondigit) break;
+			nondigit = c;
+			continue;
+		    }
+		    if (!ISDIGIT(c)) break;
+		    nondigit = 0;
+		    tokadd(p, c);
+		} while ((c = nextc(p)) != -1);
+	    }
+	    pushback(p, c);
+	    tokfix(p);
+	    if (toklen(p) == start) {
+		return no_digits(p);
+	    }
+	    else if (nondigit) goto trailing_uc;
+	    suffix = number_literal_suffix(p, NUM_SUFFIX_ALL);
+	    return set_integer_literal(p, rb_cstr_to_inum(tok(p), 10, FALSE), suffix);
+	}
+	if (c == '_') {
+	    /* 0_0 */
+	    goto octal_number;
+	}
+	if (c == 'o' || c == 'O') {
+	    /* prefixed octal */
+	    c = nextc(p);
+	    if (c == -1 || c == '_' || !ISDIGIT(c)) {
+		return no_digits(p);
+	    }
+	}
+	if (c >= '0' && c <= '7') {
+	    /* octal */
+	  octal_number:
+	    do {
+		if (c == '_') {
+		    if (nondigit) break;
+		    nondigit = c;
+		    continue;
+		}
+		if (c < '0' || c > '9') break;
+		if (c > '7') goto invalid_octal;
+		nondigit = 0;
+		tokadd(p, c);
+	    } while ((c = nextc(p)) != -1);
+	    if (toklen(p) > start) {
+		pushback(p, c);
+		tokfix(p);
+		if (nondigit) goto trailing_uc;
+		suffix = number_literal_suffix(p, NUM_SUFFIX_ALL);
+		return set_integer_literal(p, rb_cstr_to_inum(tok(p), 8, FALSE), suffix);
+	    }
+	    if (nondigit) {
+		pushback(p, c);
+		goto trailing_uc;
+	    }
+	}
+	if (c > '7' && c <= '9') {
+	  invalid_octal:
+	    yyerror0("Invalid octal digit");
+	}
+	else if (c == '.' || c == 'e' || c == 'E') {
+	    tokadd(p, '0');
+	}
+	else {
+	    pushback(p, c);
+	    suffix = number_literal_suffix(p, NUM_SUFFIX_ALL);
+	    return set_integer_literal(p, INT2FIX(0), suffix);
+	}
+    }
+
+    for (;;) {
+	switch (c) {
+	  case '0': case '1': case '2': case '3': case '4':
+	  case '5': case '6': case '7': case '8': case '9':
+	    nondigit = 0;
+	    tokadd(p, c);
+	    break;
+
+	  case '.':
+	    if (nondigit) goto trailing_uc;
+	    if (seen_point || seen_e) {
+		goto decode_num;
+	    }
+	    else {
+		int c0 = nextc(p);
+		if (c0 == -1 || !ISDIGIT(c0)) {
