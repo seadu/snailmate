@@ -16557,3 +16557,290 @@ parse_numeric(struct parser_params *p, int c)
 	    else {
 		int c0 = nextc(p);
 		if (c0 == -1 || !ISDIGIT(c0)) {
+		    pushback(p, c0);
+		    goto decode_num;
+		}
+		c = c0;
+	    }
+	    seen_point = toklen(p);
+	    tokadd(p, '.');
+	    tokadd(p, c);
+	    is_float++;
+	    nondigit = 0;
+	    break;
+
+	  case 'e':
+	  case 'E':
+	    if (nondigit) {
+		pushback(p, c);
+		c = nondigit;
+		goto decode_num;
+	    }
+	    if (seen_e) {
+		goto decode_num;
+	    }
+	    nondigit = c;
+	    c = nextc(p);
+	    if (c != '-' && c != '+' && !ISDIGIT(c)) {
+		pushback(p, c);
+		nondigit = 0;
+		goto decode_num;
+	    }
+	    tokadd(p, nondigit);
+	    seen_e++;
+	    is_float++;
+	    tokadd(p, c);
+	    nondigit = (c == '-' || c == '+') ? c : 0;
+	    break;
+
+	  case '_':	/* `_' in number just ignored */
+	    if (nondigit) goto decode_num;
+	    nondigit = c;
+	    break;
+
+	  default:
+	    goto decode_num;
+	}
+	c = nextc(p);
+    }
+
+  decode_num:
+    pushback(p, c);
+    if (nondigit) {
+      trailing_uc:
+	literal_flush(p, p->lex.pcur - 1);
+	YYLTYPE loc = RUBY_INIT_YYLLOC();
+	compile_error(p, "trailing `%c' in number", nondigit);
+	parser_show_error_line(p, &loc);
+    }
+    tokfix(p);
+    if (is_float) {
+	enum yytokentype type = tFLOAT;
+	VALUE v;
+
+	suffix = number_literal_suffix(p, seen_e ? NUM_SUFFIX_I : NUM_SUFFIX_ALL);
+	if (suffix & NUM_SUFFIX_R) {
+	    type = tRATIONAL;
+	    v = parse_rational(p, tok(p), toklen(p), seen_point);
+	}
+	else {
+	    double d = strtod(tok(p), 0);
+	    if (errno == ERANGE) {
+		rb_warning1("Float %s out of range", WARN_S(tok(p)));
+		errno = 0;
+	    }
+	    v = DBL2NUM(d);
+	}
+	return set_number_literal(p, v, type, suffix);
+    }
+    suffix = number_literal_suffix(p, NUM_SUFFIX_ALL);
+    return set_integer_literal(p, rb_cstr_to_inum(tok(p), 10, FALSE), suffix);
+}
+
+static enum yytokentype
+parse_qmark(struct parser_params *p, int space_seen)
+{
+    rb_encoding *enc;
+    register int c;
+    VALUE lit;
+
+    if (IS_END()) {
+	SET_LEX_STATE(EXPR_VALUE);
+	return '?';
+    }
+    c = nextc(p);
+    if (c == -1) {
+	compile_error(p, "incomplete character syntax");
+	return 0;
+    }
+    if (rb_enc_isspace(c, p->enc)) {
+	if (!IS_ARG()) {
+	    int c2 = escaped_control_code(c);
+	    if (c2) {
+		WARN_SPACE_CHAR(c2, "?");
+	    }
+	}
+      ternary:
+	pushback(p, c);
+	SET_LEX_STATE(EXPR_VALUE);
+	return '?';
+    }
+    newtok(p);
+    enc = p->enc;
+    if (!parser_isascii(p)) {
+	if (tokadd_mbchar(p, c) == -1) return 0;
+    }
+    else if ((rb_enc_isalnum(c, p->enc) || c == '_') &&
+	     p->lex.pcur < p->lex.pend && is_identchar(p->lex.pcur, p->lex.pend, p->enc)) {
+	if (space_seen) {
+	    const char *start = p->lex.pcur - 1, *ptr = start;
+	    do {
+		int n = parser_precise_mbclen(p, ptr);
+		if (n < 0) return -1;
+		ptr += n;
+	    } while (ptr < p->lex.pend && is_identchar(ptr, p->lex.pend, p->enc));
+	    rb_warn2("`?' just followed by `%.*s' is interpreted as" \
+		     " a conditional operator, put a space after `?'",
+		     WARN_I((int)(ptr - start)), WARN_S_L(start, (ptr - start)));
+	}
+	goto ternary;
+    }
+    else if (c == '\\') {
+	if (peek(p, 'u')) {
+	    nextc(p);
+	    enc = rb_utf8_encoding();
+	    tokadd_utf8(p, &enc, -1, 0, 0);
+	}
+	else if (!lex_eol_p(p) && !(c = *p->lex.pcur, ISASCII(c))) {
+	    nextc(p);
+	    if (tokadd_mbchar(p, c) == -1) return 0;
+	}
+	else {
+	    c = read_escape(p, 0, &enc);
+	    tokadd(p, c);
+	}
+    }
+    else {
+	tokadd(p, c);
+    }
+    tokfix(p);
+    lit = STR_NEW3(tok(p), toklen(p), enc, 0);
+    set_yylval_str(lit);
+    SET_LEX_STATE(EXPR_END);
+    return tCHAR;
+}
+
+static enum yytokentype
+parse_percent(struct parser_params *p, const int space_seen, const enum lex_state_e last_state)
+{
+    register int c;
+    const char *ptok = p->lex.pcur;
+
+    if (IS_BEG()) {
+	int term;
+	int paren;
+
+	c = nextc(p);
+      quotation:
+	if (c == -1) goto unterminated;
+	if (!ISALNUM(c)) {
+	    term = c;
+	    if (!ISASCII(c)) goto unknown;
+	    c = 'Q';
+	}
+	else {
+	    term = nextc(p);
+	    if (rb_enc_isalnum(term, p->enc) || !parser_isascii(p)) {
+	      unknown:
+		pushback(p, term);
+		c = parser_precise_mbclen(p, p->lex.pcur);
+		if (c < 0) return 0;
+		p->lex.pcur += c;
+		yyerror0("unknown type of %string");
+		return 0;
+	    }
+	}
+	if (term == -1) {
+	  unterminated:
+	    compile_error(p, "unterminated quoted string meets end of file");
+	    return 0;
+	}
+	paren = term;
+	if (term == '(') term = ')';
+	else if (term == '[') term = ']';
+	else if (term == '{') term = '}';
+	else if (term == '<') term = '>';
+	else paren = 0;
+
+	p->lex.ptok = ptok-1;
+	switch (c) {
+	  case 'Q':
+	    p->lex.strterm = NEW_STRTERM(str_dquote, term, paren);
+	    return tSTRING_BEG;
+
+	  case 'q':
+	    p->lex.strterm = NEW_STRTERM(str_squote, term, paren);
+	    return tSTRING_BEG;
+
+	  case 'W':
+	    p->lex.strterm = NEW_STRTERM(str_dword, term, paren);
+	    return tWORDS_BEG;
+
+	  case 'w':
+	    p->lex.strterm = NEW_STRTERM(str_sword, term, paren);
+	    return tQWORDS_BEG;
+
+	  case 'I':
+	    p->lex.strterm = NEW_STRTERM(str_dword, term, paren);
+	    return tSYMBOLS_BEG;
+
+	  case 'i':
+	    p->lex.strterm = NEW_STRTERM(str_sword, term, paren);
+	    return tQSYMBOLS_BEG;
+
+	  case 'x':
+	    p->lex.strterm = NEW_STRTERM(str_xquote, term, paren);
+	    return tXSTRING_BEG;
+
+	  case 'r':
+	    p->lex.strterm = NEW_STRTERM(str_regexp, term, paren);
+	    return tREGEXP_BEG;
+
+	  case 's':
+	    p->lex.strterm = NEW_STRTERM(str_ssym, term, paren);
+	    SET_LEX_STATE(EXPR_FNAME|EXPR_FITEM);
+	    return tSYMBEG;
+
+	  default:
+	    yyerror0("unknown type of %string");
+	    return 0;
+	}
+    }
+    if ((c = nextc(p)) == '=') {
+	set_yylval_id('%');
+	SET_LEX_STATE(EXPR_BEG);
+	return tOP_ASGN;
+    }
+    if (IS_SPCARG(c) || (IS_lex_state(EXPR_FITEM) && c == 's')) {
+	goto quotation;
+    }
+    SET_LEX_STATE(IS_AFTER_OPERATOR() ? EXPR_ARG : EXPR_BEG);
+    pushback(p, c);
+    return warn_balanced('%', "%%", "string literal");
+}
+
+static int
+tokadd_ident(struct parser_params *p, int c)
+{
+    do {
+	if (tokadd_mbchar(p, c) == -1) return -1;
+	c = nextc(p);
+    } while (parser_is_identchar(p));
+    pushback(p, c);
+    return 0;
+}
+
+static ID
+tokenize_ident(struct parser_params *p, const enum lex_state_e last_state)
+{
+    ID ident = TOK_INTERN();
+
+    set_yylval_name(ident);
+
+    return ident;
+}
+
+static int
+parse_numvar(struct parser_params *p)
+{
+    size_t len;
+    int overflow;
+    unsigned long n = ruby_scan_digits(tok(p)+1, toklen(p)-1, 10, &len, &overflow);
+    const unsigned long nth_ref_max =
+	((FIXNUM_MAX < INT_MAX) ? FIXNUM_MAX : INT_MAX) >> 1;
+    /* NTH_REF is left-shifted to be ORed with back-ref flag and
+     * turned into a Fixnum, in compile.c */
+
+    if (overflow || n > nth_ref_max) {
+	/* compile_error()? */
+	rb_warn1("`%s' is too big for a number variable,
