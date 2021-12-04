@@ -16843,4 +16843,262 @@ parse_numvar(struct parser_params *p)
 
     if (overflow || n > nth_ref_max) {
 	/* compile_error()? */
-	rb_warn1("`%s' is too big for a number variable,
+	rb_warn1("`%s' is too big for a number variable, always nil", WARN_S(tok(p)));
+	return 0;		/* $0 is $PROGRAM_NAME, not NTH_REF */
+    }
+    else {
+	return (int)n;
+    }
+}
+
+static enum yytokentype
+parse_gvar(struct parser_params *p, const enum lex_state_e last_state)
+{
+    const char *ptr = p->lex.pcur;
+    register int c;
+
+    SET_LEX_STATE(EXPR_END);
+    p->lex.ptok = ptr - 1; /* from '$' */
+    newtok(p);
+    c = nextc(p);
+    switch (c) {
+      case '_':		/* $_: last read line string */
+	c = nextc(p);
+	if (parser_is_identchar(p)) {
+	    tokadd(p, '$');
+	    tokadd(p, '_');
+	    break;
+	}
+	pushback(p, c);
+	c = '_';
+	/* fall through */
+      case '~':		/* $~: match-data */
+      case '*':		/* $*: argv */
+      case '$':		/* $$: pid */
+      case '?':		/* $?: last status */
+      case '!':		/* $!: error string */
+      case '@':		/* $@: error position */
+      case '/':		/* $/: input record separator */
+      case '\\':		/* $\: output record separator */
+      case ';':		/* $;: field separator */
+      case ',':		/* $,: output field separator */
+      case '.':		/* $.: last read line number */
+      case '=':		/* $=: ignorecase */
+      case ':':		/* $:: load path */
+      case '<':		/* $<: reading filename */
+      case '>':		/* $>: default output handle */
+      case '\"':		/* $": already loaded files */
+	tokadd(p, '$');
+	tokadd(p, c);
+	goto gvar;
+
+      case '-':
+	tokadd(p, '$');
+	tokadd(p, c);
+	c = nextc(p);
+	if (parser_is_identchar(p)) {
+	    if (tokadd_mbchar(p, c) == -1) return 0;
+	}
+	else {
+	    pushback(p, c);
+	    pushback(p, '-');
+	    return '$';
+	}
+      gvar:
+	set_yylval_name(TOK_INTERN());
+	return tGVAR;
+
+      case '&':		/* $&: last match */
+      case '`':		/* $`: string before last match */
+      case '\'':		/* $': string after last match */
+      case '+':		/* $+: string matches last paren. */
+	if (IS_lex_state_for(last_state, EXPR_FNAME)) {
+	    tokadd(p, '$');
+	    tokadd(p, c);
+	    goto gvar;
+	}
+	set_yylval_node(NEW_BACK_REF(c, &_cur_loc));
+	return tBACK_REF;
+
+      case '1': case '2': case '3':
+      case '4': case '5': case '6':
+      case '7': case '8': case '9':
+	tokadd(p, '$');
+	do {
+	    tokadd(p, c);
+	    c = nextc(p);
+	} while (c != -1 && ISDIGIT(c));
+	pushback(p, c);
+	if (IS_lex_state_for(last_state, EXPR_FNAME)) goto gvar;
+	tokfix(p);
+	c = parse_numvar(p);
+	set_yylval_node(NEW_NTH_REF(c, &_cur_loc));
+	return tNTH_REF;
+
+      default:
+	if (!parser_is_identchar(p)) {
+	    YYLTYPE loc = RUBY_INIT_YYLLOC();
+	    if (c == -1 || ISSPACE(c)) {
+		compile_error(p, "`$' without identifiers is not allowed as a global variable name");
+	    }
+	    else {
+		pushback(p, c);
+		compile_error(p, "`$%c' is not allowed as a global variable name", c);
+	    }
+	    parser_show_error_line(p, &loc);
+	    set_yylval_noname();
+	    return tGVAR;
+	}
+	/* fall through */
+      case '0':
+	tokadd(p, '$');
+    }
+
+    if (tokadd_ident(p, c)) return 0;
+    SET_LEX_STATE(EXPR_END);
+    tokenize_ident(p, last_state);
+    return tGVAR;
+}
+
+#ifndef RIPPER
+static bool
+parser_numbered_param(struct parser_params *p, int n)
+{
+    if (n < 0) return false;
+
+    if (DVARS_TERMINAL_P(p->lvtbl->args) || DVARS_TERMINAL_P(p->lvtbl->args->prev)) {
+	return false;
+    }
+    if (p->max_numparam == ORDINAL_PARAM) {
+	compile_error(p, "ordinary parameter is defined");
+	return false;
+    }
+    struct vtable *args = p->lvtbl->args;
+    if (p->max_numparam < n) {
+	p->max_numparam = n;
+    }
+    while (n > args->pos) {
+	vtable_add(args, NUMPARAM_IDX_TO_ID(args->pos+1));
+    }
+    return true;
+}
+#endif
+
+static enum yytokentype
+parse_atmark(struct parser_params *p, const enum lex_state_e last_state)
+{
+    const char *ptr = p->lex.pcur;
+    enum yytokentype result = tIVAR;
+    register int c = nextc(p);
+    YYLTYPE loc;
+
+    p->lex.ptok = ptr - 1; /* from '@' */
+    newtok(p);
+    tokadd(p, '@');
+    if (c == '@') {
+	result = tCVAR;
+	tokadd(p, '@');
+	c = nextc(p);
+    }
+    SET_LEX_STATE(IS_lex_state_for(last_state, EXPR_FNAME) ? EXPR_ENDFN : EXPR_END);
+    if (c == -1 || !parser_is_identchar(p)) {
+	pushback(p, c);
+	RUBY_SET_YYLLOC(loc);
+	if (result == tIVAR) {
+	    compile_error(p, "`@' without identifiers is not allowed as an instance variable name");
+	}
+	else {
+	    compile_error(p, "`@@' without identifiers is not allowed as a class variable name");
+	}
+	parser_show_error_line(p, &loc);
+	set_yylval_noname();
+	SET_LEX_STATE(EXPR_END);
+	return result;
+    }
+    else if (ISDIGIT(c)) {
+	pushback(p, c);
+	RUBY_SET_YYLLOC(loc);
+	if (result == tIVAR) {
+	    compile_error(p, "`@%c' is not allowed as an instance variable name", c);
+	}
+	else {
+	    compile_error(p, "`@@%c' is not allowed as a class variable name", c);
+	}
+	parser_show_error_line(p, &loc);
+	set_yylval_noname();
+	SET_LEX_STATE(EXPR_END);
+	return result;
+    }
+
+    if (tokadd_ident(p, c)) return 0;
+    tokenize_ident(p, last_state);
+    return result;
+}
+
+static enum yytokentype
+parse_ident(struct parser_params *p, int c, int cmd_state)
+{
+    enum yytokentype result;
+    int mb = ENC_CODERANGE_7BIT;
+    const enum lex_state_e last_state = p->lex.state;
+    ID ident;
+
+    do {
+	if (!ISASCII(c)) mb = ENC_CODERANGE_UNKNOWN;
+	if (tokadd_mbchar(p, c) == -1) return 0;
+	c = nextc(p);
+    } while (parser_is_identchar(p));
+    if ((c == '!' || c == '?') && !peek(p, '=')) {
+	result = tFID;
+	tokadd(p, c);
+    }
+    else if (c == '=' && IS_lex_state(EXPR_FNAME) &&
+	     (!peek(p, '~') && !peek(p, '>') && (!peek(p, '=') || (peek_n(p, '>', 1))))) {
+	result = tIDENTIFIER;
+	tokadd(p, c);
+    }
+    else {
+	result = tCONSTANT;	/* assume provisionally */
+	pushback(p, c);
+    }
+    tokfix(p);
+
+    if (IS_LABEL_POSSIBLE()) {
+	if (IS_LABEL_SUFFIX(0)) {
+	    SET_LEX_STATE(EXPR_ARG|EXPR_LABELED);
+	    nextc(p);
+	    set_yylval_name(TOK_INTERN());
+	    return tLABEL;
+	}
+    }
+    if (mb == ENC_CODERANGE_7BIT && !IS_lex_state(EXPR_DOT)) {
+	const struct kwtable *kw;
+
+	/* See if it is a reserved word.  */
+	kw = rb_reserved_word(tok(p), toklen(p));
+	if (kw) {
+	    enum lex_state_e state = p->lex.state;
+	    if (IS_lex_state_for(state, EXPR_FNAME)) {
+		SET_LEX_STATE(EXPR_ENDFN);
+		set_yylval_name(rb_intern2(tok(p), toklen(p)));
+		return kw->id[0];
+	    }
+	    SET_LEX_STATE(kw->state);
+	    if (IS_lex_state(EXPR_BEG)) {
+		p->command_start = TRUE;
+	    }
+	    if (kw->id[0] == keyword_do) {
+		if (lambda_beginning_p()) {
+		    p->lex.lpar_beg = -1; /* make lambda_beginning_p() == FALSE in the body of "-> do ... end" */
+		    return keyword_do_LAMBDA;
+		}
+		if (COND_P()) return keyword_do_cond;
+		if (CMDARG_P() && !IS_lex_state_for(state, EXPR_CMDARG))
+		    return keyword_do_block;
+		return keyword_do;
+	    }
+	    if (IS_lex_state_for(state, (EXPR_BEG | EXPR_LABELED)))
+		return kw->id[0];
+	    else {
+		if (kw->id[0] != kw->id[1])
+		    SET_LEX_STATE(EXPR_BEG | EXPR_LABE
