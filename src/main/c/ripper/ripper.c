@@ -17406,4 +17406,295 @@ parser_yylex(struct parser_params *p)
 	pushback(p, c);
 	return '<';
 
-      case 
+      case '>':
+	SET_LEX_STATE(IS_AFTER_OPERATOR() ? EXPR_ARG : EXPR_BEG);
+	if ((c = nextc(p)) == '=') {
+	    return tGEQ;
+	}
+	if (c == '>') {
+	    if ((c = nextc(p)) == '=') {
+		set_yylval_id(idGTGT);
+		SET_LEX_STATE(EXPR_BEG);
+		return tOP_ASGN;
+	    }
+	    pushback(p, c);
+	    return tRSHFT;
+	}
+	pushback(p, c);
+	return '>';
+
+      case '"':
+	label = (IS_LABEL_POSSIBLE() ? str_label : 0);
+	p->lex.strterm = NEW_STRTERM(str_dquote | label, '"', 0);
+	p->lex.ptok = p->lex.pcur-1;
+	return tSTRING_BEG;
+
+      case '`':
+	if (IS_lex_state(EXPR_FNAME)) {
+	    SET_LEX_STATE(EXPR_ENDFN);
+	    return c;
+	}
+	if (IS_lex_state(EXPR_DOT)) {
+	    if (cmd_state)
+		SET_LEX_STATE(EXPR_CMDARG);
+	    else
+		SET_LEX_STATE(EXPR_ARG);
+	    return c;
+	}
+	p->lex.strterm = NEW_STRTERM(str_xquote, '`', 0);
+	return tXSTRING_BEG;
+
+      case '\'':
+	label = (IS_LABEL_POSSIBLE() ? str_label : 0);
+	p->lex.strterm = NEW_STRTERM(str_squote | label, '\'', 0);
+	p->lex.ptok = p->lex.pcur-1;
+	return tSTRING_BEG;
+
+      case '?':
+	return parse_qmark(p, space_seen);
+
+      case '&':
+	if ((c = nextc(p)) == '&') {
+	    SET_LEX_STATE(EXPR_BEG);
+	    if ((c = nextc(p)) == '=') {
+                set_yylval_id(idANDOP);
+		SET_LEX_STATE(EXPR_BEG);
+		return tOP_ASGN;
+	    }
+	    pushback(p, c);
+	    return tANDOP;
+	}
+	else if (c == '=') {
+            set_yylval_id('&');
+	    SET_LEX_STATE(EXPR_BEG);
+	    return tOP_ASGN;
+	}
+	else if (c == '.') {
+	    set_yylval_id(idANDDOT);
+	    SET_LEX_STATE(EXPR_DOT);
+	    return tANDDOT;
+	}
+	pushback(p, c);
+	if (IS_SPCARG(c)) {
+	    if ((c != ':') ||
+		(c = peekc_n(p, 1)) == -1 ||
+		!(c == '\'' || c == '"' ||
+		  is_identchar((p->lex.pcur+1), p->lex.pend, p->enc))) {
+		rb_warning0("`&' interpreted as argument prefix");
+	    }
+	    c = tAMPER;
+	}
+	else if (IS_BEG()) {
+	    c = tAMPER;
+	}
+	else {
+	    c = warn_balanced('&', "&", "argument prefix");
+	}
+	SET_LEX_STATE(IS_AFTER_OPERATOR() ? EXPR_ARG : EXPR_BEG);
+	return c;
+
+      case '|':
+	if ((c = nextc(p)) == '|') {
+	    SET_LEX_STATE(EXPR_BEG);
+	    if ((c = nextc(p)) == '=') {
+                set_yylval_id(idOROP);
+		SET_LEX_STATE(EXPR_BEG);
+		return tOP_ASGN;
+	    }
+	    pushback(p, c);
+	    if (IS_lex_state_for(last_state, EXPR_BEG)) {
+		c = '|';
+		pushback(p, '|');
+		return c;
+	    }
+	    return tOROP;
+	}
+	if (c == '=') {
+            set_yylval_id('|');
+	    SET_LEX_STATE(EXPR_BEG);
+	    return tOP_ASGN;
+	}
+	SET_LEX_STATE(IS_AFTER_OPERATOR() ? EXPR_ARG : EXPR_BEG|EXPR_LABEL);
+	pushback(p, c);
+	return '|';
+
+      case '+':
+	c = nextc(p);
+	if (IS_AFTER_OPERATOR()) {
+	    SET_LEX_STATE(EXPR_ARG);
+	    if (c == '@') {
+		return tUPLUS;
+	    }
+	    pushback(p, c);
+	    return '+';
+	}
+	if (c == '=') {
+            set_yylval_id('+');
+	    SET_LEX_STATE(EXPR_BEG);
+	    return tOP_ASGN;
+	}
+	if (IS_BEG() || (IS_SPCARG(c) && arg_ambiguous(p, '+'))) {
+	    SET_LEX_STATE(EXPR_BEG);
+	    pushback(p, c);
+	    if (c != -1 && ISDIGIT(c)) {
+		return parse_numeric(p, '+');
+	    }
+	    return tUPLUS;
+	}
+	SET_LEX_STATE(EXPR_BEG);
+	pushback(p, c);
+	return warn_balanced('+', "+", "unary operator");
+
+      case '-':
+	c = nextc(p);
+	if (IS_AFTER_OPERATOR()) {
+	    SET_LEX_STATE(EXPR_ARG);
+	    if (c == '@') {
+		return tUMINUS;
+	    }
+	    pushback(p, c);
+	    return '-';
+	}
+	if (c == '=') {
+            set_yylval_id('-');
+	    SET_LEX_STATE(EXPR_BEG);
+	    return tOP_ASGN;
+	}
+	if (c == '>') {
+	    SET_LEX_STATE(EXPR_ENDFN);
+	    return tLAMBDA;
+	}
+	if (IS_BEG() || (IS_SPCARG(c) && arg_ambiguous(p, '-'))) {
+	    SET_LEX_STATE(EXPR_BEG);
+	    pushback(p, c);
+	    if (c != -1 && ISDIGIT(c)) {
+		return tUMINUS_NUM;
+	    }
+	    return tUMINUS;
+	}
+	SET_LEX_STATE(EXPR_BEG);
+	pushback(p, c);
+	return warn_balanced('-', "-", "unary operator");
+
+      case '.': {
+        int is_beg = IS_BEG();
+	SET_LEX_STATE(EXPR_BEG);
+	if ((c = nextc(p)) == '.') {
+	    if ((c = nextc(p)) == '.') {
+		if (p->ctxt.in_argdef) {
+		    SET_LEX_STATE(EXPR_ENDARG);
+		    return tBDOT3;
+		}
+		if (p->lex.paren_nest == 0 && looking_at_eol_p(p)) {
+		    rb_warn0("... at EOL, should be parenthesized?");
+		}
+		else if (p->lex.lpar_beg >= 0 && p->lex.lpar_beg+1 == p->lex.paren_nest) {
+		    if (IS_lex_state_for(last_state, EXPR_LABEL))
+			return tDOT3;
+		}
+		return is_beg ? tBDOT3 : tDOT3;
+	    }
+	    pushback(p, c);
+	    return is_beg ? tBDOT2 : tDOT2;
+	}
+	pushback(p, c);
+	if (c != -1 && ISDIGIT(c)) {
+	    char prev = p->lex.pcur-1 > p->lex.pbeg ? *(p->lex.pcur-2) : 0;
+	    parse_numeric(p, '.');
+	    if (ISDIGIT(prev)) {
+		yyerror0("unexpected fraction part after numeric literal");
+	    }
+	    else {
+		yyerror0("no .<digit> floating literal anymore; put 0 before dot");
+	    }
+	    SET_LEX_STATE(EXPR_END);
+	    p->lex.ptok = p->lex.pcur;
+	    goto retry;
+	}
+	set_yylval_id('.');
+	SET_LEX_STATE(EXPR_DOT);
+	return '.';
+      }
+
+      case '0': case '1': case '2': case '3': case '4':
+      case '5': case '6': case '7': case '8': case '9':
+	return parse_numeric(p, c);
+
+      case ')':
+	COND_POP();
+	CMDARG_POP();
+	SET_LEX_STATE(EXPR_ENDFN);
+	p->lex.paren_nest--;
+	return c;
+
+      case ']':
+	COND_POP();
+	CMDARG_POP();
+	SET_LEX_STATE(EXPR_END);
+	p->lex.paren_nest--;
+	return c;
+
+      case '}':
+	/* tSTRING_DEND does COND_POP and CMDARG_POP in the yacc's rule */
+	if (!p->lex.brace_nest--) return tSTRING_DEND;
+	COND_POP();
+	CMDARG_POP();
+	SET_LEX_STATE(EXPR_END);
+	p->lex.paren_nest--;
+	return c;
+
+      case ':':
+	c = nextc(p);
+	if (c == ':') {
+	    if (IS_BEG() || IS_lex_state(EXPR_CLASS) || IS_SPCARG(-1)) {
+		SET_LEX_STATE(EXPR_BEG);
+		return tCOLON3;
+	    }
+	    set_yylval_id(idCOLON2);
+	    SET_LEX_STATE(EXPR_DOT);
+	    return tCOLON2;
+	}
+	if (IS_END() || ISSPACE(c) || c == '#') {
+	    pushback(p, c);
+	    c = warn_balanced(':', ":", "symbol literal");
+	    SET_LEX_STATE(EXPR_BEG);
+	    return c;
+	}
+	switch (c) {
+	  case '\'':
+	    p->lex.strterm = NEW_STRTERM(str_ssym, c, 0);
+	    break;
+	  case '"':
+	    p->lex.strterm = NEW_STRTERM(str_dsym, c, 0);
+	    break;
+	  default:
+	    pushback(p, c);
+	    break;
+	}
+	SET_LEX_STATE(EXPR_FNAME);
+	return tSYMBEG;
+
+      case '/':
+	if (IS_BEG()) {
+	    p->lex.strterm = NEW_STRTERM(str_regexp, '/', 0);
+	    return tREGEXP_BEG;
+	}
+	if ((c = nextc(p)) == '=') {
+            set_yylval_id('/');
+	    SET_LEX_STATE(EXPR_BEG);
+	    return tOP_ASGN;
+	}
+	pushback(p, c);
+	if (IS_SPCARG(c)) {
+	    arg_ambiguous(p, '/');
+	    p->lex.strterm = NEW_STRTERM(str_regexp, '/', 0);
+	    return tREGEXP_BEG;
+	}
+	SET_LEX_STATE(IS_AFTER_OPERATOR() ? EXPR_ARG : EXPR_BEG);
+	return warn_balanced('/', "/", "regexp literal");
+
+      case '^':
+	if ((c = nextc(p)) == '=') {
+            set_yylval_id('^');
+	    SET_LEX_STATE(EXPR_BEG);
+	    return
