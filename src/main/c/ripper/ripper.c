@@ -18027,4 +18027,279 @@ list_concat(NODE *head, NODE *tail)
 	head->nd_next->nd_end = tail->nd_next->nd_end;
     }
     else {
-	head->nd_next->nd_end = tail
+	head->nd_next->nd_end = tail;
+    }
+
+    nd_set_last_loc(head, nd_last_loc(tail));
+
+    return head;
+}
+
+static int
+literal_concat0(struct parser_params *p, VALUE head, VALUE tail)
+{
+    if (NIL_P(tail)) return 1;
+    if (!rb_enc_compatible(head, tail)) {
+	compile_error(p, "string literal encodings differ (%s / %s)",
+		      rb_enc_name(rb_enc_get(head)),
+		      rb_enc_name(rb_enc_get(tail)));
+	rb_str_resize(head, 0);
+	rb_str_resize(tail, 0);
+	return 0;
+    }
+    rb_str_buf_append(head, tail);
+    return 1;
+}
+
+static VALUE
+string_literal_head(enum node_type htype, NODE *head)
+{
+    if (htype != NODE_DSTR) return Qfalse;
+    if (head->nd_next) {
+	head = head->nd_next->nd_end->nd_head;
+	if (!head || !nd_type_p(head, NODE_STR)) return Qfalse;
+    }
+    const VALUE lit = head->nd_lit;
+    ASSUME(lit != Qfalse);
+    return lit;
+}
+
+/* concat two string literals */
+static NODE *
+literal_concat(struct parser_params *p, NODE *head, NODE *tail, const YYLTYPE *loc)
+{
+    enum node_type htype;
+    VALUE lit;
+
+    if (!head) return tail;
+    if (!tail) return head;
+
+    htype = nd_type(head);
+    if (htype == NODE_EVSTR) {
+	head = new_dstr(p, head, loc);
+	htype = NODE_DSTR;
+    }
+    if (p->heredoc_indent > 0) {
+	switch (htype) {
+	  case NODE_STR:
+	    nd_set_type(head, NODE_DSTR);
+	  case NODE_DSTR:
+	    return list_append(p, head, tail);
+	  default:
+	    break;
+	}
+    }
+    switch (nd_type(tail)) {
+      case NODE_STR:
+	if ((lit = string_literal_head(htype, head)) != Qfalse) {
+	    htype = NODE_STR;
+	}
+	else {
+	    lit = head->nd_lit;
+	}
+	if (htype == NODE_STR) {
+	    if (!literal_concat0(p, lit, tail->nd_lit)) {
+	      error:
+		rb_discard_node(p, head);
+		rb_discard_node(p, tail);
+		return 0;
+	    }
+	    rb_discard_node(p, tail);
+	}
+	else {
+	    list_append(p, head, tail);
+	}
+	break;
+
+      case NODE_DSTR:
+	if (htype == NODE_STR) {
+	    if (!literal_concat0(p, head->nd_lit, tail->nd_lit))
+		goto error;
+	    tail->nd_lit = head->nd_lit;
+	    rb_discard_node(p, head);
+	    head = tail;
+	}
+	else if (NIL_P(tail->nd_lit)) {
+	  append:
+	    head->nd_alen += tail->nd_alen - 1;
+	    if (!head->nd_next) {
+		head->nd_next = tail->nd_next;
+	    }
+	    else if (tail->nd_next) {
+		head->nd_next->nd_end->nd_next = tail->nd_next;
+		head->nd_next->nd_end = tail->nd_next->nd_end;
+	    }
+	    rb_discard_node(p, tail);
+	}
+	else if ((lit = string_literal_head(htype, head)) != Qfalse) {
+	    if (!literal_concat0(p, lit, tail->nd_lit))
+		goto error;
+	    tail->nd_lit = Qnil;
+	    goto append;
+	}
+	else {
+	    list_concat(head, NEW_NODE(NODE_LIST, NEW_STR(tail->nd_lit, loc), tail->nd_alen, tail->nd_next, loc));
+	}
+	break;
+
+      case NODE_EVSTR:
+	if (htype == NODE_STR) {
+	    nd_set_type(head, NODE_DSTR);
+	    head->nd_alen = 1;
+	}
+	list_append(p, head, tail);
+	break;
+    }
+    return head;
+}
+
+static NODE *
+evstr2dstr(struct parser_params *p, NODE *node)
+{
+    if (nd_type_p(node, NODE_EVSTR)) {
+	node = new_dstr(p, node, &node->nd_loc);
+    }
+    return node;
+}
+
+static NODE *
+new_evstr(struct parser_params *p, NODE *node, const YYLTYPE *loc)
+{
+    NODE *head = node;
+
+    if (node) {
+	switch (nd_type(node)) {
+	  case NODE_STR:
+	    nd_set_type(node, NODE_DSTR);
+            return node;
+          case NODE_DSTR:
+            break;
+          case NODE_EVSTR:
+	    return node;
+	}
+    }
+    return NEW_EVSTR(head, loc);
+}
+
+static NODE *
+new_dstr(struct parser_params *p, NODE *node, const YYLTYPE *loc)
+{
+    VALUE lit = STR_NEW0();
+    NODE *dstr = NEW_DSTR(lit, loc);
+    RB_OBJ_WRITTEN(p->ast, Qnil, lit);
+    return list_append(p, dstr, node);
+}
+
+static NODE *
+call_bin_op(struct parser_params *p, NODE *recv, ID id, NODE *arg1,
+		const YYLTYPE *op_loc, const YYLTYPE *loc)
+{
+    NODE *expr;
+    value_expr(recv);
+    value_expr(arg1);
+    expr = NEW_OPCALL(recv, id, NEW_LIST(arg1, &arg1->nd_loc), loc);
+    nd_set_line(expr, op_loc->beg_pos.lineno);
+    return expr;
+}
+
+static NODE *
+call_uni_op(struct parser_params *p, NODE *recv, ID id, const YYLTYPE *op_loc, const YYLTYPE *loc)
+{
+    NODE *opcall;
+    value_expr(recv);
+    opcall = NEW_OPCALL(recv, id, 0, loc);
+    nd_set_line(opcall, op_loc->beg_pos.lineno);
+    return opcall;
+}
+
+static NODE *
+new_qcall(struct parser_params* p, ID atype, NODE *recv, ID mid, NODE *args, const YYLTYPE *op_loc, const YYLTYPE *loc)
+{
+    NODE *qcall = NEW_QCALL(atype, recv, mid, args, loc);
+    nd_set_line(qcall, op_loc->beg_pos.lineno);
+    return qcall;
+}
+
+static NODE*
+new_command_qcall(struct parser_params* p, ID atype, NODE *recv, ID mid, NODE *args, NODE *block, const YYLTYPE *op_loc, const YYLTYPE *loc)
+{
+    NODE *ret;
+    if (block) block_dup_check(p, args, block);
+    ret = new_qcall(p, atype, recv, mid, args, op_loc, loc);
+    if (block) ret = method_add_block(p, ret, block, loc);
+    fixpos(ret, recv);
+    return ret;
+}
+
+#define nd_once_body(node) (nd_type_p((node), NODE_ONCE) ? (node)->nd_body : node)
+static NODE*
+match_op(struct parser_params *p, NODE *node1, NODE *node2, const YYLTYPE *op_loc, const YYLTYPE *loc)
+{
+    NODE *n;
+    int line = op_loc->beg_pos.lineno;
+
+    value_expr(node1);
+    value_expr(node2);
+    if (node1 && (n = nd_once_body(node1)) != 0) {
+	switch (nd_type(n)) {
+	  case NODE_DREGX:
+	    {
+		NODE *match = NEW_MATCH2(node1, node2, loc);
+		nd_set_line(match, line);
+		return match;
+	    }
+
+	  case NODE_LIT:
+	    if (RB_TYPE_P(n->nd_lit, T_REGEXP)) {
+		const VALUE lit = n->nd_lit;
+		NODE *match = NEW_MATCH2(node1, node2, loc);
+		match->nd_args = reg_named_capture_assign(p, lit, loc);
+		nd_set_line(match, line);
+		return match;
+	    }
+	}
+    }
+
+    if (node2 && (n = nd_once_body(node2)) != 0) {
+        NODE *match3;
+
+	switch (nd_type(n)) {
+	  case NODE_LIT:
+	    if (!RB_TYPE_P(n->nd_lit, T_REGEXP)) break;
+	    /* fallthru */
+	  case NODE_DREGX:
+	    match3 = NEW_MATCH3(node2, node1, loc);
+	    return match3;
+	}
+    }
+
+    n = NEW_CALL(node1, tMATCH, NEW_LIST(node2, &node2->nd_loc), loc);
+    nd_set_line(n, line);
+    return n;
+}
+
+# if WARN_PAST_SCOPE
+static int
+past_dvar_p(struct parser_params *p, ID id)
+{
+    struct vtable *past = p->lvtbl->past;
+    while (past) {
+	if (vtable_included(past, id)) return 1;
+	past = past->prev;
+    }
+    return 0;
+}
+# endif
+
+static int
+numparam_nested_p(struct parser_params *p)
+{
+    struct local_vars *local = p->lvtbl;
+    NODE *outer = local->numparam.outer;
+    NODE *inner = local->numparam.inner;
+    if (outer || inner) {
+	NODE *used = outer ? outer : inner;
+	compile_error(p, "numbered parameter is already used in\n"
+		      "%s:%d: %s block here",
+		      p->ruby_sourcefile, nd_line(used),
+		      outer ?
