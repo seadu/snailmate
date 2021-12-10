@@ -17697,4 +17697,334 @@ parser_yylex(struct parser_params *p)
 	if ((c = nextc(p)) == '=') {
             set_yylval_id('^');
 	    SET_LEX_STATE(EXPR_BEG);
-	    return
+	    return tOP_ASGN;
+	}
+	SET_LEX_STATE(IS_AFTER_OPERATOR() ? EXPR_ARG : EXPR_BEG);
+	pushback(p, c);
+	return '^';
+
+      case ';':
+	SET_LEX_STATE(EXPR_BEG);
+	p->command_start = TRUE;
+	return ';';
+
+      case ',':
+	SET_LEX_STATE(EXPR_BEG|EXPR_LABEL);
+	return ',';
+
+      case '~':
+	if (IS_AFTER_OPERATOR()) {
+	    if ((c = nextc(p)) != '@') {
+		pushback(p, c);
+	    }
+	    SET_LEX_STATE(EXPR_ARG);
+	}
+	else {
+	    SET_LEX_STATE(EXPR_BEG);
+	}
+	return '~';
+
+      case '(':
+	if (IS_BEG()) {
+	    c = tLPAREN;
+	}
+	else if (!space_seen) {
+	    /* foo( ... ) => method call, no ambiguity */
+	}
+	else if (IS_ARG() || IS_lex_state_all(EXPR_END|EXPR_LABEL)) {
+	    c = tLPAREN_ARG;
+	}
+	else if (IS_lex_state(EXPR_ENDFN) && !lambda_beginning_p()) {
+	    rb_warning0("parentheses after method name is interpreted as "
+			"an argument list, not a decomposed argument");
+	}
+	p->lex.paren_nest++;
+	COND_PUSH(0);
+	CMDARG_PUSH(0);
+	SET_LEX_STATE(EXPR_BEG|EXPR_LABEL);
+	return c;
+
+      case '[':
+	p->lex.paren_nest++;
+	if (IS_AFTER_OPERATOR()) {
+	    if ((c = nextc(p)) == ']') {
+		p->lex.paren_nest--;
+		SET_LEX_STATE(EXPR_ARG);
+		if ((c = nextc(p)) == '=') {
+		    return tASET;
+		}
+		pushback(p, c);
+		return tAREF;
+	    }
+	    pushback(p, c);
+	    SET_LEX_STATE(EXPR_ARG|EXPR_LABEL);
+	    return '[';
+	}
+	else if (IS_BEG()) {
+	    c = tLBRACK;
+	}
+	else if (IS_ARG() && (space_seen || IS_lex_state(EXPR_LABELED))) {
+	    c = tLBRACK;
+	}
+	SET_LEX_STATE(EXPR_BEG|EXPR_LABEL);
+	COND_PUSH(0);
+	CMDARG_PUSH(0);
+	return c;
+
+      case '{':
+	++p->lex.brace_nest;
+	if (lambda_beginning_p())
+	    c = tLAMBEG;
+	else if (IS_lex_state(EXPR_LABELED))
+	    c = tLBRACE;      /* hash */
+	else if (IS_lex_state(EXPR_ARG_ANY | EXPR_END | EXPR_ENDFN))
+	    c = '{';          /* block (primary) */
+	else if (IS_lex_state(EXPR_ENDARG))
+	    c = tLBRACE_ARG;  /* block (expr) */
+	else
+	    c = tLBRACE;      /* hash */
+	if (c != tLBRACE) {
+	    p->command_start = TRUE;
+	    SET_LEX_STATE(EXPR_BEG);
+	}
+	else {
+	    SET_LEX_STATE(EXPR_BEG|EXPR_LABEL);
+	}
+	++p->lex.paren_nest;  /* after lambda_beginning_p() */
+	COND_PUSH(0);
+	CMDARG_PUSH(0);
+	return c;
+
+      case '\\':
+	c = nextc(p);
+	if (c == '\n') {
+	    space_seen = 1;
+	    dispatch_scan_event(p, tSP);
+	    goto retry; /* skip \\n */
+	}
+	if (c == ' ') return tSP;
+	if (ISSPACE(c)) return c;
+	pushback(p, c);
+	return '\\';
+
+      case '%':
+	return parse_percent(p, space_seen, last_state);
+
+      case '$':
+	return parse_gvar(p, last_state);
+
+      case '@':
+	return parse_atmark(p, last_state);
+
+      case '_':
+	if (was_bol(p) && whole_match_p(p, "__END__", 7, 0)) {
+	    p->ruby__end__seen = 1;
+	    p->eofp = 1;
+#ifndef RIPPER
+	    return -1;
+#else
+            lex_goto_eol(p);
+            dispatch_scan_event(p, k__END__);
+            return 0;
+#endif
+	}
+	newtok(p);
+	break;
+
+      default:
+	if (!parser_is_identchar(p)) {
+	    compile_error(p, "Invalid char `\\x%02X' in expression", c);
+            token_flush(p);
+	    goto retry;
+	}
+
+	newtok(p);
+	break;
+    }
+
+    return parse_ident(p, c, cmd_state);
+}
+
+static enum yytokentype
+yylex(YYSTYPE *lval, YYLTYPE *yylloc, struct parser_params *p)
+{
+    enum yytokentype t;
+
+    p->lval = lval;
+    lval->val = Qundef;
+    t = parser_yylex(p);
+
+    if (p->lex.strterm && (p->lex.strterm->flags & STRTERM_HEREDOC))
+	RUBY_SET_YYLLOC_FROM_STRTERM_HEREDOC(*yylloc);
+    else
+	RUBY_SET_YYLLOC(*yylloc);
+
+    if (has_delayed_token(p))
+	dispatch_delayed_token(p, t);
+    else if (t != 0)
+	dispatch_scan_event(p, t);
+
+    return t;
+}
+
+#define LVAR_USED ((ID)1 << (sizeof(ID) * CHAR_BIT - 1))
+
+static NODE*
+node_newnode(struct parser_params *p, enum node_type type, VALUE a0, VALUE a1, VALUE a2, const rb_code_location_t *loc)
+{
+    NODE *n = rb_ast_newnode(p->ast, type);
+
+    rb_node_init(n, type, a0, a1, a2);
+
+    nd_set_loc(n, loc);
+    nd_set_node_id(n, parser_get_node_id(p));
+    return n;
+}
+
+static NODE *
+nd_set_loc(NODE *nd, const YYLTYPE *loc)
+{
+    nd->nd_loc = *loc;
+    nd_set_line(nd, loc->beg_pos.lineno);
+    return nd;
+}
+
+#ifndef RIPPER
+static enum node_type
+nodetype(NODE *node)			/* for debug */
+{
+    return (enum node_type)nd_type(node);
+}
+
+static int
+nodeline(NODE *node)
+{
+    return nd_line(node);
+}
+
+static NODE*
+newline_node(NODE *node)
+{
+    if (node) {
+	node = remove_begin(node);
+	node->flags |= NODE_FL_NEWLINE;
+    }
+    return node;
+}
+
+static void
+fixpos(NODE *node, NODE *orig)
+{
+    if (!node) return;
+    if (!orig) return;
+    nd_set_line(node, nd_line(orig));
+}
+
+static void
+parser_warning(struct parser_params *p, NODE *node, const char *mesg)
+{
+    rb_compile_warning(p->ruby_sourcefile, nd_line(node), "%s", mesg);
+}
+
+static void
+parser_warn(struct parser_params *p, NODE *node, const char *mesg)
+{
+    rb_compile_warn(p->ruby_sourcefile, nd_line(node), "%s", mesg);
+}
+
+static NODE*
+block_append(struct parser_params *p, NODE *head, NODE *tail)
+{
+    NODE *end, *h = head, *nd;
+
+    if (tail == 0) return head;
+
+    if (h == 0) return tail;
+    switch (nd_type(h)) {
+      case NODE_LIT:
+      case NODE_STR:
+      case NODE_SELF:
+      case NODE_TRUE:
+      case NODE_FALSE:
+      case NODE_NIL:
+	parser_warning(p, h, "unused literal ignored");
+	return tail;
+      default:
+	h = end = NEW_BLOCK(head, &head->nd_loc);
+	end->nd_end = end;
+	head = end;
+	break;
+      case NODE_BLOCK:
+	end = h->nd_end;
+	break;
+    }
+
+    nd = end->nd_head;
+    switch (nd_type(nd)) {
+      case NODE_RETURN:
+      case NODE_BREAK:
+      case NODE_NEXT:
+      case NODE_REDO:
+      case NODE_RETRY:
+	if (RTEST(ruby_verbose)) {
+	    parser_warning(p, tail, "statement not reached");
+	}
+	break;
+
+      default:
+	break;
+    }
+
+    if (!nd_type_p(tail, NODE_BLOCK)) {
+	tail = NEW_BLOCK(tail, &tail->nd_loc);
+	tail->nd_end = tail;
+    }
+    end->nd_next = tail;
+    h->nd_end = tail->nd_end;
+    nd_set_last_loc(head, nd_last_loc(tail));
+    return head;
+}
+
+/* append item to the list */
+static NODE*
+list_append(struct parser_params *p, NODE *list, NODE *item)
+{
+    NODE *last;
+
+    if (list == 0) return NEW_LIST(item, &item->nd_loc);
+    if (list->nd_next) {
+	last = list->nd_next->nd_end;
+    }
+    else {
+	last = list;
+    }
+
+    list->nd_alen += 1;
+    last->nd_next = NEW_LIST(item, &item->nd_loc);
+    list->nd_next->nd_end = last->nd_next;
+
+    nd_set_last_loc(list, nd_last_loc(item));
+
+    return list;
+}
+
+/* concat two lists */
+static NODE*
+list_concat(NODE *head, NODE *tail)
+{
+    NODE *last;
+
+    if (head->nd_next) {
+	last = head->nd_next->nd_end;
+    }
+    else {
+	last = head;
+    }
+
+    head->nd_alen += tail->nd_alen;
+    last->nd_next = tail;
+    if (tail->nd_next) {
+	head->nd_next->nd_end = tail->nd_next->nd_end;
+    }
+    else {
+	head->nd_next->nd_end = tail
