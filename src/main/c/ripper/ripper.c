@@ -18302,4 +18302,259 @@ numparam_nested_p(struct parser_params *p)
 	compile_error(p, "numbered parameter is already used in\n"
 		      "%s:%d: %s block here",
 		      p->ruby_sourcefile, nd_line(used),
-		      outer ?
+		      outer ? "outer" : "inner");
+	parser_show_error_line(p, &used->nd_loc);
+	return 1;
+    }
+    return 0;
+}
+
+static NODE*
+gettable(struct parser_params *p, ID id, const YYLTYPE *loc)
+{
+    ID *vidp = NULL;
+    NODE *node;
+    switch (id) {
+      case keyword_self:
+	return NEW_SELF(loc);
+      case keyword_nil:
+	return NEW_NIL(loc);
+      case keyword_true:
+	return NEW_TRUE(loc);
+      case keyword_false:
+	return NEW_FALSE(loc);
+      case keyword__FILE__:
+	{
+	    VALUE file = p->ruby_sourcefile_string;
+	    if (NIL_P(file))
+		file = rb_str_new(0, 0);
+	    else
+		file = rb_str_dup(file);
+	    node = NEW_STR(file, loc);
+            RB_OBJ_WRITTEN(p->ast, Qnil, file);
+	}
+	return node;
+      case keyword__LINE__:
+	return NEW_LIT(INT2FIX(p->tokline), loc);
+      case keyword__ENCODING__:
+        node = NEW_LIT(rb_enc_from_encoding(p->enc), loc);
+        RB_OBJ_WRITTEN(p->ast, Qnil, node->nd_lit);
+        return node;
+
+    }
+    switch (id_type(id)) {
+      case ID_LOCAL:
+	if (dyna_in_block(p) && dvar_defined_ref(p, id, &vidp)) {
+	    if (NUMPARAM_ID_P(id) && numparam_nested_p(p)) return 0;
+	    if (id == p->cur_arg) {
+                compile_error(p, "circular argument reference - %"PRIsWARN, rb_id2str(id));
+                return 0;
+	    }
+	    if (vidp) *vidp |= LVAR_USED;
+	    node = NEW_DVAR(id, loc);
+	    return node;
+	}
+	if (local_id_ref(p, id, &vidp)) {
+	    if (id == p->cur_arg) {
+                compile_error(p, "circular argument reference - %"PRIsWARN, rb_id2str(id));
+                return 0;
+	    }
+	    if (vidp) *vidp |= LVAR_USED;
+	    node = NEW_LVAR(id, loc);
+	    return node;
+	}
+	if (dyna_in_block(p) && NUMPARAM_ID_P(id) &&
+	    parser_numbered_param(p, NUMPARAM_ID_TO_IDX(id))) {
+	    if (numparam_nested_p(p)) return 0;
+	    node = NEW_DVAR(id, loc);
+	    struct local_vars *local = p->lvtbl;
+	    if (!local->numparam.current) local->numparam.current = node;
+	    return node;
+	}
+# if WARN_PAST_SCOPE
+	if (!p->ctxt.in_defined && RTEST(ruby_verbose) && past_dvar_p(p, id)) {
+	    rb_warning1("possible reference to past scope - %"PRIsWARN, rb_id2str(id));
+	}
+# endif
+	/* method call without arguments */
+	return NEW_VCALL(id, loc);
+      case ID_GLOBAL:
+	return NEW_GVAR(id, loc);
+      case ID_INSTANCE:
+	return NEW_IVAR(id, loc);
+      case ID_CONST:
+	return NEW_CONST(id, loc);
+      case ID_CLASS:
+	return NEW_CVAR(id, loc);
+    }
+    compile_error(p, "identifier %"PRIsVALUE" is not valid to get", rb_id2str(id));
+    return 0;
+}
+
+static NODE *
+opt_arg_append(NODE *opt_list, NODE *opt)
+{
+    NODE *opts = opt_list;
+    opts->nd_loc.end_pos = opt->nd_loc.end_pos;
+
+    while (opts->nd_next) {
+	opts = opts->nd_next;
+	opts->nd_loc.end_pos = opt->nd_loc.end_pos;
+    }
+    opts->nd_next = opt;
+
+    return opt_list;
+}
+
+static NODE *
+kwd_append(NODE *kwlist, NODE *kw)
+{
+    if (kwlist) {
+	NODE *kws = kwlist;
+	kws->nd_loc.end_pos = kw->nd_loc.end_pos;
+	while (kws->nd_next) {
+	    kws = kws->nd_next;
+	    kws->nd_loc.end_pos = kw->nd_loc.end_pos;
+	}
+	kws->nd_next = kw;
+    }
+    return kwlist;
+}
+
+static NODE *
+new_defined(struct parser_params *p, NODE *expr, const YYLTYPE *loc)
+{
+    return NEW_DEFINED(remove_begin_all(expr), loc);
+}
+
+static NODE*
+symbol_append(struct parser_params *p, NODE *symbols, NODE *symbol)
+{
+    enum node_type type = nd_type(symbol);
+    switch (type) {
+      case NODE_DSTR:
+	nd_set_type(symbol, NODE_DSYM);
+	break;
+      case NODE_STR:
+	nd_set_type(symbol, NODE_LIT);
+	RB_OBJ_WRITTEN(p->ast, Qnil, symbol->nd_lit = rb_str_intern(symbol->nd_lit));
+	break;
+      default:
+	compile_error(p, "unexpected node as symbol: %s", ruby_node_name(type));
+    }
+    return list_append(p, symbols, symbol);
+}
+
+static NODE *
+new_regexp(struct parser_params *p, NODE *node, int options, const YYLTYPE *loc)
+{
+    NODE *list, *prev;
+    VALUE lit;
+
+    if (!node) {
+	node = NEW_LIT(reg_compile(p, STR_NEW0(), options), loc);
+	RB_OBJ_WRITTEN(p->ast, Qnil, node->nd_lit);
+        return node;
+    }
+    switch (nd_type(node)) {
+      case NODE_STR:
+	{
+	    VALUE src = node->nd_lit;
+	    nd_set_type(node, NODE_LIT);
+	    nd_set_loc(node, loc);
+	    RB_OBJ_WRITTEN(p->ast, Qnil, node->nd_lit = reg_compile(p, src, options));
+	}
+	break;
+      default:
+	lit = STR_NEW0();
+	node = NEW_NODE(NODE_DSTR, lit, 1, NEW_LIST(node, loc), loc);
+        RB_OBJ_WRITTEN(p->ast, Qnil, lit);
+	/* fall through */
+      case NODE_DSTR:
+	nd_set_type(node, NODE_DREGX);
+	nd_set_loc(node, loc);
+	node->nd_cflag = options & RE_OPTION_MASK;
+	if (!NIL_P(node->nd_lit)) reg_fragment_check(p, node->nd_lit, options);
+	for (list = (prev = node)->nd_next; list; list = list->nd_next) {
+	    NODE *frag = list->nd_head;
+	    enum node_type type = nd_type(frag);
+	    if (type == NODE_STR || (type == NODE_DSTR && !frag->nd_next)) {
+		VALUE tail = frag->nd_lit;
+		if (reg_fragment_check(p, tail, options) && prev && !NIL_P(prev->nd_lit)) {
+		    VALUE lit = prev == node ? prev->nd_lit : prev->nd_head->nd_lit;
+		    if (!literal_concat0(p, lit, tail)) {
+			return NEW_NIL(loc); /* dummy node on error */
+		    }
+		    rb_str_resize(tail, 0);
+		    prev->nd_next = list->nd_next;
+		    rb_discard_node(p, list->nd_head);
+		    rb_discard_node(p, list);
+		    list = prev;
+		}
+		else {
+		    prev = list;
+		}
+	    }
+	    else {
+		prev = 0;
+	    }
+	}
+	if (!node->nd_next) {
+	    VALUE src = node->nd_lit;
+	    nd_set_type(node, NODE_LIT);
+	    RB_OBJ_WRITTEN(p->ast, Qnil, node->nd_lit = reg_compile(p, src, options));
+	}
+	if (options & RE_OPTION_ONCE) {
+	    node = NEW_NODE(NODE_ONCE, 0, node, 0, loc);
+	}
+	break;
+    }
+    return node;
+}
+
+static NODE *
+new_kw_arg(struct parser_params *p, NODE *k, const YYLTYPE *loc)
+{
+    if (!k) return 0;
+    return NEW_KW_ARG(0, (k), loc);
+}
+
+static NODE *
+new_xstring(struct parser_params *p, NODE *node, const YYLTYPE *loc)
+{
+    if (!node) {
+	VALUE lit = STR_NEW0();
+	NODE *xstr = NEW_XSTR(lit, loc);
+	RB_OBJ_WRITTEN(p->ast, Qnil, lit);
+	return xstr;
+    }
+    switch (nd_type(node)) {
+      case NODE_STR:
+	nd_set_type(node, NODE_XSTR);
+	nd_set_loc(node, loc);
+	break;
+      case NODE_DSTR:
+	nd_set_type(node, NODE_DXSTR);
+	nd_set_loc(node, loc);
+	break;
+      default:
+	node = NEW_NODE(NODE_DXSTR, Qnil, 1, NEW_LIST(node, loc), loc);
+	break;
+    }
+    return node;
+}
+
+static void
+check_literal_when(struct parser_params *p, NODE *arg, const YYLTYPE *loc)
+{
+    VALUE lit;
+
+    if (!arg || !p->case_labels) return;
+
+    lit = rb_node_case_when_optimizable_literal(arg);
+    if (lit == Qundef) return;
+    if (nd_type_p(arg, NODE_STR)) {
+	RB_OBJ_WRITTEN(p->ast, Qnil, arg->nd_lit = lit);
+    }
+
+    if (N
