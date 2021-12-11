@@ -18557,4 +18557,254 @@ check_literal_when(struct parser_params *p, NODE *arg, const YYLTYPE *loc)
 	RB_OBJ_WRITTEN(p->ast, Qnil, arg->nd_lit = lit);
     }
 
-    if (N
+    if (NIL_P(p->case_labels)) {
+	p->case_labels = rb_obj_hide(rb_hash_new());
+    }
+    else {
+	VALUE line = rb_hash_lookup(p->case_labels, lit);
+	if (!NIL_P(line)) {
+	    rb_warning1("duplicated `when' clause with line %d is ignored",
+			WARN_IVAL(line));
+	    return;
+	}
+    }
+    rb_hash_aset(p->case_labels, lit, INT2NUM(p->ruby_sourceline));
+}
+
+#else  /* !RIPPER */
+static int
+id_is_var(struct parser_params *p, ID id)
+{
+#ifdef TRUFFLERUBY
+	switch (id_type(id)) {
+#else
+    if (is_notop_id(id)) {
+	switch (id & ID_SCOPE_MASK) {
+#endif
+	  case ID_GLOBAL: case ID_INSTANCE: case ID_CONST: case ID_CLASS:
+	    return 1;
+	  case ID_LOCAL:
+	    if (dyna_in_block(p)) {
+		if (NUMPARAM_ID_P(id) || dvar_defined(p, id)) return 1;
+	    }
+	    if (local_id(p, id)) return 1;
+	    /* method call without arguments */
+	    return 0;
+	}
+#ifndef TRUFFLERUBY
+    }
+#endif
+    compile_error(p, "identifier %"PRIsVALUE" is not valid to get", rb_id2str(id));
+    return 0;
+}
+
+static VALUE
+new_regexp(struct parser_params *p, VALUE re, VALUE opt, const YYLTYPE *loc)
+{
+    VALUE src = 0, err;
+    int options = 0;
+    if (ripper_is_node_yylval(re)) {
+	src = RNODE(re)->nd_cval;
+	re = RNODE(re)->nd_rval;
+    }
+    if (ripper_is_node_yylval(opt)) {
+	options = (int)RNODE(opt)->nd_tag;
+	opt = RNODE(opt)->nd_rval;
+    }
+    if (src && NIL_P(parser_reg_compile(p, src, options, &err))) {
+	compile_error(p, "%"PRIsVALUE, err);
+    }
+    return dispatch2(regexp_literal, re, opt);
+}
+#endif /* !RIPPER */
+
+static inline enum lex_state_e
+parser_set_lex_state(struct parser_params *p, enum lex_state_e ls, int line)
+{
+    if (p->debug) {
+	ls = rb_parser_trace_lex_state(p, p->lex.state, ls, line);
+    }
+    return p->lex.state = ls;
+}
+
+#ifndef RIPPER
+static const char rb_parser_lex_state_names[][8] = {
+    "BEG",    "END",    "ENDARG", "ENDFN",  "ARG",
+    "CMDARG", "MID",    "FNAME",  "DOT",    "CLASS",
+    "LABEL",  "LABELED","FITEM",
+};
+
+static VALUE
+append_lex_state_name(enum lex_state_e state, VALUE buf)
+{
+    int i, sep = 0;
+    unsigned int mask = 1;
+    static const char none[] = "NONE";
+
+    for (i = 0; i < EXPR_MAX_STATE; ++i, mask <<= 1) {
+	if ((unsigned)state & mask) {
+	    if (sep) {
+		rb_str_cat(buf, "|", 1);
+	    }
+	    sep = 1;
+	    rb_str_cat_cstr(buf, rb_parser_lex_state_names[i]);
+	}
+    }
+    if (!sep) {
+	rb_str_cat(buf, none, sizeof(none)-1);
+    }
+    return buf;
+}
+
+static void
+flush_debug_buffer(struct parser_params *p, VALUE out, VALUE str)
+{
+    VALUE mesg = p->debug_buffer;
+
+    if (!NIL_P(mesg) && RSTRING_LEN(mesg)) {
+	p->debug_buffer = Qnil;
+	rb_io_puts(1, &mesg, out);
+    }
+    if (!NIL_P(str) && RSTRING_LEN(str)) {
+	rb_io_write(p->debug_output, str);
+    }
+}
+
+enum lex_state_e
+rb_parser_trace_lex_state(struct parser_params *p, enum lex_state_e from,
+			  enum lex_state_e to, int line)
+{
+    VALUE mesg;
+    mesg = rb_str_new_cstr("lex_state: ");
+    append_lex_state_name(from, mesg);
+    rb_str_cat_cstr(mesg, " -> ");
+    append_lex_state_name(to, mesg);
+    rb_str_catf(mesg, " at line %d\n", line);
+    flush_debug_buffer(p, p->debug_output, mesg);
+    return to;
+}
+
+VALUE
+rb_parser_lex_state_name(enum lex_state_e state)
+{
+    return rb_fstring(append_lex_state_name(state, rb_str_new(0, 0)));
+}
+
+static void
+append_bitstack_value(stack_type stack, VALUE mesg)
+{
+    if (stack == 0) {
+	rb_str_cat_cstr(mesg, "0");
+    }
+    else {
+	stack_type mask = (stack_type)1U << (CHAR_BIT * sizeof(stack_type) - 1);
+	for (; mask && !(stack & mask); mask >>= 1) continue;
+	for (; mask; mask >>= 1) rb_str_cat(mesg, stack & mask ? "1" : "0", 1);
+    }
+}
+
+void
+rb_parser_show_bitstack(struct parser_params *p, stack_type stack,
+			const char *name, int line)
+{
+    VALUE mesg = rb_sprintf("%s: ", name);
+    append_bitstack_value(stack, mesg);
+    rb_str_catf(mesg, " at line %d\n", line);
+    flush_debug_buffer(p, p->debug_output, mesg);
+}
+
+void
+rb_parser_fatal(struct parser_params *p, const char *fmt, ...)
+{
+    va_list ap;
+    VALUE mesg = rb_str_new_cstr("internal parser error: ");
+
+    va_start(ap, fmt);
+    rb_str_vcatf(mesg, fmt, ap);
+    va_end(ap);
+    yyerror0(RSTRING_PTR(mesg));
+    RB_GC_GUARD(mesg);
+
+    mesg = rb_str_new(0, 0);
+    append_lex_state_name(p->lex.state, mesg);
+    compile_error(p, "lex.state: %"PRIsVALUE, mesg);
+    rb_str_resize(mesg, 0);
+    append_bitstack_value(p->cond_stack, mesg);
+    compile_error(p, "cond_stack: %"PRIsVALUE, mesg);
+    rb_str_resize(mesg, 0);
+    append_bitstack_value(p->cmdarg_stack, mesg);
+    compile_error(p, "cmdarg_stack: %"PRIsVALUE, mesg);
+    if (p->debug_output == rb_ractor_stdout())
+	p->debug_output = rb_ractor_stderr();
+    p->debug = TRUE;
+}
+
+static YYLTYPE *
+rb_parser_set_pos(YYLTYPE *yylloc, int sourceline, int beg_pos, int end_pos)
+{
+    yylloc->beg_pos.lineno = sourceline;
+    yylloc->beg_pos.column = beg_pos;
+    yylloc->end_pos.lineno = sourceline;
+    yylloc->end_pos.column = end_pos;
+    return yylloc;
+}
+
+YYLTYPE *
+rb_parser_set_location_from_strterm_heredoc(struct parser_params *p, rb_strterm_heredoc_t *here, YYLTYPE *yylloc)
+{
+    int sourceline = here->sourceline;
+    int beg_pos = (int)here->offset - here->quote
+	- (rb_strlen_lit("<<-") - !(here->func & STR_FUNC_INDENT));
+    int end_pos = (int)here->offset + here->length + here->quote;
+
+    return rb_parser_set_pos(yylloc, sourceline, beg_pos, end_pos);
+}
+
+YYLTYPE *
+rb_parser_set_location_of_none(struct parser_params *p, YYLTYPE *yylloc)
+{
+    int sourceline = p->ruby_sourceline;
+    int beg_pos = (int)(p->lex.ptok - p->lex.pbeg);
+    int end_pos = (int)(p->lex.ptok - p->lex.pbeg);
+    return rb_parser_set_pos(yylloc, sourceline, beg_pos, end_pos);
+}
+
+YYLTYPE *
+rb_parser_set_location(struct parser_params *p, YYLTYPE *yylloc)
+{
+    int sourceline = p->ruby_sourceline;
+    int beg_pos = (int)(p->lex.ptok - p->lex.pbeg);
+    int end_pos = (int)(p->lex.pcur - p->lex.pbeg);
+    return rb_parser_set_pos(yylloc, sourceline, beg_pos, end_pos);
+}
+#endif /* !RIPPER */
+
+static int
+assignable0(struct parser_params *p, ID id, const char **err)
+{
+    if (!id) return -1;
+    switch (id) {
+      case keyword_self:
+	*err = "Can't change the value of self";
+	return -1;
+      case keyword_nil:
+	*err = "Can't assign to nil";
+	return -1;
+      case keyword_true:
+	*err = "Can't assign to true";
+	return -1;
+      case keyword_false:
+	*err = "Can't assign to false";
+	return -1;
+      case keyword__FILE__:
+	*err = "Can't assign to __FILE__";
+	return -1;
+      case keyword__LINE__:
+	*err = "Can't assign to __LINE__";
+	return -1;
+      case keyword__ENCODING__:
+	*err = "Can't assign to __ENCODING__";
+	return -1;
+    }
+    switch (id_type(id)) {
+      case ID_LOC
