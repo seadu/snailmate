@@ -18807,4 +18807,268 @@ assignable0(struct parser_params *p, ID id, const char **err)
 	return -1;
     }
     switch (id_type(id)) {
-      case ID_LOC
+      case ID_LOCAL:
+	if (dyna_in_block(p)) {
+	    if (p->max_numparam > NO_PARAM && NUMPARAM_ID_P(id)) {
+		compile_error(p, "Can't assign to numbered parameter _%d",
+			      NUMPARAM_ID_TO_IDX(id));
+		return -1;
+	    }
+	    if (dvar_curr(p, id)) return NODE_DASGN;
+	    if (dvar_defined(p, id)) return NODE_DASGN;
+	    if (local_id(p, id)) return NODE_LASGN;
+	    dyna_var(p, id);
+	    return NODE_DASGN;
+	}
+	else {
+	    if (!local_id(p, id)) local_var(p, id);
+	    return NODE_LASGN;
+	}
+	break;
+      case ID_GLOBAL: return NODE_GASGN;
+      case ID_INSTANCE: return NODE_IASGN;
+      case ID_CONST:
+	if (!p->ctxt.in_def) return NODE_CDECL;
+	*err = "dynamic constant assignment";
+	return -1;
+      case ID_CLASS: return NODE_CVASGN;
+      default:
+	compile_error(p, "identifier %"PRIsVALUE" is not valid to set", rb_id2str(id));
+    }
+    return -1;
+}
+
+#ifndef RIPPER
+static NODE*
+assignable(struct parser_params *p, ID id, NODE *val, const YYLTYPE *loc)
+{
+    const char *err = 0;
+    int node_type = assignable0(p, id, &err);
+    switch (node_type) {
+      case NODE_DASGN: return NEW_DASGN(id, val, loc);
+      case NODE_LASGN: return NEW_LASGN(id, val, loc);
+      case NODE_GASGN: return NEW_GASGN(id, val, loc);
+      case NODE_IASGN: return NEW_IASGN(id, val, loc);
+      case NODE_CDECL: return NEW_CDECL(id, val, 0, loc);
+      case NODE_CVASGN: return NEW_CVASGN(id, val, loc);
+    }
+    if (err) yyerror1(loc, err);
+    return NEW_BEGIN(0, loc);
+}
+#else
+static VALUE
+assignable(struct parser_params *p, VALUE lhs)
+{
+    const char *err = 0;
+    assignable0(p, get_id(lhs), &err);
+    if (err) lhs = assign_error(p, err, lhs);
+    return lhs;
+}
+#endif
+
+static int
+is_private_local_id(ID name)
+{
+    VALUE s;
+    if (name == idUScore) return 1;
+    if (!is_local_id(name)) return 0;
+    s = rb_id2str(name);
+    if (!s) return 0;
+    return RSTRING_PTR(s)[0] == '_';
+}
+
+static int
+shadowing_lvar_0(struct parser_params *p, ID name)
+{
+    if (is_private_local_id(name)) return 1;
+    if (dyna_in_block(p)) {
+	if (dvar_curr(p, name)) {
+	    yyerror0("duplicated argument name");
+	}
+	else if (dvar_defined(p, name) || local_id(p, name)) {
+	    vtable_add(p->lvtbl->vars, name);
+	    if (p->lvtbl->used) {
+		vtable_add(p->lvtbl->used, (ID)p->ruby_sourceline | LVAR_USED);
+	    }
+	    return 0;
+	}
+    }
+    else {
+	if (local_id(p, name)) {
+	    yyerror0("duplicated argument name");
+	}
+    }
+    return 1;
+}
+
+static ID
+shadowing_lvar(struct parser_params *p, ID name)
+{
+    shadowing_lvar_0(p, name);
+    return name;
+}
+
+static void
+new_bv(struct parser_params *p, ID name)
+{
+    if (!name) return;
+    if (!is_local_id(name)) {
+	compile_error(p, "invalid local variable - %"PRIsVALUE,
+		      rb_id2str(name));
+	return;
+    }
+    if (!shadowing_lvar_0(p, name)) return;
+    dyna_var(p, name);
+}
+
+#ifndef RIPPER
+static NODE *
+aryset(struct parser_params *p, NODE *recv, NODE *idx, const YYLTYPE *loc)
+{
+    return NEW_ATTRASGN(recv, tASET, idx, loc);
+}
+
+static void
+block_dup_check(struct parser_params *p, NODE *node1, NODE *node2)
+{
+    if (node2 && node1 && nd_type_p(node1, NODE_BLOCK_PASS)) {
+	compile_error(p, "both block arg and actual block given");
+    }
+}
+
+static NODE *
+attrset(struct parser_params *p, NODE *recv, ID atype, ID id, const YYLTYPE *loc)
+{
+    if (!CALL_Q_P(atype)) id = rb_id_attrset(id);
+    return NEW_ATTRASGN(recv, id, 0, loc);
+}
+
+static void
+rb_backref_error(struct parser_params *p, NODE *node)
+{
+    switch (nd_type(node)) {
+      case NODE_NTH_REF:
+	compile_error(p, "Can't set variable $%ld", node->nd_nth);
+	break;
+      case NODE_BACK_REF:
+	compile_error(p, "Can't set variable $%c", (int)node->nd_nth);
+	break;
+    }
+}
+#else
+static VALUE
+backref_error(struct parser_params *p, NODE *ref, VALUE expr)
+{
+    VALUE mesg = rb_str_new_cstr("Can't set variable ");
+    rb_str_append(mesg, ref->nd_cval);
+    return dispatch2(assign_error, mesg, expr);
+}
+#endif
+
+#ifndef RIPPER
+static NODE *
+arg_append(struct parser_params *p, NODE *node1, NODE *node2, const YYLTYPE *loc)
+{
+    if (!node1) return NEW_LIST(node2, &node2->nd_loc);
+    switch (nd_type(node1))  {
+      case NODE_LIST:
+	return list_append(p, node1, node2);
+      case NODE_BLOCK_PASS:
+	node1->nd_head = arg_append(p, node1->nd_head, node2, loc);
+	node1->nd_loc.end_pos = node1->nd_head->nd_loc.end_pos;
+	return node1;
+      case NODE_ARGSPUSH:
+	node1->nd_body = list_append(p, NEW_LIST(node1->nd_body, &node1->nd_body->nd_loc), node2);
+	node1->nd_loc.end_pos = node1->nd_body->nd_loc.end_pos;
+	nd_set_type(node1, NODE_ARGSCAT);
+	return node1;
+      case NODE_ARGSCAT:
+        if (!nd_type_p(node1->nd_body, NODE_LIST)) break;
+        node1->nd_body = list_append(p, node1->nd_body, node2);
+        node1->nd_loc.end_pos = node1->nd_body->nd_loc.end_pos;
+        return node1;
+    }
+    return NEW_ARGSPUSH(node1, node2, loc);
+}
+
+static NODE *
+arg_concat(struct parser_params *p, NODE *node1, NODE *node2, const YYLTYPE *loc)
+{
+    if (!node2) return node1;
+    switch (nd_type(node1)) {
+      case NODE_BLOCK_PASS:
+	if (node1->nd_head)
+	    node1->nd_head = arg_concat(p, node1->nd_head, node2, loc);
+	else
+	    node1->nd_head = NEW_LIST(node2, loc);
+	return node1;
+      case NODE_ARGSPUSH:
+	if (!nd_type_p(node2, NODE_LIST)) break;
+	node1->nd_body = list_concat(NEW_LIST(node1->nd_body, loc), node2);
+	nd_set_type(node1, NODE_ARGSCAT);
+	return node1;
+      case NODE_ARGSCAT:
+	if (!nd_type_p(node2, NODE_LIST) ||
+	    !nd_type_p(node1->nd_body, NODE_LIST)) break;
+	node1->nd_body = list_concat(node1->nd_body, node2);
+	return node1;
+    }
+    return NEW_ARGSCAT(node1, node2, loc);
+}
+
+static NODE *
+last_arg_append(struct parser_params *p, NODE *args, NODE *last_arg, const YYLTYPE *loc)
+{
+    NODE *n1;
+    if ((n1 = splat_array(args)) != 0) {
+	return list_append(p, n1, last_arg);
+    }
+    return arg_append(p, args, last_arg, loc);
+}
+
+static NODE *
+rest_arg_append(struct parser_params *p, NODE *args, NODE *rest_arg, const YYLTYPE *loc)
+{
+    NODE *n1;
+    if ((nd_type_p(rest_arg, NODE_LIST)) && (n1 = splat_array(args)) != 0) {
+	return list_concat(n1, rest_arg);
+    }
+    return arg_concat(p, args, rest_arg, loc);
+}
+
+static NODE *
+splat_array(NODE* node)
+{
+    if (nd_type_p(node, NODE_SPLAT)) node = node->nd_head;
+    if (nd_type_p(node, NODE_LIST)) return node;
+    return 0;
+}
+
+static void
+mark_lvar_used(struct parser_params *p, NODE *rhs)
+{
+    ID *vidp = NULL;
+    if (!rhs) return;
+    switch (nd_type(rhs)) {
+      case NODE_LASGN:
+	if (local_id_ref(p, rhs->nd_vid, &vidp)) {
+	    if (vidp) *vidp |= LVAR_USED;
+	}
+	break;
+      case NODE_DASGN:
+	if (dvar_defined_ref(p, rhs->nd_vid, &vidp)) {
+	    if (vidp) *vidp |= LVAR_USED;
+	}
+	break;
+#if 0
+      case NODE_MASGN:
+	for (rhs = rhs->nd_head; rhs; rhs = rhs->nd_next) {
+	    mark_lvar_used(p, rhs->nd_head);
+	}
+	break;
+#endif
+    }
+}
+
+static NODE *
+const_decl_path(struct parser_params 
