@@ -19357,4 +19357,334 @@ value_expr_check(struct parser_params *p, NODE *node)
     if (!node) {
 	rb_warning0("empty expression");
     }
-    wh
+    while (node) {
+	switch (nd_type(node)) {
+	  case NODE_RETURN:
+	  case NODE_BREAK:
+	  case NODE_NEXT:
+	  case NODE_REDO:
+	  case NODE_RETRY:
+	    return void_node ? void_node : node;
+
+	  case NODE_CASE3:
+	    if (!node->nd_body || !nd_type_p(node->nd_body, NODE_IN)) {
+		compile_error(p, "unexpected node");
+		return NULL;
+	    }
+	    if (node->nd_body->nd_body) {
+		return NULL;
+	    }
+	    /* single line pattern matching */
+	    return void_node ? void_node : node;
+
+	  case NODE_BLOCK:
+	    while (node->nd_next) {
+		node = node->nd_next;
+	    }
+	    node = node->nd_head;
+	    break;
+
+	  case NODE_BEGIN:
+	    node = node->nd_body;
+	    break;
+
+	  case NODE_IF:
+	  case NODE_UNLESS:
+	    if (!node->nd_body) {
+		return NULL;
+	    }
+	    else if (!node->nd_else) {
+		return NULL;
+	    }
+	    vn = value_expr_check(p, node->nd_body);
+	    if (!vn) return NULL;
+	    if (!void_node) void_node = vn;
+	    node = node->nd_else;
+	    break;
+
+	  case NODE_AND:
+	  case NODE_OR:
+	    node = node->nd_1st;
+	    break;
+
+	  case NODE_LASGN:
+	  case NODE_DASGN:
+	  case NODE_MASGN:
+	    mark_lvar_used(p, node);
+	    return NULL;
+
+	  default:
+	    return NULL;
+	}
+    }
+
+    return NULL;
+}
+
+static int
+value_expr_gen(struct parser_params *p, NODE *node)
+{
+    NODE *void_node = value_expr_check(p, node);
+    if (void_node) {
+	yyerror1(&void_node->nd_loc, "void value expression");
+	/* or "control never reach"? */
+	return FALSE;
+    }
+    return TRUE;
+}
+static void
+void_expr(struct parser_params *p, NODE *node)
+{
+    const char *useless = 0;
+
+    if (!RTEST(ruby_verbose)) return;
+
+    if (!node || !(node = nd_once_body(node))) return;
+    switch (nd_type(node)) {
+      case NODE_OPCALL:
+	switch (node->nd_mid) {
+	  case '+':
+	  case '-':
+	  case '*':
+	  case '/':
+	  case '%':
+	  case tPOW:
+	  case tUPLUS:
+	  case tUMINUS:
+	  case '|':
+	  case '^':
+	  case '&':
+	  case tCMP:
+	  case '>':
+	  case tGEQ:
+	  case '<':
+	  case tLEQ:
+	  case tEQ:
+	  case tNEQ:
+	    useless = rb_id2name(node->nd_mid);
+	    break;
+	}
+	break;
+
+      case NODE_LVAR:
+      case NODE_DVAR:
+      case NODE_GVAR:
+      case NODE_IVAR:
+      case NODE_CVAR:
+      case NODE_NTH_REF:
+      case NODE_BACK_REF:
+	useless = "a variable";
+	break;
+      case NODE_CONST:
+	useless = "a constant";
+	break;
+      case NODE_LIT:
+      case NODE_STR:
+      case NODE_DSTR:
+      case NODE_DREGX:
+	useless = "a literal";
+	break;
+      case NODE_COLON2:
+      case NODE_COLON3:
+	useless = "::";
+	break;
+      case NODE_DOT2:
+	useless = "..";
+	break;
+      case NODE_DOT3:
+	useless = "...";
+	break;
+      case NODE_SELF:
+	useless = "self";
+	break;
+      case NODE_NIL:
+	useless = "nil";
+	break;
+      case NODE_TRUE:
+	useless = "true";
+	break;
+      case NODE_FALSE:
+	useless = "false";
+	break;
+      case NODE_DEFINED:
+	useless = "defined?";
+	break;
+    }
+
+    if (useless) {
+	rb_warn1L(nd_line(node), "possibly useless use of %s in void context", WARN_S(useless));
+    }
+}
+
+static NODE *
+void_stmts(struct parser_params *p, NODE *node)
+{
+    NODE *const n = node;
+    if (!RTEST(ruby_verbose)) return n;
+    if (!node) return n;
+    if (!nd_type_p(node, NODE_BLOCK)) return n;
+
+    while (node->nd_next) {
+	void_expr(p, node->nd_head);
+	node = node->nd_next;
+    }
+    return n;
+}
+
+static NODE *
+remove_begin(NODE *node)
+{
+    NODE **n = &node, *n1 = node;
+    while (n1 && nd_type_p(n1, NODE_BEGIN) && n1->nd_body) {
+	*n = n1 = n1->nd_body;
+    }
+    return node;
+}
+
+static NODE *
+remove_begin_all(NODE *node)
+{
+    NODE **n = &node, *n1 = node;
+    while (n1 && nd_type_p(n1, NODE_BEGIN)) {
+	*n = n1 = n1->nd_body;
+    }
+    return node;
+}
+
+static void
+reduce_nodes(struct parser_params *p, NODE **body)
+{
+    NODE *node = *body;
+
+    if (!node) {
+	*body = NEW_NIL(&NULL_LOC);
+	return;
+    }
+#define subnodes(n1, n2) \
+    ((!node->n1) ? (node->n2 ? (body = &node->n2, 1) : 0) : \
+     (!node->n2) ? (body = &node->n1, 1) : \
+     (reduce_nodes(p, &node->n1), body = &node->n2, 1))
+
+    while (node) {
+	int newline = (int)(node->flags & NODE_FL_NEWLINE);
+	switch (nd_type(node)) {
+	  end:
+	  case NODE_NIL:
+	    *body = 0;
+	    return;
+	  case NODE_RETURN:
+	    *body = node = node->nd_stts;
+	    if (newline && node) node->flags |= NODE_FL_NEWLINE;
+	    continue;
+	  case NODE_BEGIN:
+	    *body = node = node->nd_body;
+	    if (newline && node) node->flags |= NODE_FL_NEWLINE;
+	    continue;
+	  case NODE_BLOCK:
+	    body = &node->nd_end->nd_head;
+	    break;
+	  case NODE_IF:
+	  case NODE_UNLESS:
+	    if (subnodes(nd_body, nd_else)) break;
+	    return;
+	  case NODE_CASE:
+	    body = &node->nd_body;
+	    break;
+	  case NODE_WHEN:
+	    if (!subnodes(nd_body, nd_next)) goto end;
+	    break;
+	  case NODE_ENSURE:
+	    if (!subnodes(nd_head, nd_resq)) goto end;
+	    break;
+	  case NODE_RESCUE:
+	    if (node->nd_else) {
+		body = &node->nd_resq;
+		break;
+	    }
+	    if (!subnodes(nd_head, nd_resq)) goto end;
+	    break;
+	  default:
+	    return;
+	}
+	node = *body;
+	if (newline && node) node->flags |= NODE_FL_NEWLINE;
+    }
+
+#undef subnodes
+}
+
+static int
+is_static_content(NODE *node)
+{
+    if (!node) return 1;
+    switch (nd_type(node)) {
+      case NODE_HASH:
+	if (!(node = node->nd_head)) break;
+      case NODE_LIST:
+	do {
+	    if (!is_static_content(node->nd_head)) return 0;
+	} while ((node = node->nd_next) != 0);
+      case NODE_LIT:
+      case NODE_STR:
+      case NODE_NIL:
+      case NODE_TRUE:
+      case NODE_FALSE:
+      case NODE_ZLIST:
+	break;
+      default:
+	return 0;
+    }
+    return 1;
+}
+
+static int
+assign_in_cond(struct parser_params *p, NODE *node)
+{
+    switch (nd_type(node)) {
+      case NODE_MASGN:
+      case NODE_LASGN:
+      case NODE_DASGN:
+      case NODE_GASGN:
+      case NODE_IASGN:
+	break;
+
+      default:
+	return 0;
+    }
+
+    if (!node->nd_value) return 1;
+    if (is_static_content(node->nd_value)) {
+	/* reports always */
+	parser_warn(p, node->nd_value, "found `= literal' in conditional, should be ==");
+    }
+    return 1;
+}
+
+enum cond_type {
+    COND_IN_OP,
+    COND_IN_COND,
+    COND_IN_FF
+};
+
+#define SWITCH_BY_COND_TYPE(t, w, arg) \
+    switch (t) { \
+      case COND_IN_OP: break; \
+      case COND_IN_COND: rb_##w##0(arg "literal in condition"); break; \
+      case COND_IN_FF: rb_##w##0(arg "literal in flip-flop"); break; \
+    }
+
+static NODE *cond0(struct parser_params*,NODE*,enum cond_type,const YYLTYPE*);
+
+static NODE*
+range_op(struct parser_params *p, NODE *node, const YYLTYPE *loc)
+{
+    enum node_type type;
+
+    if (node == 0) return 0;
+
+    type = nd_type(node);
+    value_expr(node);
+    if (type == NODE_LIT && FIXNUM_P(node->nd_lit)) {
+	if (!e_option_supplied(p)) parser_warn(p, node, "integer literal in flip-flop");
+	ID lineno = rb_intern("$.");
+	return NEW_CALL(node, tEQ, NEW_LIST(NEW_GVAR(lineno, loc), 
