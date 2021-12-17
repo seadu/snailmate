@@ -19687,4 +19687,267 @@ range_op(struct parser_params *p, NODE *node, const YYLTYPE *loc)
     if (type == NODE_LIT && FIXNUM_P(node->nd_lit)) {
 	if (!e_option_supplied(p)) parser_warn(p, node, "integer literal in flip-flop");
 	ID lineno = rb_intern("$.");
-	return NEW_CALL(node, tEQ, NEW_LIST(NEW_GVAR(lineno, loc), 
+	return NEW_CALL(node, tEQ, NEW_LIST(NEW_GVAR(lineno, loc), loc), loc);
+    }
+    return cond0(p, node, COND_IN_FF, loc);
+}
+
+static NODE*
+cond0(struct parser_params *p, NODE *node, enum cond_type type, const YYLTYPE *loc)
+{
+    if (node == 0) return 0;
+    if (!(node = nd_once_body(node))) return 0;
+    assign_in_cond(p, node);
+
+    switch (nd_type(node)) {
+      case NODE_DSTR:
+      case NODE_EVSTR:
+      case NODE_STR:
+	SWITCH_BY_COND_TYPE(type, warn, "string ")
+	break;
+
+      case NODE_DREGX:
+	if (!e_option_supplied(p)) SWITCH_BY_COND_TYPE(type, warning, "regex ")
+
+	return NEW_MATCH2(node, NEW_GVAR(idLASTLINE, loc), loc);
+
+      case NODE_AND:
+      case NODE_OR:
+	node->nd_1st = cond0(p, node->nd_1st, COND_IN_COND, loc);
+	node->nd_2nd = cond0(p, node->nd_2nd, COND_IN_COND, loc);
+	break;
+
+      case NODE_DOT2:
+      case NODE_DOT3:
+	node->nd_beg = range_op(p, node->nd_beg, loc);
+	node->nd_end = range_op(p, node->nd_end, loc);
+	if (nd_type_p(node, NODE_DOT2)) nd_set_type(node,NODE_FLIP2);
+	else if (nd_type_p(node, NODE_DOT3)) nd_set_type(node, NODE_FLIP3);
+	break;
+
+      case NODE_DSYM:
+      warn_symbol:
+	SWITCH_BY_COND_TYPE(type, warning, "symbol ")
+	break;
+
+      case NODE_LIT:
+	if (RB_TYPE_P(node->nd_lit, T_REGEXP)) {
+	    if (!e_option_supplied(p)) SWITCH_BY_COND_TYPE(type, warn, "regex ")
+	    nd_set_type(node, NODE_MATCH);
+	}
+	else if (node->nd_lit == Qtrue ||
+		 node->nd_lit == Qfalse) {
+	    /* booleans are OK, e.g., while true */
+	}
+	else if (SYMBOL_P(node->nd_lit)) {
+	    goto warn_symbol;
+	}
+	else {
+	    SWITCH_BY_COND_TYPE(type, warning, "")
+	}
+      default:
+	break;
+    }
+    return node;
+}
+
+static NODE*
+cond(struct parser_params *p, NODE *node, const YYLTYPE *loc)
+{
+    if (node == 0) return 0;
+    return cond0(p, node, COND_IN_COND, loc);
+}
+
+static NODE*
+method_cond(struct parser_params *p, NODE *node, const YYLTYPE *loc)
+{
+    if (node == 0) return 0;
+    return cond0(p, node, COND_IN_OP, loc);
+}
+
+static NODE*
+new_nil_at(struct parser_params *p, const rb_code_position_t *pos)
+{
+    YYLTYPE loc = {*pos, *pos};
+    return NEW_NIL(&loc);
+}
+
+static NODE*
+new_if(struct parser_params *p, NODE *cc, NODE *left, NODE *right, const YYLTYPE *loc)
+{
+    if (!cc) return right;
+    cc = cond0(p, cc, COND_IN_COND, loc);
+    return newline_node(NEW_IF(cc, left, right, loc));
+}
+
+static NODE*
+new_unless(struct parser_params *p, NODE *cc, NODE *left, NODE *right, const YYLTYPE *loc)
+{
+    if (!cc) return right;
+    cc = cond0(p, cc, COND_IN_COND, loc);
+    return newline_node(NEW_UNLESS(cc, left, right, loc));
+}
+
+static NODE*
+logop(struct parser_params *p, ID id, NODE *left, NODE *right,
+	  const YYLTYPE *op_loc, const YYLTYPE *loc)
+{
+    enum node_type type = id == idAND || id == idANDOP ? NODE_AND : NODE_OR;
+    NODE *op;
+    value_expr(left);
+    if (left && nd_type_p(left, type)) {
+	NODE *node = left, *second;
+	while ((second = node->nd_2nd) != 0 && nd_type_p(second, type)) {
+	    node = second;
+	}
+	node->nd_2nd = NEW_NODE(type, second, right, 0, loc);
+	nd_set_line(node->nd_2nd, op_loc->beg_pos.lineno);
+	left->nd_loc.end_pos = loc->end_pos;
+	return left;
+    }
+    op = NEW_NODE(type, left, right, 0, loc);
+    nd_set_line(op, op_loc->beg_pos.lineno);
+    return op;
+}
+
+static void
+no_blockarg(struct parser_params *p, NODE *node)
+{
+    if (node && nd_type_p(node, NODE_BLOCK_PASS)) {
+	compile_error(p, "block argument should not be given");
+    }
+}
+
+static NODE *
+ret_args(struct parser_params *p, NODE *node)
+{
+    if (node) {
+	no_blockarg(p, node);
+	if (nd_type_p(node, NODE_LIST)) {
+	    if (node->nd_next == 0) {
+		node = node->nd_head;
+	    }
+	    else {
+		nd_set_type(node, NODE_VALUES);
+	    }
+	}
+    }
+    return node;
+}
+
+static NODE *
+new_yield(struct parser_params *p, NODE *node, const YYLTYPE *loc)
+{
+    if (node) no_blockarg(p, node);
+
+    return NEW_YIELD(node, loc);
+}
+
+static VALUE
+negate_lit(struct parser_params *p, VALUE lit)
+{
+    if (FIXNUM_P(lit)) {
+	return LONG2FIX(-FIX2LONG(lit));
+    }
+    if (SPECIAL_CONST_P(lit)) {
+#if USE_FLONUM
+	if (FLONUM_P(lit)) {
+	    return DBL2NUM(-RFLOAT_VALUE(lit));
+	}
+#endif
+	goto unknown;
+    }
+    switch (BUILTIN_TYPE(lit)) {
+      case T_BIGNUM:
+	BIGNUM_NEGATE(lit);
+	lit = rb_big_norm(lit);
+	break;
+      case T_RATIONAL:
+	RATIONAL_SET_NUM(lit, negate_lit(p, RRATIONAL(lit)->num));
+	break;
+      case T_COMPLEX:
+	RCOMPLEX_SET_REAL(lit, negate_lit(p, RCOMPLEX(lit)->real));
+	RCOMPLEX_SET_IMAG(lit, negate_lit(p, RCOMPLEX(lit)->imag));
+	break;
+      case T_FLOAT:
+	lit = DBL2NUM(-RFLOAT_VALUE(lit));
+	break;
+      unknown:
+      default:
+	rb_parser_fatal(p, "unknown literal type (%s) passed to negate_lit",
+			rb_builtin_class_name(lit));
+	break;
+    }
+    return lit;
+}
+
+static NODE *
+arg_blk_pass(NODE *node1, NODE *node2)
+{
+    if (node2) {
+        if (!node1) return node2;
+	node2->nd_head = node1;
+	nd_set_first_lineno(node2, nd_first_lineno(node1));
+	nd_set_first_column(node2, nd_first_column(node1));
+	return node2;
+    }
+    return node1;
+}
+
+static bool
+args_info_empty_p(struct rb_args_info *args)
+{
+    if (args->pre_args_num) return false;
+    if (args->post_args_num) return false;
+    if (args->rest_arg) return false;
+    if (args->opt_args) return false;
+    if (args->block_arg) return false;
+    if (args->kw_args) return false;
+    if (args->kw_rest_arg) return false;
+    return true;
+}
+
+static NODE*
+new_args(struct parser_params *p, NODE *pre_args, NODE *opt_args, ID rest_arg, NODE *post_args, NODE *tail, const YYLTYPE *loc)
+{
+    int saved_line = p->ruby_sourceline;
+    struct rb_args_info *args = tail->nd_ainfo;
+
+    if (args->block_arg == idFWD_BLOCK) {
+	if (rest_arg) {
+	    yyerror1(&tail->nd_loc, "... after rest argument");
+	    return tail;
+	}
+	rest_arg = idFWD_REST;
+    }
+
+    args->pre_args_num   = pre_args ? rb_long2int(pre_args->nd_plen) : 0;
+    args->pre_init       = pre_args ? pre_args->nd_next : 0;
+
+    args->post_args_num  = post_args ? rb_long2int(post_args->nd_plen) : 0;
+    args->post_init      = post_args ? post_args->nd_next : 0;
+    args->first_post_arg = post_args ? post_args->nd_pid : 0;
+
+    args->rest_arg       = rest_arg;
+
+    args->opt_args       = opt_args;
+
+    args->ruby2_keywords = rest_arg == idFWD_REST;
+
+    p->ruby_sourceline = saved_line;
+    nd_set_loc(tail, loc);
+
+    return tail;
+}
+
+static NODE*
+new_args_tail(struct parser_params *p, NODE *kw_args, ID kw_rest_arg, ID block, const YYLTYPE *kw_rest_loc)
+{
+    int saved_line = p->ruby_sourceline;
+    NODE *node;
+    VALUE tmpbuf = rb_imemo_tmpbuf_auto_free_pointer();
+    struct rb_args_info *args = ZALLOC(struct rb_args_info);
+    rb_imemo_tmpbuf_set_ptr(tmpbuf, args);
+    args->imemo = tmpbuf;
+    node = NEW_NODE(NODE_ARGS, 0, 0, args, &NULL_LOC);
+    RB_OBJ_WRITTEN(p->ast
