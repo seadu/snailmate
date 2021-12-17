@@ -19950,4 +19950,268 @@ new_args_tail(struct parser_params *p, NODE *kw_args, ID kw_rest_arg, ID block, 
     rb_imemo_tmpbuf_set_ptr(tmpbuf, args);
     args->imemo = tmpbuf;
     node = NEW_NODE(NODE_ARGS, 0, 0, args, &NULL_LOC);
-    RB_OBJ_WRITTEN(p->ast
+    RB_OBJ_WRITTEN(p->ast, Qnil, tmpbuf);
+    if (p->error_p) return node;
+
+    args->block_arg      = block;
+    args->kw_args        = kw_args;
+
+    if (kw_args) {
+	/*
+	 * def foo(k1: 1, kr1:, k2: 2, **krest, &b)
+	 * variable order: k1, kr1, k2, &b, internal_id, krest
+	 * #=> <reorder>
+	 * variable order: kr1, k1, k2, internal_id, krest, &b
+	 */
+	ID kw_bits = internal_id(p), *required_kw_vars, *kw_vars;
+	struct vtable *vtargs = p->lvtbl->args;
+	NODE *kwn = kw_args;
+
+        if (block) block = vtargs->tbl[vtargs->pos-1];
+	vtable_pop(vtargs, !!block + !!kw_rest_arg);
+	required_kw_vars = kw_vars = &vtargs->tbl[vtargs->pos];
+	while (kwn) {
+	    if (!NODE_REQUIRED_KEYWORD_P(kwn->nd_body))
+		--kw_vars;
+	    --required_kw_vars;
+	    kwn = kwn->nd_next;
+	}
+
+	for (kwn = kw_args; kwn; kwn = kwn->nd_next) {
+	    ID vid = kwn->nd_body->nd_vid;
+	    if (NODE_REQUIRED_KEYWORD_P(kwn->nd_body)) {
+		*required_kw_vars++ = vid;
+	    }
+	    else {
+		*kw_vars++ = vid;
+	    }
+	}
+
+	arg_var(p, kw_bits);
+	if (kw_rest_arg) arg_var(p, kw_rest_arg);
+	if (block) arg_var(p, block);
+
+	args->kw_rest_arg = NEW_DVAR(kw_rest_arg, kw_rest_loc);
+	args->kw_rest_arg->nd_cflag = kw_bits;
+    }
+    else if (kw_rest_arg == idNil) {
+	args->no_kwarg = 1;
+    }
+    else if (kw_rest_arg) {
+	args->kw_rest_arg = NEW_DVAR(kw_rest_arg, kw_rest_loc);
+    }
+
+    p->ruby_sourceline = saved_line;
+    return node;
+}
+
+static NODE *
+args_with_numbered(struct parser_params *p, NODE *args, int max_numparam)
+{
+    if (max_numparam > NO_PARAM) {
+	if (!args) {
+	    YYLTYPE loc = RUBY_INIT_YYLLOC();
+	    args = new_args_tail(p, 0, 0, 0, 0);
+	    nd_set_loc(args, &loc);
+	}
+	args->nd_ainfo->pre_args_num = max_numparam;
+    }
+    return args;
+}
+
+static NODE*
+new_array_pattern(struct parser_params *p, NODE *constant, NODE *pre_arg, NODE *aryptn, const YYLTYPE *loc)
+{
+    struct rb_ary_pattern_info *apinfo = aryptn->nd_apinfo;
+
+    aryptn->nd_pconst = constant;
+
+    if (pre_arg) {
+	NODE *pre_args = NEW_LIST(pre_arg, loc);
+	if (apinfo->pre_args) {
+	    apinfo->pre_args = list_concat(pre_args, apinfo->pre_args);
+	}
+	else {
+	    apinfo->pre_args = pre_args;
+	}
+    }
+    return aryptn;
+}
+
+static NODE*
+new_array_pattern_tail(struct parser_params *p, NODE *pre_args, int has_rest, ID rest_arg, NODE *post_args, const YYLTYPE *loc)
+{
+    int saved_line = p->ruby_sourceline;
+    NODE *node;
+    VALUE tmpbuf = rb_imemo_tmpbuf_auto_free_pointer();
+    struct rb_ary_pattern_info *apinfo = ZALLOC(struct rb_ary_pattern_info);
+    rb_imemo_tmpbuf_set_ptr(tmpbuf, apinfo);
+    node = NEW_NODE(NODE_ARYPTN, 0, tmpbuf, apinfo, loc);
+    RB_OBJ_WRITTEN(p->ast, Qnil, tmpbuf);
+
+    apinfo->pre_args = pre_args;
+
+    if (has_rest) {
+	if (rest_arg) {
+	    apinfo->rest_arg = assignable(p, rest_arg, 0, loc);
+	}
+	else {
+	    apinfo->rest_arg = NODE_SPECIAL_NO_NAME_REST;
+	}
+    }
+    else {
+	apinfo->rest_arg = NULL;
+    }
+
+    apinfo->post_args = post_args;
+
+    p->ruby_sourceline = saved_line;
+    return node;
+}
+
+static NODE*
+new_find_pattern(struct parser_params *p, NODE *constant, NODE *fndptn, const YYLTYPE *loc)
+{
+    fndptn->nd_pconst = constant;
+
+    return fndptn;
+}
+
+static NODE*
+new_find_pattern_tail(struct parser_params *p, ID pre_rest_arg, NODE *args, ID post_rest_arg, const YYLTYPE *loc)
+{
+    int saved_line = p->ruby_sourceline;
+    NODE *node;
+    VALUE tmpbuf = rb_imemo_tmpbuf_auto_free_pointer();
+    struct rb_fnd_pattern_info *fpinfo = ZALLOC(struct rb_fnd_pattern_info);
+    rb_imemo_tmpbuf_set_ptr(tmpbuf, fpinfo);
+    node = NEW_NODE(NODE_FNDPTN, 0, tmpbuf, fpinfo, loc);
+    RB_OBJ_WRITTEN(p->ast, Qnil, tmpbuf);
+
+    fpinfo->pre_rest_arg = pre_rest_arg ? assignable(p, pre_rest_arg, 0, loc) : NODE_SPECIAL_NO_NAME_REST;
+    fpinfo->args = args;
+    fpinfo->post_rest_arg = post_rest_arg ? assignable(p, post_rest_arg, 0, loc) : NODE_SPECIAL_NO_NAME_REST;
+
+    p->ruby_sourceline = saved_line;
+    return node;
+}
+
+static NODE*
+new_hash_pattern(struct parser_params *p, NODE *constant, NODE *hshptn, const YYLTYPE *loc)
+{
+    hshptn->nd_pconst = constant;
+    return hshptn;
+}
+
+static NODE*
+new_hash_pattern_tail(struct parser_params *p, NODE *kw_args, ID kw_rest_arg, const YYLTYPE *loc)
+{
+    int saved_line = p->ruby_sourceline;
+    NODE *node, *kw_rest_arg_node;
+
+    if (kw_rest_arg == idNil) {
+	kw_rest_arg_node = NODE_SPECIAL_NO_REST_KEYWORD;
+    }
+    else if (kw_rest_arg) {
+	kw_rest_arg_node = assignable(p, kw_rest_arg, 0, loc);
+    }
+    else {
+	kw_rest_arg_node = NULL;
+    }
+
+    node = NEW_NODE(NODE_HSHPTN, 0, kw_args, kw_rest_arg_node, loc);
+
+    p->ruby_sourceline = saved_line;
+    return node;
+}
+
+static NODE*
+dsym_node(struct parser_params *p, NODE *node, const YYLTYPE *loc)
+{
+    VALUE lit;
+
+    if (!node) {
+	return NEW_LIT(ID2SYM(idNULL), loc);
+    }
+
+    switch (nd_type(node)) {
+      case NODE_DSTR:
+	nd_set_type(node, NODE_DSYM);
+	nd_set_loc(node, loc);
+	break;
+      case NODE_STR:
+	lit = node->nd_lit;
+	RB_OBJ_WRITTEN(p->ast, Qnil, node->nd_lit = ID2SYM(rb_intern_str(lit)));
+	nd_set_type(node, NODE_LIT);
+	nd_set_loc(node, loc);
+	break;
+      default:
+	node = NEW_NODE(NODE_DSYM, Qnil, 1, NEW_LIST(node, loc), loc);
+	break;
+    }
+    return node;
+}
+
+static int
+append_literal_keys(st_data_t k, st_data_t v, st_data_t h)
+{
+    NODE *node = (NODE *)v;
+    NODE **result = (NODE **)h;
+    node->nd_alen = 2;
+    node->nd_next->nd_end = node->nd_next;
+    node->nd_next->nd_next = 0;
+    if (*result)
+	list_concat(*result, node);
+    else
+	*result = node;
+    return ST_CONTINUE;
+}
+
+static bool
+hash_literal_key_p(VALUE k)
+{
+    switch (OBJ_BUILTIN_TYPE(k)) {
+      case T_NODE:
+	return false;
+      default:
+	return true;
+    }
+}
+
+static int
+literal_cmp(VALUE val, VALUE lit)
+{
+    if (val == lit) return 0;
+    if (!hash_literal_key_p(val) || !hash_literal_key_p(lit)) return -1;
+    return rb_iseq_cdhash_cmp(val, lit);
+}
+
+static st_index_t
+literal_hash(VALUE a)
+{
+    if (!hash_literal_key_p(a)) return (st_index_t)a;
+    return rb_iseq_cdhash_hash(a);
+}
+
+static const struct st_hash_type literal_type = {
+    literal_cmp,
+    literal_hash,
+};
+
+static NODE *
+remove_duplicate_keys(struct parser_params *p, NODE *hash)
+{
+    st_table *literal_keys = st_init_table_with_size(&literal_type, hash->nd_alen / 2);
+    NODE *result = 0;
+    NODE *last_expr = 0;
+    rb_code_location_t loc = hash->nd_loc;
+    while (hash && hash->nd_head && hash->nd_next) {
+	NODE *head = hash->nd_head;
+	NODE *value = hash->nd_next;
+	NODE *next = value->nd_next;
+	st_data_t key = (st_data_t)head;
+	st_data_t data;
+	value->nd_next = 0;
+	if (nd_type_p(head, NODE_LIT) &&
+	    st_delete(literal_keys, (key = (st_data_t)head->nd_lit, &key), &data)) {
+	    NODE *dup_value = (
