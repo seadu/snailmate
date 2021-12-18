@@ -20473,4 +20473,282 @@ local_push(struct parser_params *p, int toplevel_scope)
     local = ALLOC(struct local_vars);
     local->prev = p->lvtbl;
     local->args = vtable_alloc(0);
-    
+    local->vars = vtable_alloc(inherits_dvars ? DVARS_INHERIT : DVARS_TOPSCOPE);
+#ifndef RIPPER
+    if (toplevel_scope && compile_for_eval) warn_unused_vars = 0;
+    if (toplevel_scope && e_option_supplied(p)) warn_unused_vars = 0;
+    local->numparam.outer = 0;
+    local->numparam.inner = 0;
+    local->numparam.current = 0;
+#endif
+    local->used = warn_unused_vars ? vtable_alloc(0) : 0;
+
+# if WARN_PAST_SCOPE
+    local->past = 0;
+# endif
+    CMDARG_PUSH(0);
+    COND_PUSH(0);
+    p->lvtbl = local;
+}
+
+static void
+local_pop(struct parser_params *p)
+{
+    struct local_vars *local = p->lvtbl->prev;
+    if (p->lvtbl->used) {
+	warn_unused_var(p, p->lvtbl);
+	vtable_free(p->lvtbl->used);
+    }
+# if WARN_PAST_SCOPE
+    while (p->lvtbl->past) {
+	struct vtable *past = p->lvtbl->past;
+	p->lvtbl->past = past->prev;
+	vtable_free(past);
+    }
+# endif
+    vtable_free(p->lvtbl->args);
+    vtable_free(p->lvtbl->vars);
+    CMDARG_POP();
+    COND_POP();
+    ruby_sized_xfree(p->lvtbl, sizeof(*p->lvtbl));
+    p->lvtbl = local;
+}
+
+#ifndef RIPPER
+static rb_ast_id_table_t *
+local_tbl(struct parser_params *p)
+{
+    int cnt_args = vtable_size(p->lvtbl->args);
+    int cnt_vars = vtable_size(p->lvtbl->vars);
+    int cnt = cnt_args + cnt_vars;
+    int i, j;
+    rb_ast_id_table_t *tbl;
+
+    if (cnt <= 0) return 0;
+    tbl = rb_ast_new_local_table(p->ast, cnt);
+    MEMCPY(tbl->ids, p->lvtbl->args->tbl, ID, cnt_args);
+    /* remove IDs duplicated to warn shadowing */
+    for (i = 0, j = cnt_args; i < cnt_vars; ++i) {
+	ID id = p->lvtbl->vars->tbl[i];
+	if (!vtable_included(p->lvtbl->args, id)) {
+	    tbl->ids[j++] = id;
+	}
+    }
+    if (j < cnt) {
+        tbl = rb_ast_resize_latest_local_table(p->ast, j);
+    }
+
+    return tbl;
+}
+
+static NODE*
+node_newnode_with_locals(struct parser_params *p, enum node_type type, VALUE a1, VALUE a2, const rb_code_location_t *loc)
+{
+    rb_ast_id_table_t *a0;
+    NODE *n;
+
+    a0 = local_tbl(p);
+    n = NEW_NODE(type, a0, a1, a2, loc);
+    return n;
+}
+
+#endif
+
+static void
+numparam_name(struct parser_params *p, ID id)
+{
+    if (!NUMPARAM_ID_P(id)) return;
+    compile_error(p, "_%d is reserved for numbered parameter",
+        NUMPARAM_ID_TO_IDX(id));
+}
+
+static void
+arg_var(struct parser_params *p, ID id)
+{
+    numparam_name(p, id);
+    vtable_add(p->lvtbl->args, id);
+}
+
+static void
+local_var(struct parser_params *p, ID id)
+{
+    numparam_name(p, id);
+    vtable_add(p->lvtbl->vars, id);
+    if (p->lvtbl->used) {
+	vtable_add(p->lvtbl->used, (ID)p->ruby_sourceline);
+    }
+}
+
+static int
+local_id_ref(struct parser_params *p, ID id, ID **vidrefp)
+{
+    struct vtable *vars, *args, *used;
+
+    vars = p->lvtbl->vars;
+    args = p->lvtbl->args;
+    used = p->lvtbl->used;
+
+    while (vars && !DVARS_TERMINAL_P(vars->prev)) {
+	vars = vars->prev;
+	args = args->prev;
+	if (used) used = used->prev;
+    }
+
+    if (vars && vars->prev == DVARS_INHERIT) {
+	return rb_local_defined(id, p->parent_iseq);
+    }
+    else if (vtable_included(args, id)) {
+	return 1;
+    }
+    else {
+	int i = vtable_included(vars, id);
+	if (i && used && vidrefp) *vidrefp = &used->tbl[i-1];
+	return i != 0;
+    }
+}
+
+static int
+local_id(struct parser_params *p, ID id)
+{
+    return local_id_ref(p, id, NULL);
+}
+
+static int
+check_forwarding_args(struct parser_params *p)
+{
+    if (local_id(p, idFWD_REST) &&
+#if idFWD_KWREST
+        local_id(p, idFWD_KWREST) &&
+#endif
+        local_id(p, idFWD_BLOCK)) return TRUE;
+    compile_error(p, "unexpected ...");
+    return FALSE;
+}
+
+static void
+add_forwarding_args(struct parser_params *p)
+{
+    arg_var(p, idFWD_REST);
+#if idFWD_KWREST
+    arg_var(p, idFWD_KWREST);
+#endif
+    arg_var(p, idFWD_BLOCK);
+}
+
+#ifndef RIPPER
+static NODE *
+new_args_forward_call(struct parser_params *p, NODE *leading, const YYLTYPE *loc, const YYLTYPE *argsloc)
+{
+    NODE *splat = NEW_SPLAT(NEW_LVAR(idFWD_REST, loc), loc);
+#if idFWD_KWREST
+    NODE *kwrest = list_append(p, NEW_LIST(0, loc), NEW_LVAR(idFWD_KWREST, loc));
+#endif
+    NODE *block = NEW_BLOCK_PASS(NEW_LVAR(idFWD_BLOCK, loc), loc);
+    NODE *args = leading ? rest_arg_append(p, leading, splat, argsloc) : splat;
+#if idFWD_KWREST
+    args = arg_append(p, splat, new_hash(p, kwrest, loc), loc);
+#endif
+    return arg_blk_pass(args, block);
+}
+#endif
+
+static NODE *
+numparam_push(struct parser_params *p)
+{
+#ifndef RIPPER
+    struct local_vars *local = p->lvtbl;
+    NODE *inner = local->numparam.inner;
+    if (!local->numparam.outer) {
+	local->numparam.outer = local->numparam.current;
+    }
+    local->numparam.inner = 0;
+    local->numparam.current = 0;
+    return inner;
+#else
+    return 0;
+#endif
+}
+
+static void
+numparam_pop(struct parser_params *p, NODE *prev_inner)
+{
+#ifndef RIPPER
+    struct local_vars *local = p->lvtbl;
+    if (prev_inner) {
+	/* prefer first one */
+	local->numparam.inner = prev_inner;
+    }
+    else if (local->numparam.current) {
+	/* current and inner are exclusive */
+	local->numparam.inner = local->numparam.current;
+    }
+    if (p->max_numparam > NO_PARAM) {
+	/* current and outer are exclusive */
+	local->numparam.current = local->numparam.outer;
+	local->numparam.outer = 0;
+    }
+    else {
+	/* no numbered parameter */
+	local->numparam.current = 0;
+    }
+#endif
+}
+
+static const struct vtable *
+dyna_push(struct parser_params *p)
+{
+    p->lvtbl->args = vtable_alloc(p->lvtbl->args);
+    p->lvtbl->vars = vtable_alloc(p->lvtbl->vars);
+    if (p->lvtbl->used) {
+	p->lvtbl->used = vtable_alloc(p->lvtbl->used);
+    }
+    return p->lvtbl->args;
+}
+
+static void
+dyna_pop_vtable(struct parser_params *p, struct vtable **vtblp)
+{
+    struct vtable *tmp = *vtblp;
+    *vtblp = tmp->prev;
+# if WARN_PAST_SCOPE
+    if (p->past_scope_enabled) {
+	tmp->prev = p->lvtbl->past;
+	p->lvtbl->past = tmp;
+	return;
+    }
+# endif
+    vtable_free(tmp);
+}
+
+static void
+dyna_pop_1(struct parser_params *p)
+{
+    struct vtable *tmp;
+
+    if ((tmp = p->lvtbl->used) != 0) {
+	warn_unused_var(p, p->lvtbl);
+	p->lvtbl->used = p->lvtbl->used->prev;
+	vtable_free(tmp);
+    }
+    dyna_pop_vtable(p, &p->lvtbl->args);
+    dyna_pop_vtable(p, &p->lvtbl->vars);
+}
+
+static void
+dyna_pop(struct parser_params *p, const struct vtable *lvargs)
+{
+    while (p->lvtbl->args != lvargs) {
+	dyna_pop_1(p);
+	if (!p->lvtbl->args) {
+	    struct local_vars *local = p->lvtbl->prev;
+	    ruby_sized_xfree(p->lvtbl, sizeof(*p->lvtbl));
+	    p->lvtbl = local;
+	}
+    }
+    dyna_pop_1(p);
+}
+
+static int
+dyna_in_block(struct parser_params *p)
+{
+    return !DVARS_TERMINAL_P(p->lvtbl->vars)
