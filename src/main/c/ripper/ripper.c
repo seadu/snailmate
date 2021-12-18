@@ -20214,4 +20214,263 @@ remove_duplicate_keys(struct parser_params *p, NODE *hash)
 	value->nd_next = 0;
 	if (nd_type_p(head, NODE_LIT) &&
 	    st_delete(literal_keys, (key = (st_data_t)head->nd_lit, &key), &data)) {
-	    NODE *dup_value = (
+	    NODE *dup_value = ((NODE *)data)->nd_next;
+	    rb_compile_warn(p->ruby_sourcefile, nd_line((NODE *)data),
+			    "key %+"PRIsVALUE" is duplicated and overwritten on line %d",
+			    head->nd_lit, nd_line(head));
+	    if (dup_value == last_expr) {
+		value->nd_head = block_append(p, dup_value->nd_head, value->nd_head);
+	    }
+	    else {
+		last_expr->nd_head = block_append(p, dup_value->nd_head, last_expr->nd_head);
+	    }
+	}
+	st_insert(literal_keys, (st_data_t)key, (st_data_t)hash);
+	last_expr = nd_type_p(head, NODE_LIT) ? value : head;
+	hash = next;
+    }
+    st_foreach(literal_keys, append_literal_keys, (st_data_t)&result);
+    st_free_table(literal_keys);
+    if (hash) {
+	if (!result) result = hash;
+	else list_concat(result, hash);
+    }
+    result->nd_loc = loc;
+    return result;
+}
+
+static NODE *
+new_hash(struct parser_params *p, NODE *hash, const YYLTYPE *loc)
+{
+    if (hash) hash = remove_duplicate_keys(p, hash);
+    return NEW_HASH(hash, loc);
+}
+#endif
+
+static void
+error_duplicate_pattern_variable(struct parser_params *p, ID id, const YYLTYPE *loc)
+{
+    if (is_private_local_id(id)) {
+	return;
+    }
+    if (st_is_member(p->pvtbl, id)) {
+	yyerror1(loc, "duplicated variable name");
+    }
+    else {
+	st_insert(p->pvtbl, (st_data_t)id, 0);
+    }
+}
+
+static void
+error_duplicate_pattern_key(struct parser_params *p, VALUE key, const YYLTYPE *loc)
+{
+    if (!p->pktbl) {
+	p->pktbl = st_init_numtable();
+    }
+    else if (st_is_member(p->pktbl, key)) {
+	yyerror1(loc, "duplicated key name");
+	return;
+    }
+    st_insert(p->pktbl, (st_data_t)key, 0);
+}
+
+#ifndef RIPPER
+static NODE *
+new_unique_key_hash(struct parser_params *p, NODE *hash, const YYLTYPE *loc)
+{
+    return NEW_HASH(hash, loc);
+}
+#endif /* !RIPPER */
+
+#ifndef RIPPER
+static NODE *
+new_op_assign(struct parser_params *p, NODE *lhs, ID op, NODE *rhs, struct lex_context ctxt, const YYLTYPE *loc)
+{
+    NODE *asgn;
+
+    if (lhs) {
+	ID vid = lhs->nd_vid;
+	YYLTYPE lhs_loc = lhs->nd_loc;
+	int shareable = ctxt.shareable_constant_value;
+	if (shareable) {
+	    switch (nd_type(lhs)) {
+	      case NODE_CDECL:
+	      case NODE_COLON2:
+	      case NODE_COLON3:
+		break;
+	      default:
+		shareable = 0;
+		break;
+	    }
+	}
+	if (op == tOROP) {
+	    rhs = shareable_constant_value(p, shareable, lhs, rhs, &rhs->nd_loc);
+	    lhs->nd_value = rhs;
+	    nd_set_loc(lhs, loc);
+	    asgn = NEW_OP_ASGN_OR(gettable(p, vid, &lhs_loc), lhs, loc);
+	    if (is_notop_id(vid)) {
+		switch (id_type(vid)) {
+		  case ID_GLOBAL:
+		  case ID_INSTANCE:
+		  case ID_CLASS:
+		    asgn->nd_aid = vid;
+		}
+	    }
+	}
+	else if (op == tANDOP) {
+	    if (shareable) {
+		rhs = shareable_constant_value(p, shareable, lhs, rhs, &rhs->nd_loc);
+	    }
+	    lhs->nd_value = rhs;
+	    nd_set_loc(lhs, loc);
+	    asgn = NEW_OP_ASGN_AND(gettable(p, vid, &lhs_loc), lhs, loc);
+	}
+	else {
+	    asgn = lhs;
+	    rhs = NEW_CALL(gettable(p, vid, &lhs_loc), op, NEW_LIST(rhs, &rhs->nd_loc), loc);
+	    if (shareable) {
+		rhs = shareable_constant_value(p, shareable, lhs, rhs, &rhs->nd_loc);
+	    }
+	    asgn->nd_value = rhs;
+	    nd_set_loc(asgn, loc);
+	}
+    }
+    else {
+	asgn = NEW_BEGIN(0, loc);
+    }
+    return asgn;
+}
+
+static NODE *
+new_ary_op_assign(struct parser_params *p, NODE *ary,
+		  NODE *args, ID op, NODE *rhs, const YYLTYPE *args_loc, const YYLTYPE *loc)
+{
+    NODE *asgn;
+
+    args = make_list(args, args_loc);
+    if (nd_type_p(args, NODE_BLOCK_PASS)) {
+	args = NEW_ARGSCAT(args, rhs, loc);
+    }
+    else {
+	args = arg_concat(p, args, rhs, loc);
+    }
+    asgn = NEW_OP_ASGN1(ary, op, args, loc);
+    fixpos(asgn, ary);
+    return asgn;
+}
+
+static NODE *
+new_attr_op_assign(struct parser_params *p, NODE *lhs,
+		   ID atype, ID attr, ID op, NODE *rhs, const YYLTYPE *loc)
+{
+    NODE *asgn;
+
+    asgn = NEW_OP_ASGN2(lhs, CALL_Q_P(atype), attr, op, rhs, loc);
+    fixpos(asgn, lhs);
+    return asgn;
+}
+
+static NODE *
+new_const_op_assign(struct parser_params *p, NODE *lhs, ID op, NODE *rhs, struct lex_context ctxt, const YYLTYPE *loc)
+{
+    NODE *asgn;
+
+    if (lhs) {
+	rhs = shareable_constant_value(p, ctxt.shareable_constant_value, lhs, rhs, loc);
+	asgn = NEW_OP_CDECL(lhs, op, rhs, loc);
+    }
+    else {
+	asgn = NEW_BEGIN(0, loc);
+    }
+    fixpos(asgn, lhs);
+    return asgn;
+}
+
+static NODE *
+const_decl(struct parser_params *p, NODE *path, const YYLTYPE *loc)
+{
+    if (p->ctxt.in_def) {
+	yyerror1(loc, "dynamic constant assignment");
+    }
+    return NEW_CDECL(0, 0, (path), loc);
+}
+#else
+static VALUE
+const_decl(struct parser_params *p, VALUE path)
+{
+    if (p->ctxt.in_def) {
+	path = assign_error(p, "dynamic constant assignment", path);
+    }
+    return path;
+}
+
+static VALUE
+assign_error(struct parser_params *p, const char *mesg, VALUE a)
+{
+    a = dispatch2(assign_error, ERR_MESG(), a);
+    ripper_error(p);
+    return a;
+}
+
+static VALUE
+var_field(struct parser_params *p, VALUE a)
+{
+    return ripper_new_yylval(p, get_id(a), dispatch1(var_field, a), 0);
+}
+#endif
+
+#ifndef RIPPER
+static NODE *
+new_bodystmt(struct parser_params *p, NODE *head, NODE *rescue, NODE *rescue_else, NODE *ensure, const YYLTYPE *loc)
+{
+    NODE *result = head;
+    if (rescue) {
+        NODE *tmp = rescue_else ? rescue_else : rescue;
+        YYLTYPE rescue_loc = code_loc_gen(&head->nd_loc, &tmp->nd_loc);
+
+        result = NEW_RESCUE(head, rescue, rescue_else, &rescue_loc);
+        nd_set_line(result, rescue->nd_loc.beg_pos.lineno);
+    }
+    else if (rescue_else) {
+        result = block_append(p, result, rescue_else);
+    }
+    if (ensure) {
+        result = NEW_ENSURE(result, ensure, loc);
+    }
+    fixpos(result, head);
+    return result;
+}
+#endif
+
+static void
+warn_unused_var(struct parser_params *p, struct local_vars *local)
+{
+    int cnt;
+
+    if (!local->used) return;
+    cnt = local->used->pos;
+    if (cnt != local->vars->pos) {
+	rb_parser_fatal(p, "local->used->pos != local->vars->pos");
+    }
+#ifndef RIPPER
+    ID *v = local->vars->tbl;
+    ID *u = local->used->tbl;
+    for (int i = 0; i < cnt; ++i) {
+	if (!v[i] || (u[i] & LVAR_USED)) continue;
+	if (is_private_local_id(v[i])) continue;
+	rb_warn1L((int)u[i], "assigned but unused variable - %"PRIsWARN, rb_id2str(v[i]));
+    }
+#endif
+}
+
+static void
+local_push(struct parser_params *p, int toplevel_scope)
+{
+    struct local_vars *local;
+    int inherits_dvars = toplevel_scope && compile_for_eval;
+    int warn_unused_vars = RTEST(ruby_verbose);
+
+    local = ALLOC(struct local_vars);
+    local->prev = p->lvtbl;
+    local->args = vtable_alloc(0);
+    
