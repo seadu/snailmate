@@ -20751,4 +20751,274 @@ dyna_pop(struct parser_params *p, const struct vtable *lvargs)
 static int
 dyna_in_block(struct parser_params *p)
 {
-    return !DVARS_TERMINAL_P(p->lvtbl->vars)
+    return !DVARS_TERMINAL_P(p->lvtbl->vars) && p->lvtbl->vars->prev != DVARS_TOPSCOPE;
+}
+
+static int
+dvar_defined_ref(struct parser_params *p, ID id, ID **vidrefp)
+{
+    struct vtable *vars, *args, *used;
+    int i;
+
+    args = p->lvtbl->args;
+    vars = p->lvtbl->vars;
+    used = p->lvtbl->used;
+
+    while (!DVARS_TERMINAL_P(vars)) {
+	if (vtable_included(args, id)) {
+	    return 1;
+	}
+	if ((i = vtable_included(vars, id)) != 0) {
+	    if (used && vidrefp) *vidrefp = &used->tbl[i-1];
+	    return 1;
+	}
+	args = args->prev;
+	vars = vars->prev;
+	if (!vidrefp) used = 0;
+	if (used) used = used->prev;
+    }
+
+    if (vars == DVARS_INHERIT && !NUMPARAM_ID_P(id)) {
+        return rb_dvar_defined(id, p->parent_iseq);
+    }
+
+    return 0;
+}
+
+static int
+dvar_defined(struct parser_params *p, ID id)
+{
+    return dvar_defined_ref(p, id, NULL);
+}
+
+static int
+dvar_curr(struct parser_params *p, ID id)
+{
+    return (vtable_included(p->lvtbl->args, id) ||
+	    vtable_included(p->lvtbl->vars, id));
+}
+
+static void
+reg_fragment_enc_error(struct parser_params* p, VALUE str, int c)
+{
+    compile_error(p,
+        "regexp encoding option '%c' differs from source encoding '%s'",
+        c, rb_enc_name(rb_enc_get(str)));
+}
+
+#ifndef RIPPER
+int
+rb_reg_fragment_setenc(struct parser_params* p, VALUE str, int options)
+{
+    int c = RE_OPTION_ENCODING_IDX(options);
+
+    if (c) {
+	int opt, idx;
+	rb_char_to_option_kcode(c, &opt, &idx);
+	if (idx != ENCODING_GET(str) &&
+	    rb_enc_str_coderange(str) != ENC_CODERANGE_7BIT) {
+            goto error;
+	}
+	ENCODING_SET(str, idx);
+    }
+    else if (RE_OPTION_ENCODING_NONE(options)) {
+        if (!ENCODING_IS_ASCII8BIT(str) &&
+            rb_enc_str_coderange(str) != ENC_CODERANGE_7BIT) {
+            c = 'n';
+            goto error;
+        }
+	rb_enc_associate(str, rb_ascii8bit_encoding());
+    }
+    else if (p->enc == rb_usascii_encoding()) {
+	if (rb_enc_str_coderange(str) != ENC_CODERANGE_7BIT) {
+	    /* raise in re.c */
+	    rb_enc_associate(str, rb_usascii_encoding());
+	}
+	else {
+	    rb_enc_associate(str, rb_ascii8bit_encoding());
+	}
+    }
+    return 0;
+
+  error:
+    return c;
+}
+
+static void
+reg_fragment_setenc(struct parser_params* p, VALUE str, int options)
+{
+    int c = rb_reg_fragment_setenc(p, str, options);
+    if (c) reg_fragment_enc_error(p, str, c);
+}
+
+static int
+reg_fragment_check(struct parser_params* p, VALUE str, int options)
+{
+    VALUE err;
+    reg_fragment_setenc(p, str, options);
+    err = rb_reg_check_preprocess(str);
+    if (err != Qnil) {
+        err = rb_obj_as_string(err);
+        compile_error(p, "%"PRIsVALUE, err);
+	return 0;
+    }
+    return 1;
+}
+
+typedef struct {
+    struct parser_params* parser;
+    rb_encoding *enc;
+    NODE *succ_block;
+    const YYLTYPE *loc;
+} reg_named_capture_assign_t;
+
+static int
+reg_named_capture_assign_iter(const OnigUChar *name, const OnigUChar *name_end,
+          int back_num, int *back_refs, OnigRegex regex, void *arg0)
+{
+    reg_named_capture_assign_t *arg = (reg_named_capture_assign_t*)arg0;
+    struct parser_params* p = arg->parser;
+    rb_encoding *enc = arg->enc;
+    long len = name_end - name;
+    const char *s = (const char *)name;
+    ID var;
+    NODE *node, *succ;
+
+    if (!len) return ST_CONTINUE;
+    if (rb_enc_symname_type(s, len, enc, (1U<<ID_LOCAL)) != ID_LOCAL)
+        return ST_CONTINUE;
+
+    var = intern_cstr(s, len, enc);
+    if (len < MAX_WORD_LENGTH && rb_reserved_word(s, (int)len)) {
+	if (!lvar_defined(p, var)) return ST_CONTINUE;
+    }
+    node = node_assign(p, assignable(p, var, 0, arg->loc), NEW_LIT(ID2SYM(var), arg->loc), NO_LEX_CTXT, arg->loc);
+    succ = arg->succ_block;
+    if (!succ) succ = NEW_BEGIN(0, arg->loc);
+    succ = block_append(p, succ, node);
+    arg->succ_block = succ;
+    return ST_CONTINUE;
+}
+
+static NODE *
+reg_named_capture_assign(struct parser_params* p, VALUE regexp, const YYLTYPE *loc)
+{
+    reg_named_capture_assign_t arg;
+
+    arg.parser = p;
+    arg.enc = rb_enc_get(regexp);
+    arg.succ_block = 0;
+    arg.loc = loc;
+    onig_foreach_name(RREGEXP_PTR(regexp), reg_named_capture_assign_iter, &arg);
+
+    if (!arg.succ_block) return 0;
+    return arg.succ_block->nd_next;
+}
+
+static VALUE
+parser_reg_compile(struct parser_params* p, VALUE str, int options)
+{
+    reg_fragment_setenc(p, str, options);
+    return rb_parser_reg_compile(p, str, options);
+}
+
+VALUE
+rb_parser_reg_compile(struct parser_params* p, VALUE str, int options)
+{
+    return rb_reg_compile(str, options & RE_OPTION_MASK, p->ruby_sourcefile, p->ruby_sourceline);
+}
+
+static VALUE
+reg_compile(struct parser_params* p, VALUE str, int options)
+{
+    VALUE re;
+    VALUE err;
+
+    err = rb_errinfo();
+    re = parser_reg_compile(p, str, options);
+    if (NIL_P(re)) {
+	VALUE m = rb_attr_get(rb_errinfo(), idMesg);
+	rb_set_errinfo(err);
+	compile_error(p, "%"PRIsVALUE, m);
+	return Qnil;
+    }
+    return re;
+}
+#else
+static VALUE
+parser_reg_compile(struct parser_params* p, VALUE str, int options, VALUE *errmsg)
+{
+    VALUE err = rb_errinfo();
+    VALUE re;
+    str = ripper_is_node_yylval(str) ? RNODE(str)->nd_cval : str;
+    int c = rb_reg_fragment_setenc(p, str, options);
+    if (c) reg_fragment_enc_error(p, str, c);
+    re = rb_parser_reg_compile(p, str, options);
+    if (NIL_P(re)) {
+	*errmsg = rb_attr_get(rb_errinfo(), idMesg);
+	rb_set_errinfo(err);
+    }
+    return re;
+}
+#endif
+
+#ifndef RIPPER
+void
+rb_parser_set_options(VALUE vparser, int print, int loop, int chomp, int split)
+{
+    struct parser_params *p;
+    TypedData_Get_Struct(vparser, struct parser_params, &parser_data_type, p);
+    p->do_print = print;
+    p->do_loop = loop;
+    p->do_chomp = chomp;
+    p->do_split = split;
+}
+
+static NODE *
+parser_append_options(struct parser_params *p, NODE *node)
+{
+    static const YYLTYPE default_location = {{1, 0}, {1, 0}};
+    const YYLTYPE *const LOC = &default_location;
+
+    if (p->do_print) {
+	NODE *print = NEW_FCALL(rb_intern("print"),
+				NEW_LIST(NEW_GVAR(idLASTLINE, LOC), LOC),
+				LOC);
+	node = block_append(p, node, print);
+    }
+
+    if (p->do_loop) {
+	if (p->do_split) {
+	    ID ifs = rb_intern("$;");
+	    ID fields = rb_intern("$F");
+	    NODE *args = NEW_LIST(NEW_GVAR(ifs, LOC), LOC);
+	    NODE *split = NEW_GASGN(fields,
+				    NEW_CALL(NEW_GVAR(idLASTLINE, LOC),
+					     rb_intern("split"), args, LOC),
+				    LOC);
+	    node = block_append(p, split, node);
+	}
+	if (p->do_chomp) {
+	    NODE *chomp = NEW_CALL(NEW_GVAR(idLASTLINE, LOC),
+				   rb_intern("chomp!"), 0, LOC);
+	    node = block_append(p, chomp, node);
+	}
+
+	node = NEW_WHILE(NEW_VCALL(idGets, LOC), node, 1, LOC);
+    }
+
+    return node;
+}
+
+void
+rb_init_parse(void)
+{
+    /* just to suppress unused-function warnings */
+    (void)nodetype;
+    (void)nodeline;
+}
+
+static ID
+internal_id(struct parser_params *p)
+{
+    return rb_make_temporary_id(vtable_size(p->lvtbl->args) +
