@@ -21021,4 +21021,304 @@ rb_init_parse(void)
 static ID
 internal_id(struct parser_params *p)
 {
-    return rb_make_temporary_id(vtable_size(p->lvtbl->args) +
+    return rb_make_temporary_id(vtable_size(p->lvtbl->args) + vtable_size(p->lvtbl->vars));
+}
+#endif /* !RIPPER */
+
+static void
+parser_initialize(struct parser_params *p)
+{
+    /* note: we rely on TypedData_Make_Struct to set most fields to 0 */
+    p->command_start = TRUE;
+    p->ruby_sourcefile_string = Qnil;
+    p->lex.lpar_beg = -1; /* make lambda_beginning_p() == FALSE at first */
+    p->node_id = 0;
+#ifdef RIPPER
+    p->delayed.token = Qnil;
+    p->result = Qnil;
+    p->parsing_thread = Qnil;
+#else
+    p->error_buffer = Qfalse;
+#endif
+    p->debug_buffer = Qnil;
+    p->debug_output = rb_ractor_stdout();
+    p->enc = rb_utf8_encoding();
+}
+
+#ifdef RIPPER
+#define parser_mark ripper_parser_mark
+#define parser_free ripper_parser_free
+#endif
+
+static void
+parser_mark(void *ptr)
+{
+    struct parser_params *p = (struct parser_params*)ptr;
+
+    rb_gc_mark(p->lex.input);
+    rb_gc_mark(p->lex.prevline);
+    rb_gc_mark(p->lex.lastline);
+    rb_gc_mark(p->lex.nextline);
+    rb_gc_mark(p->ruby_sourcefile_string);
+    rb_gc_mark((VALUE)p->lex.strterm);
+    rb_gc_mark((VALUE)p->ast);
+    rb_gc_mark(p->case_labels);
+#ifndef RIPPER
+    rb_gc_mark(p->debug_lines);
+    rb_gc_mark(p->compile_option);
+    rb_gc_mark(p->error_buffer);
+#else
+    rb_gc_mark(p->delayed.token);
+    rb_gc_mark(p->value);
+    rb_gc_mark(p->result);
+    rb_gc_mark(p->parsing_thread);
+#endif
+    rb_gc_mark(p->debug_buffer);
+    rb_gc_mark(p->debug_output);
+#ifdef YYMALLOC
+#ifndef TRUFFLERUBY
+    rb_gc_mark((VALUE)p->heap);
+#endif
+#endif
+}
+
+static void
+parser_free(void *ptr)
+{
+    struct parser_params *p = (struct parser_params*)ptr;
+    struct local_vars *local, *prev;
+
+#ifdef TRUFFLERUBY
+    rb_imemo_tmpbuf_t *heap = p->heap;
+
+    while (heap != NULL) {
+        if (heap->ptr != NULL) {
+            xfree(ptr);
+        }
+        heap = heap->next;
+    }
+#endif
+
+    if (p->tokenbuf) {
+        ruby_sized_xfree(p->tokenbuf, p->toksiz);
+    }
+    for (local = p->lvtbl; local; local = prev) {
+	if (local->vars) xfree(local->vars);
+	prev = local->prev;
+	xfree(local);
+    }
+    {
+	token_info *ptinfo;
+	while ((ptinfo = p->token_info) != 0) {
+	    p->token_info = ptinfo->next;
+	    xfree(ptinfo);
+	}
+    }
+    xfree(ptr);
+}
+
+static size_t
+parser_memsize(const void *ptr)
+{
+    struct parser_params *p = (struct parser_params*)ptr;
+    struct local_vars *local;
+    size_t size = sizeof(*p);
+
+    size += p->toksiz;
+    for (local = p->lvtbl; local; local = local->prev) {
+	size += sizeof(*local);
+	if (local->vars) size += local->vars->capa * sizeof(ID);
+    }
+    return size;
+}
+
+static const rb_data_type_t parser_data_type = {
+#ifndef RIPPER
+    "parser",
+#else
+    "ripper",
+#endif
+    {
+	parser_mark,
+	parser_free,
+	parser_memsize,
+    },
+    0, 0, RUBY_TYPED_FREE_IMMEDIATELY
+};
+
+#ifndef RIPPER
+#undef rb_reserved_word
+
+const struct kwtable *
+rb_reserved_word(const char *str, unsigned int len)
+{
+    return reserved_word(str, len);
+}
+
+VALUE
+rb_parser_new(void)
+{
+    struct parser_params *p;
+    VALUE parser = TypedData_Make_Struct(0, struct parser_params,
+					 &parser_data_type, p);
+    parser_initialize(p);
+    return parser;
+}
+
+VALUE
+rb_parser_set_context(VALUE vparser, const struct rb_iseq_struct *base, int main)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(vparser, struct parser_params, &parser_data_type, p);
+    p->error_buffer = main ? Qfalse : Qnil;
+    p->parent_iseq = base;
+    return vparser;
+}
+
+void
+rb_parser_keep_script_lines(VALUE vparser)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(vparser, struct parser_params, &parser_data_type, p);
+    p->keep_script_lines = 1;
+}
+#endif
+
+#ifdef RIPPER
+#define rb_parser_end_seen_p ripper_parser_end_seen_p
+#define rb_parser_encoding ripper_parser_encoding
+#define rb_parser_get_yydebug ripper_parser_get_yydebug
+#define rb_parser_set_yydebug ripper_parser_set_yydebug
+#define rb_parser_get_debug_output ripper_parser_get_debug_output
+#define rb_parser_set_debug_output ripper_parser_set_debug_output
+static VALUE ripper_parser_end_seen_p(VALUE vparser);
+static VALUE ripper_parser_encoding(VALUE vparser);
+static VALUE ripper_parser_get_yydebug(VALUE self);
+static VALUE ripper_parser_set_yydebug(VALUE self, VALUE flag);
+static VALUE ripper_parser_get_debug_output(VALUE self);
+static VALUE ripper_parser_set_debug_output(VALUE self, VALUE output);
+
+/*
+ *  call-seq:
+ *    ripper.error?   -> Boolean
+ *
+ *  Return true if parsed source has errors.
+ */
+static VALUE
+ripper_error_p(VALUE vparser)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(vparser, struct parser_params, &parser_data_type, p);
+    return RBOOL(p->error_p);
+}
+#endif
+
+/*
+ *  call-seq:
+ *    ripper.end_seen?   -> Boolean
+ *
+ *  Return true if parsed source ended by +\_\_END\_\_+.
+ */
+VALUE
+rb_parser_end_seen_p(VALUE vparser)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(vparser, struct parser_params, &parser_data_type, p);
+    return RBOOL(p->ruby__end__seen);
+}
+
+/*
+ *  call-seq:
+ *    ripper.encoding   -> encoding
+ *
+ *  Return encoding of the source.
+ */
+VALUE
+rb_parser_encoding(VALUE vparser)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(vparser, struct parser_params, &parser_data_type, p);
+    return rb_enc_from_encoding(p->enc);
+}
+
+#ifdef RIPPER
+/*
+ *  call-seq:
+ *    ripper.yydebug   -> true or false
+ *
+ *  Get yydebug.
+ */
+VALUE
+rb_parser_get_yydebug(VALUE self)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(self, struct parser_params, &parser_data_type, p);
+    return RBOOL(p->debug);
+}
+#endif
+
+/*
+ *  call-seq:
+ *    ripper.yydebug = flag
+ *
+ *  Set yydebug.
+ */
+VALUE
+rb_parser_set_yydebug(VALUE self, VALUE flag)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(self, struct parser_params, &parser_data_type, p);
+    p->debug = RTEST(flag);
+    return flag;
+}
+
+/*
+ *  call-seq:
+ *    ripper.debug_output   -> obj
+ *
+ *  Get debug output.
+ */
+VALUE
+rb_parser_get_debug_output(VALUE self)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(self, struct parser_params, &parser_data_type, p);
+    return p->debug_output;
+}
+
+/*
+ *  call-seq:
+ *    ripper.debug_output = obj
+ *
+ *  Set debug output.
+ */
+VALUE
+rb_parser_set_debug_output(VALUE self, VALUE output)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(self, struct parser_params, &parser_data_type, p);
+    return p->debug_output = output;
+}
+
+#ifndef RIPPER
+#ifdef YYMALLOC
+#define HEAPCNT(n, size) ((n) * (size) / sizeof(YYSTYPE))
+/* Keep the order; NEWHEAP then xmalloc and ADD2HEAP to get rid of
+ * potential memory leak */
+#define NEWHEAP() rb_imemo_tmpbuf_parser_heap(0, p->heap, 0)
+#define ADD2HEAP(new, cnt, ptr) ((p->heap = (new))->ptr = (ptr), \
+			   (new)->cnt = (cnt), (ptr))
+
+void *
+rb_parser_malloc(struct parser_params *p, size_t size)
+{
+   
