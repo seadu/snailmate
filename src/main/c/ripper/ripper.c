@@ -21321,4 +21321,322 @@ rb_parser_set_debug_output(VALUE self, VALUE output)
 void *
 rb_parser_malloc(struct parser_params *p, size_t size)
 {
-   
+    size_t cnt = HEAPCNT(1, size);
+    rb_imemo_tmpbuf_t *n = NEWHEAP();
+    void *ptr = xmalloc(size);
+
+    return ADD2HEAP(n, cnt, ptr);
+}
+
+void *
+rb_parser_calloc(struct parser_params *p, size_t nelem, size_t size)
+{
+    size_t cnt = HEAPCNT(nelem, size);
+    rb_imemo_tmpbuf_t *n = NEWHEAP();
+    void *ptr = xcalloc(nelem, size);
+
+    return ADD2HEAP(n, cnt, ptr);
+}
+
+void *
+rb_parser_realloc(struct parser_params *p, void *ptr, size_t size)
+{
+    rb_imemo_tmpbuf_t *n;
+    size_t cnt = HEAPCNT(1, size);
+
+    if (ptr && (n = p->heap) != NULL) {
+	do {
+	    if (n->ptr == ptr) {
+		n->ptr = ptr = xrealloc(ptr, size);
+		if (n->cnt) n->cnt = cnt;
+		return ptr;
+	    }
+	} while ((n = n->next) != NULL);
+    }
+    n = NEWHEAP();
+    ptr = xrealloc(ptr, size);
+    return ADD2HEAP(n, cnt, ptr);
+}
+
+void
+rb_parser_free(struct parser_params *p, void *ptr)
+{
+    rb_imemo_tmpbuf_t **prev = &p->heap, *n;
+
+    while ((n = *prev) != NULL) {
+	if (n->ptr == ptr) {
+	    *prev = n->next;
+	    break;
+	}
+	prev = &n->next;
+    }
+}
+#endif
+
+void
+rb_parser_printf(struct parser_params *p, const char *fmt, ...)
+{
+    va_list ap;
+    VALUE mesg = p->debug_buffer;
+
+    if (NIL_P(mesg)) p->debug_buffer = mesg = rb_str_new(0, 0);
+    va_start(ap, fmt);
+    rb_str_vcatf(mesg, fmt, ap);
+    va_end(ap);
+    if (RSTRING_END(mesg)[-1] == '\n') {
+	rb_io_write(p->debug_output, mesg);
+	p->debug_buffer = Qnil;
+    }
+}
+
+static void
+parser_compile_error(struct parser_params *p, const char *fmt, ...)
+{
+    va_list ap;
+
+    rb_io_flush(p->debug_output);
+    p->error_p = 1;
+    va_start(ap, fmt);
+    p->error_buffer =
+	rb_syntax_error_append(p->error_buffer,
+			       p->ruby_sourcefile_string,
+			       p->ruby_sourceline,
+			       rb_long2int(p->lex.pcur - p->lex.pbeg),
+			       p->enc, fmt, ap);
+    va_end(ap);
+}
+
+static size_t
+count_char(const char *str, int c)
+{
+    int n = 0;
+    while (str[n] == c) ++n;
+    return n;
+}
+
+/*
+ * strip enclosing double-quotes, same as the default yytnamerr except
+ * for that single-quotes matching back-quotes do not stop stripping.
+ *
+ *  "\"`class' keyword\"" => "`class' keyword"
+ */
+RUBY_FUNC_EXPORTED size_t
+rb_yytnamerr(struct parser_params *p, char *yyres, const char *yystr)
+{
+    if (*yystr == '"') {
+	size_t yyn = 0, bquote = 0;
+	const char *yyp = yystr;
+
+	while (*++yyp) {
+	    switch (*yyp) {
+	      case '`':
+		if (!bquote) {
+		    bquote = count_char(yyp+1, '`') + 1;
+		    if (yyres) memcpy(&yyres[yyn], yyp, bquote);
+		    yyn += bquote;
+		    yyp += bquote - 1;
+		    break;
+		}
+		goto default_char;
+
+	      case '\'':
+		if (bquote && count_char(yyp+1, '\'') + 1 == bquote) {
+		    if (yyres) memcpy(yyres + yyn, yyp, bquote);
+		    yyn += bquote;
+		    yyp += bquote - 1;
+		    bquote = 0;
+		    break;
+		}
+		if (yyp[1] && yyp[1] != '\'' && yyp[2] == '\'') {
+		    if (yyres) memcpy(yyres + yyn, yyp, 3);
+		    yyn += 3;
+		    yyp += 2;
+		    break;
+		}
+		goto do_not_strip_quotes;
+
+	      case ',':
+		goto do_not_strip_quotes;
+
+	      case '\\':
+		if (*++yyp != '\\')
+		    goto do_not_strip_quotes;
+		/* Fall through.  */
+	      default_char:
+	      default:
+		if (yyres)
+		    yyres[yyn] = *yyp;
+		yyn++;
+		break;
+
+	      case '"':
+	      case '\0':
+		if (yyres)
+		    yyres[yyn] = '\0';
+		return yyn;
+	    }
+	}
+      do_not_strip_quotes: ;
+    }
+
+    if (!yyres) return strlen(yystr);
+
+    return (YYSIZE_T)(yystpcpy(yyres, yystr) - yyres);
+}
+#endif
+
+#ifdef RIPPER
+#ifdef RIPPER_DEBUG
+/* :nodoc: */
+static VALUE
+ripper_validate_object(VALUE self, VALUE x)
+{
+    if (x == Qfalse) return x;
+    if (x == Qtrue) return x;
+    if (x == Qnil) return x;
+    if (x == Qundef)
+	rb_raise(rb_eArgError, "Qundef given");
+    if (FIXNUM_P(x)) return x;
+    if (SYMBOL_P(x)) return x;
+    switch (BUILTIN_TYPE(x)) {
+      case T_STRING:
+      case T_OBJECT:
+      case T_ARRAY:
+      case T_BIGNUM:
+      case T_FLOAT:
+      case T_COMPLEX:
+      case T_RATIONAL:
+	break;
+      case T_NODE:
+	if (!nd_type_p((NODE *)x, NODE_RIPPER)) {
+	    rb_raise(rb_eArgError, "NODE given: %p", (void *)x);
+	}
+	x = ((NODE *)x)->nd_rval;
+	break;
+      default:
+	rb_raise(rb_eArgError, "wrong type of ruby object: %p (%s)",
+		 (void *)x, rb_obj_classname(x));
+    }
+    if (!RBASIC_CLASS(x)) {
+	rb_raise(rb_eArgError, "hidden ruby object: %p (%s)",
+		 (void *)x, rb_builtin_type_name(TYPE(x)));
+    }
+    return x;
+}
+#endif
+
+#define validate(x) ((x) = get_value(x))
+
+static VALUE
+ripper_dispatch0(struct parser_params *p, ID mid)
+{
+    return rb_funcall(p->value, mid, 0);
+}
+
+static VALUE
+ripper_dispatch1(struct parser_params *p, ID mid, VALUE a)
+{
+    validate(a);
+    return rb_funcall(p->value, mid, 1, a);
+}
+
+static VALUE
+ripper_dispatch2(struct parser_params *p, ID mid, VALUE a, VALUE b)
+{
+    validate(a);
+    validate(b);
+    return rb_funcall(p->value, mid, 2, a, b);
+}
+
+static VALUE
+ripper_dispatch3(struct parser_params *p, ID mid, VALUE a, VALUE b, VALUE c)
+{
+    validate(a);
+    validate(b);
+    validate(c);
+    return rb_funcall(p->value, mid, 3, a, b, c);
+}
+
+static VALUE
+ripper_dispatch4(struct parser_params *p, ID mid, VALUE a, VALUE b, VALUE c, VALUE d)
+{
+    validate(a);
+    validate(b);
+    validate(c);
+    validate(d);
+    return rb_funcall(p->value, mid, 4, a, b, c, d);
+}
+
+static VALUE
+ripper_dispatch5(struct parser_params *p, ID mid, VALUE a, VALUE b, VALUE c, VALUE d, VALUE e)
+{
+    validate(a);
+    validate(b);
+    validate(c);
+    validate(d);
+    validate(e);
+    return rb_funcall(p->value, mid, 5, a, b, c, d, e);
+}
+
+static VALUE
+ripper_dispatch7(struct parser_params *p, ID mid, VALUE a, VALUE b, VALUE c, VALUE d, VALUE e, VALUE f, VALUE g)
+{
+    validate(a);
+    validate(b);
+    validate(c);
+    validate(d);
+    validate(e);
+    validate(f);
+    validate(g);
+    return rb_funcall(p->value, mid, 7, a, b, c, d, e, f, g);
+}
+
+static ID
+ripper_get_id(VALUE v)
+{
+    NODE *nd;
+    if (!RB_TYPE_P(v, T_NODE)) return 0;
+    nd = (NODE *)v;
+    if (!nd_type_p(nd, NODE_RIPPER)) return 0;
+    return nd->nd_vid;
+}
+
+static VALUE
+ripper_get_value(VALUE v)
+{
+    NODE *nd;
+    if (v == Qundef) return Qnil;
+    if (!RB_TYPE_P(v, T_NODE)) return v;
+    nd = (NODE *)v;
+    if (!nd_type_p(nd, NODE_RIPPER)) return Qnil;
+    return nd->nd_rval;
+}
+
+static void
+ripper_error(struct parser_params *p)
+{
+    p->error_p = TRUE;
+}
+
+static void
+ripper_compile_error(struct parser_params *p, const char *fmt, ...)
+{
+    VALUE str;
+    va_list args;
+
+    va_start(args, fmt);
+    str = rb_vsprintf(fmt, args);
+    va_end(args);
+    rb_funcall(p->value, rb_intern("compile_error"), 1, str);
+    ripper_error(p);
+}
+
+static VALUE
+ripper_lex_get_generic(struct parser_params *p, VALUE src)
+{
+    VALUE line = rb_funcallv_public(src, id_gets, 0, 0);
+    if (!NIL_P(line) && !RB_TYPE_P(line, T_STRING)) {
+	rb_raise(rb_eTypeError,
+		 "gets returned %"PRIsVALUE" (expected String or nil)",
+		 rb_obj_class(line));
+  
