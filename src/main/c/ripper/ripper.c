@@ -21639,4 +21639,285 @@ ripper_lex_get_generic(struct parser_params *p, VALUE src)
 	rb_raise(rb_eTypeError,
 		 "gets returned %"PRIsVALUE" (expected String or nil)",
 		 rb_obj_class(line));
-  
+    }
+    return line;
+}
+
+static VALUE
+ripper_lex_io_get(struct parser_params *p, VALUE src)
+{
+    return rb_io_gets(src);
+}
+
+static VALUE
+ripper_s_allocate(VALUE klass)
+{
+    struct parser_params *p;
+    VALUE self = TypedData_Make_Struct(klass, struct parser_params,
+				       &parser_data_type, p);
+    p->value = self;
+    return self;
+}
+
+#define ripper_initialized_p(r) ((r)->lex.input != 0)
+
+/*
+ *  call-seq:
+ *    Ripper.new(src, filename="(ripper)", lineno=1) -> ripper
+ *
+ *  Create a new Ripper object.
+ *  _src_ must be a String, an IO, or an Object which has #gets method.
+ *
+ *  This method does not starts parsing.
+ *  See also Ripper#parse and Ripper.parse.
+ */
+static VALUE
+ripper_initialize(int argc, VALUE *argv, VALUE self)
+{
+    struct parser_params *p;
+    VALUE src, fname, lineno;
+
+    TypedData_Get_Struct(self, struct parser_params, &parser_data_type, p);
+    rb_scan_args(argc, argv, "12", &src, &fname, &lineno);
+    if (RB_TYPE_P(src, T_FILE)) {
+        p->lex.gets = ripper_lex_io_get;
+    }
+    else if (rb_respond_to(src, id_gets)) {
+        p->lex.gets = ripper_lex_get_generic;
+    }
+    else {
+        StringValue(src);
+        p->lex.gets = lex_get_str;
+    }
+    p->lex.input = src;
+    p->eofp = 0;
+    if (NIL_P(fname)) {
+        fname = STR_NEW2("(ripper)");
+	OBJ_FREEZE(fname);
+    }
+    else {
+	StringValueCStr(fname);
+	fname = rb_str_new_frozen(fname);
+    }
+    parser_initialize(p);
+
+    p->ruby_sourcefile_string = fname;
+    p->ruby_sourcefile = RSTRING_PTR(fname);
+    p->ruby_sourceline = NIL_P(lineno) ? 0 : NUM2INT(lineno) - 1;
+
+    return Qnil;
+}
+
+static VALUE
+ripper_parse0(VALUE parser_v)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(parser_v, struct parser_params, &parser_data_type, p);
+    parser_prepare(p);
+    p->ast = rb_ast_new();
+    ripper_yyparse((void*)p);
+    rb_ast_dispose(p->ast);
+    p->ast = 0;
+    return p->result;
+}
+
+static VALUE
+ripper_ensure(VALUE parser_v)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(parser_v, struct parser_params, &parser_data_type, p);
+    p->parsing_thread = Qnil;
+    return Qnil;
+}
+
+/*
+ *  call-seq:
+ *    ripper.parse
+ *
+ *  Start parsing and returns the value of the root action.
+ */
+static VALUE
+ripper_parse(VALUE self)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(self, struct parser_params, &parser_data_type, p);
+    if (!ripper_initialized_p(p)) {
+        rb_raise(rb_eArgError, "method called for uninitialized object");
+    }
+    if (!NIL_P(p->parsing_thread)) {
+        if (p->parsing_thread == rb_thread_current())
+            rb_raise(rb_eArgError, "Ripper#parse is not reentrant");
+        else
+            rb_raise(rb_eArgError, "Ripper#parse is not multithread-safe");
+    }
+    p->parsing_thread = rb_thread_current();
+    rb_ensure(ripper_parse0, self, ripper_ensure, self);
+
+    return p->result;
+}
+
+/*
+ *  call-seq:
+ *    ripper.column   -> Integer
+ *
+ *  Return column number of current parsing line.
+ *  This number starts from 0.
+ */
+static VALUE
+ripper_column(VALUE self)
+{
+    struct parser_params *p;
+    long col;
+
+    TypedData_Get_Struct(self, struct parser_params, &parser_data_type, p);
+    if (!ripper_initialized_p(p)) {
+        rb_raise(rb_eArgError, "method called for uninitialized object");
+    }
+    if (NIL_P(p->parsing_thread)) return Qnil;
+    col = p->lex.ptok - p->lex.pbeg;
+    return LONG2NUM(col);
+}
+
+/*
+ *  call-seq:
+ *    ripper.filename   -> String
+ *
+ *  Return current parsing filename.
+ */
+static VALUE
+ripper_filename(VALUE self)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(self, struct parser_params, &parser_data_type, p);
+    if (!ripper_initialized_p(p)) {
+        rb_raise(rb_eArgError, "method called for uninitialized object");
+    }
+    return p->ruby_sourcefile_string;
+}
+
+/*
+ *  call-seq:
+ *    ripper.lineno   -> Integer
+ *
+ *  Return line number of current parsing line.
+ *  This number starts from 1.
+ */
+static VALUE
+ripper_lineno(VALUE self)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(self, struct parser_params, &parser_data_type, p);
+    if (!ripper_initialized_p(p)) {
+        rb_raise(rb_eArgError, "method called for uninitialized object");
+    }
+    if (NIL_P(p->parsing_thread)) return Qnil;
+    return INT2NUM(p->ruby_sourceline);
+}
+
+/*
+ *  call-seq:
+ *    ripper.state   -> Integer
+ *
+ *  Return scanner state of current token.
+ */
+static VALUE
+ripper_state(VALUE self)
+{
+    struct parser_params *p;
+
+    TypedData_Get_Struct(self, struct parser_params, &parser_data_type, p);
+    if (!ripper_initialized_p(p)) {
+	rb_raise(rb_eArgError, "method called for uninitialized object");
+    }
+    if (NIL_P(p->parsing_thread)) return Qnil;
+    return INT2NUM(p->lex.state);
+}
+
+/*
+ *  call-seq:
+ *    ripper.token   -> String
+ *
+ *  Return the current token string.
+ */
+static VALUE
+ripper_token(VALUE self)
+{
+    struct parser_params *p;
+    long pos, len;
+
+    TypedData_Get_Struct(self, struct parser_params, &parser_data_type, p);
+    if (!ripper_initialized_p(p)) {
+        rb_raise(rb_eArgError, "method called for uninitialized object");
+    }
+    if (NIL_P(p->parsing_thread)) return Qnil;
+    pos = p->lex.ptok - p->lex.pbeg;
+    len = p->lex.pcur - p->lex.ptok;
+    return rb_str_subseq(p->lex.lastline, pos, len);
+}
+
+#ifdef RIPPER_DEBUG
+/* :nodoc: */
+static VALUE
+ripper_assert_Qundef(VALUE self, VALUE obj, VALUE msg)
+{
+    StringValue(msg);
+    if (obj == Qundef) {
+        rb_raise(rb_eArgError, "%"PRIsVALUE, msg);
+    }
+    return Qnil;
+}
+
+/* :nodoc: */
+static VALUE
+ripper_value(VALUE self, VALUE obj)
+{
+    return ULONG2NUM(obj);
+}
+#endif
+
+/*
+ *  call-seq:
+ *    Ripper.lex_state_name(integer)   -> string
+ *
+ *  Returns a string representation of lex_state.
+ */
+static VALUE
+ripper_lex_state_name(VALUE self, VALUE state)
+{
+    return rb_parser_lex_state_name(NUM2INT(state));
+}
+
+void
+Init_ripper(void)
+{
+    ripper_init_eventids1();
+    ripper_init_eventids2();
+    id_warn = rb_intern_const("warn");
+    id_warning = rb_intern_const("warning");
+    id_gets = rb_intern_const("gets");
+    id_assoc = rb_intern_const("=>");
+
+    (void)yystpcpy; /* may not used in newer bison */
+
+    InitVM(ripper);
+}
+
+void
+InitVM_ripper(void)
+{
+    VALUE Ripper;
+
+    Ripper = rb_define_class("Ripper", rb_cObject);
+    /* version of Ripper */
+    rb_define_const(Ripper, "Version", rb_usascii_str_new2(RIPPER_VERSION));
+    rb_define_alloc_func(Ripper, ripper_s_allocate);
+    rb_define_method(Ripper, "initialize", ripper_initialize, -1);
+    rb_define_method(Ripper, "parse", ripper_parse, 0);
+    rb_define_method(Ripper, "column", ripper_column, 0);
+    rb_define_method(Ripper, "filename", ripper_filename, 0);
+    rb_define_method(Ripper
