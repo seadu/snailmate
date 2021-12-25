@@ -21920,4 +21920,84 @@ InitVM_ripper(void)
     rb_define_method(Ripper, "parse", ripper_parse, 0);
     rb_define_method(Ripper, "column", ripper_column, 0);
     rb_define_method(Ripper, "filename", ripper_filename, 0);
-    rb_define_method(Ripper
+    rb_define_method(Ripper, "lineno", ripper_lineno, 0);
+    rb_define_method(Ripper, "state", ripper_state, 0);
+    rb_define_method(Ripper, "token", ripper_token, 0);
+    rb_define_method(Ripper, "end_seen?", rb_parser_end_seen_p, 0);
+    rb_define_method(Ripper, "encoding", rb_parser_encoding, 0);
+    rb_define_method(Ripper, "yydebug", rb_parser_get_yydebug, 0);
+    rb_define_method(Ripper, "yydebug=", rb_parser_set_yydebug, 1);
+    rb_define_method(Ripper, "debug_output", rb_parser_get_debug_output, 0);
+    rb_define_method(Ripper, "debug_output=", rb_parser_set_debug_output, 1);
+    rb_define_method(Ripper, "error?", ripper_error_p, 0);
+#ifdef RIPPER_DEBUG
+    rb_define_method(Ripper, "assert_Qundef", ripper_assert_Qundef, 2);
+    rb_define_method(Ripper, "rawVALUE", ripper_value, 1);
+    rb_define_method(Ripper, "validate_object", ripper_validate_object, 1);
+#endif
+
+    rb_define_singleton_method(Ripper, "dedent_string", parser_dedent_string, 2);
+    rb_define_private_method(Ripper, "dedent_string", parser_dedent_string, 2);
+
+    rb_define_singleton_method(Ripper, "lex_state_name", ripper_lex_state_name, 1);
+
+    /* ignore newline, +/- is a sign. */
+    rb_define_const(Ripper, "EXPR_BEG", INT2NUM(EXPR_BEG));
+    /* newline significant, +/- is an operator. */
+    rb_define_const(Ripper, "EXPR_END", INT2NUM(EXPR_END));
+    /* ditto, and unbound braces. */
+    rb_define_const(Ripper, "EXPR_ENDARG", INT2NUM(EXPR_ENDARG));
+    /* ditto, and unbound braces. */
+    rb_define_const(Ripper, "EXPR_ENDFN", INT2NUM(EXPR_ENDFN));
+    /* newline significant, +/- is an operator. */
+    rb_define_const(Ripper, "EXPR_ARG", INT2NUM(EXPR_ARG));
+    /* newline significant, +/- is an operator. */
+    rb_define_const(Ripper, "EXPR_CMDARG", INT2NUM(EXPR_CMDARG));
+    /* newline significant, +/- is an operator. */
+    rb_define_const(Ripper, "EXPR_MID", INT2NUM(EXPR_MID));
+    /* ignore newline, no reserved words. */
+    rb_define_const(Ripper, "EXPR_FNAME", INT2NUM(EXPR_FNAME));
+    /* right after `.' or `::', no reserved words. */
+    rb_define_const(Ripper, "EXPR_DOT", INT2NUM(EXPR_DOT));
+    /* immediate after `class', no here document. */
+    rb_define_const(Ripper, "EXPR_CLASS", INT2NUM(EXPR_CLASS));
+    /* flag bit, label is allowed. */
+    rb_define_const(Ripper, "EXPR_LABEL", INT2NUM(EXPR_LABEL));
+    /* flag bit, just after a label. */
+    rb_define_const(Ripper, "EXPR_LABELED", INT2NUM(EXPR_LABELED));
+    /* symbol literal as FNAME. */
+    rb_define_const(Ripper, "EXPR_FITEM", INT2NUM(EXPR_FITEM));
+    /* equals to +EXPR_BEG+ */
+    rb_define_const(Ripper, "EXPR_VALUE", INT2NUM(EXPR_VALUE));
+    /* equals to <tt>(EXPR_BEG | EXPR_MID | EXPR_CLASS)</tt> */
+    rb_define_const(Ripper, "EXPR_BEG_ANY", INT2NUM(EXPR_BEG_ANY));
+    /* equals to <tt>(EXPR_ARG | EXPR_CMDARG)</tt> */
+    rb_define_const(Ripper, "EXPR_ARG_ANY", INT2NUM(EXPR_ARG_ANY));
+    /* equals to <tt>(EXPR_END | EXPR_ENDARG | EXPR_ENDFN)</tt> */
+    rb_define_const(Ripper, "EXPR_END_ANY", INT2NUM(EXPR_END_ANY));
+    /* equals to +0+ */
+    rb_define_const(Ripper, "EXPR_NONE", INT2NUM(EXPR_NONE));
+
+    ripper_init_eventids1_table(Ripper);
+    ripper_init_eventids2_table(Ripper);
+
+# if 0
+    /* Hack to let RDoc document SCRIPT_LINES__ */
+
+    /*
+     * When a Hash is assigned to +SCRIPT_LINES__+ the contents of files loaded
+     * after the assignment will be added as an Array of lines with the file
+     * name as the key.
+     */
+    rb_define_global_const("SCRIPT_LINES__", Qnil);
+#endif
+
+}
+#endif /* RIPPER */
+
+/*
+ * Local variables:
+ * mode: c
+ * c-file-style: "ruby"
+ * End:
+ */
