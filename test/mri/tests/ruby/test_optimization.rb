@@ -210,4 +210,277 @@ class TestRubyOptimization < Test::Unit::TestCase
 
   def test_string_freeze_saves_memory
     n = 16384
-    dat
+    data = '.'.freeze
+    r, w = IO.pipe
+    w.write data
+
+    s = r.readpartial(n, '')
+    assert_operator ObjectSpace.memsize_of(s), :>=, n,
+      'IO buffer NOT resized prematurely because will likely be reused'
+
+    s.freeze
+    assert_equal ObjectSpace.memsize_of(data), ObjectSpace.memsize_of(s),
+      'buffer resized on freeze since it cannot be written to again'
+  ensure
+    r.close if r
+    w.close if w
+  end
+
+  def test_string_eq_neq
+    %w(== !=).each do |m|
+      assert_redefine_method('String', m, <<-end)
+        assert_equal :b, ("a" #{m} "b").to_sym
+        b = 'b'
+        assert_equal :b, ("a" #{m} b).to_sym
+        assert_equal :b, (b #{m} "b").to_sym
+      end
+    end
+  end
+
+  def test_string_ltlt
+    assert_equal "", "" << ""
+    assert_equal "x", "x" << ""
+    assert_equal "x", "" << "x"
+    assert_equal "ab", "a" << "b"
+    assert_redefine_method('String', '<<', 'assert_equal "b", "a" << "b"')
+  end
+
+  def test_fixnum_and
+    assert_equal 1, 1&3
+    assert_redefine_method('Integer', '&', 'assert_equal 3, 1&3')
+  end
+
+  def test_fixnum_or
+    assert_equal 3, 1|3
+    assert_redefine_method('Integer', '|', 'assert_equal 1, 3|1')
+  end
+
+  def test_array_plus
+    assert_equal [1,2], [1]+[2]
+    assert_redefine_method('Array', '+', 'assert_equal [2], [1]+[2]')
+  end
+
+  def test_array_minus
+    assert_equal [2], [1,2] - [1]
+    assert_redefine_method('Array', '-', 'assert_equal [1], [1,2]-[1]')
+  end
+
+  def test_array_length
+    assert_equal 0, [].length
+    assert_equal 3, [1,2,3].length
+    assert_redefine_method('Array', 'length', 'assert_nil([].length); assert_nil([1,2,3].length)')
+  end
+
+  def test_array_empty?
+    assert_equal true, [].empty?
+    assert_equal false, [1,2,3].empty?
+    assert_redefine_method('Array', 'empty?', 'assert_nil([].empty?); assert_nil([1,2,3].empty?)')
+  end
+
+  def test_hash_length
+    assert_equal 0, {}.length
+    assert_equal 1, {1=>1}.length
+    assert_redefine_method('Hash', 'length', 'assert_nil({}.length); assert_nil({1=>1}.length)')
+  end
+
+  def test_hash_empty?
+    assert_equal true, {}.empty?
+    assert_equal false, {1=>1}.empty?
+    assert_redefine_method('Hash', 'empty?', 'assert_nil({}.empty?); assert_nil({1=>1}.empty?)')
+  end
+
+  def test_hash_aref_with
+    h = { "foo" => 1 }
+    assert_equal 1, h["foo"]
+    assert_redefine_method('Hash', '[]', "#{<<-"begin;"}\n#{<<~"end;"}")
+    begin;
+      h = { "foo" => 1 }
+      assert_equal "foo", h["foo"]
+    end;
+  end
+
+  def test_hash_aset_with
+    h = {}
+    assert_equal 1, h["foo"] = 1
+    assert_redefine_method('Hash', '[]=', "#{<<-"begin;"}\n#{<<~"end;"}")
+    begin;
+      h = {}
+      assert_equal 1, h["foo"] = 1, "assignment always returns value set"
+      assert_nil h["foo"]
+    end;
+  end
+
+  class MyObj
+    def ==(other)
+      true
+    end
+  end
+
+  def test_eq
+    assert_equal true, nil == nil
+    assert_equal true, 1 == 1
+    assert_equal true, 'string' == 'string'
+    assert_equal true, 1 == MyObj.new
+    assert_equal false, nil == MyObj.new
+    assert_equal true, MyObj.new == 1
+    assert_equal true, MyObj.new == nil
+  end
+
+  def self.tailcall(klass, src, file = nil, path = nil, line = nil, tailcall: true)
+    unless file
+      loc, = caller_locations(1, 1)
+      file = loc.path
+      line ||= loc.lineno + 1
+    end
+    RubyVM::InstructionSequence.new("proc {|_|_.class_eval {#{src}}}",
+                                    file, (path || file), line,
+                                    tailcall_optimization: tailcall,
+                                    trace_instruction: false)
+      .eval[klass]
+  end
+
+  def tailcall(*args)
+    self.class.tailcall(singleton_class, *args)
+  end
+
+  def test_tailcall
+    bug4082 = '[ruby-core:33289]'
+
+    tailcall("#{<<-"begin;"}\n#{<<~"end;"}")
+    begin;
+      def fact_helper(n, res)
+        if n == 1
+          res
+        else
+          fact_helper(n - 1, n * res)
+        end
+      end
+      def fact(n)
+        fact_helper(n, 1)
+      end
+    end;
+    assert_equal(9131, fact(3000).to_s.size, message(bug4082) {disasm(:fact_helper)})
+  end
+
+  def test_tailcall_with_block
+    bug6901 = '[ruby-dev:46065]'
+
+    tailcall("#{<<-"begin;"}\n#{<<~"end;"}")
+    begin;
+      def identity(val)
+        val
+      end
+
+      def delay
+        -> {
+          identity(yield)
+        }
+      end
+    end;
+    assert_equal(123, delay { 123 }.call, message(bug6901) {disasm(:delay)})
+  end
+
+  def just_yield
+    yield
+  end
+
+  def test_tailcall_inhibited_by_block
+    tailcall("#{<<-"begin;"}\n#{<<~"end;"}")
+    begin;
+      def yield_result
+        just_yield {:ok}
+      end
+    end;
+    assert_equal(:ok, yield_result, message {disasm(:yield_result)})
+  end
+
+  def do_raise
+    raise "should be rescued"
+  end
+
+  def errinfo
+    $!
+  end
+
+  def test_tailcall_inhibited_by_rescue
+    bug12082 = '[ruby-core:73871] [Bug #12082]'
+
+    EnvUtil.suppress_warning {tailcall("#{<<-"begin;"}\n#{<<~"end;"}")}
+    begin;
+      def to_be_rescued
+        return do_raise
+        1 + 2
+      rescue
+        errinfo
+      end
+    end;
+    result = assert_nothing_raised(RuntimeError, message(bug12082) {disasm(:to_be_rescued)}) {
+      to_be_rescued
+    }
+    assert_instance_of(RuntimeError, result, bug12082)
+    assert_equal("should be rescued", result.message, bug12082)
+  end
+
+  def test_tailcall_symbol_block_arg
+    bug12565 = '[ruby-core:46065]'
+    tailcall("#{<<-"begin;"}\n#{<<~"end;"}")
+    begin;
+      def apply_one_and_two(&block)
+        yield(1, 2)
+      end
+
+      def add_one_and_two
+        apply_one_and_two(&:+)
+      end
+    end;
+    assert_equal(3, add_one_and_two,
+                 message(bug12565) {disasm(:add_one_and_two)})
+  end
+
+  def test_tailcall_interrupted_by_sigint
+    bug12576 = 'ruby-core:76327'
+    script = "#{<<-"begin;"}\n#{<<~'end;'}"
+    begin;
+      RubyVM::InstructionSequence.compile_option = {
+        :tailcall_optimization => true,
+        :trace_instruction => false
+      }
+
+      eval "#{<<~"begin;"}\n#{<<~'end;1'}"
+      begin;
+        def foo
+          foo
+        end
+        puts("start")
+        STDOUT.flush
+        foo
+      end;1
+    end;
+    status, _err = EnvUtil.invoke_ruby([], "", true, true, **{}) {
+      |in_p, out_p, err_p, pid|
+      in_p.write(script)
+      in_p.close
+      out_p.gets
+      sig = :INT
+      begin
+        Process.kill(sig, pid)
+        Timeout.timeout(1) do
+          *, stat = Process.wait2(pid)
+          [stat, err_p.read]
+        end
+      rescue Timeout::Error
+        if sig == :INT
+          sig = :KILL
+          retry
+        else
+          raise
+        end
+      end
+    }
+    assert_not_equal("SEGV", Signal.signame(status.termsig || 0), bug12576)
+  end unless /mswin|mingw/ =~ RUBY_PLATFORM
+
+  def test_tailcall_condition_block
+    bug = '[ruby-core:78015] [Bug #12905]'
+
+    src = "#{<<-"begin;"}\n#{<<
