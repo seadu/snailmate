@@ -483,4 +483,268 @@ class TestRubyOptimization < Test::Unit::TestCase
   def test_tailcall_condition_block
     bug = '[ruby-core:78015] [Bug #12905]'
 
-    src = "#{<<-"begin;"}\n#{<<
+    src = "#{<<-"begin;"}\n#{<<~"end;"}", __FILE__, nil, __LINE__+1
+    begin;
+      def run(current, final)
+        if current < final
+          run(current+1, final)
+        else
+          nil
+        end
+      end
+    end;
+
+    obj = Object.new
+    self.class.tailcall(obj.singleton_class, *src, tailcall: false)
+    e = assert_raise(SystemStackError) {
+      obj.run(1, Float::INFINITY)
+    }
+    level = e.backtrace_locations.size
+    obj = Object.new
+    self.class.tailcall(obj.singleton_class, *src, tailcall: true)
+    level *= 2
+    mesg = message {"#{bug}: #{$!.backtrace_locations.size} / #{level} stack levels"}
+    assert_nothing_raised(SystemStackError, mesg) {
+      obj.run(1, level)
+    }
+  end
+
+  def test_tailcall_not_to_grow_stack
+    skip 'currently JIT-ed code always creates a new stack frame' if defined?(RubyVM::MJIT) && RubyVM::MJIT.enabled?
+    bug16161 = '[ruby-core:94881]'
+
+    tailcall("#{<<-"begin;"}\n#{<<~"end;"}")
+    begin;
+      def foo(n)
+        return :ok if n < 1
+        foo(n - 1)
+      end
+    end;
+    assert_nothing_raised(SystemStackError, bug16161) do
+      assert_equal(:ok, foo(1_000_000), bug16161)
+    end
+  end
+
+  class Bug10557
+    def [](_)
+      block_given?
+    end
+
+    def []=(_, _)
+      block_given?
+    end
+  end
+
+  def test_block_given_aset_aref
+    bug10557 = '[ruby-core:66595]'
+    assert_equal(true, Bug10557.new.[](nil){}, bug10557)
+    assert_equal(true, Bug10557.new.[](0){}, bug10557)
+    assert_equal(true, Bug10557.new.[](false){}, bug10557)
+    assert_equal(true, Bug10557.new.[](''){}, bug10557)
+    assert_equal(true, Bug10557.new.[]=(nil, 1){}, bug10557)
+    assert_equal(true, Bug10557.new.[]=(0, 1){}, bug10557)
+    assert_equal(true, Bug10557.new.[]=(false, 1){}, bug10557)
+    assert_equal(true, Bug10557.new.[]=('', 1){}, bug10557)
+  end
+
+  def test_string_freeze_block
+    assert_separately([], "#{<<-"begin;"}\n#{<<~"end;"}")
+    begin;
+      class String
+        undef freeze
+        def freeze
+          block_given?
+        end
+      end
+      assert_equal(true, "block".freeze {})
+      assert_equal(false, "block".freeze)
+    end;
+  end
+
+  def test_opt_case_dispatch
+    code = "#{<<-"begin;"}\n#{<<~"end;"}"
+    begin;
+      case foo
+      when "foo" then :foo
+      when true then true
+      when false then false
+      when :sym then :sym
+      when 6 then :fix
+      when nil then nil
+      when 0.1 then :float
+      when 0xffffffffffffffff then :big
+      else
+        :nomatch
+      end
+    end;
+    check = {
+      'foo' => :foo,
+      true => true,
+      false => false,
+      :sym => :sym,
+      6 => :fix,
+      nil => nil,
+      0.1 => :float,
+      0xffffffffffffffff => :big,
+    }
+    iseq = RubyVM::InstructionSequence.compile(code)
+    assert_match %r{\bopt_case_dispatch\b}, iseq.disasm
+    check.each do |foo, expect|
+      assert_equal expect, eval("foo = #{foo.inspect}\n#{code}")
+    end
+    assert_equal :nomatch, eval("foo = :blah\n#{code}")
+    check.each do |foo, _|
+      klass = foo.class.to_s
+      assert_separately([], "#{<<~"begin;"}\n#{<<~"end;"}")
+      begin;
+        class #{klass}
+          undef ===
+          def ===(*args)
+            false
+          end
+        end
+        foo = #{foo.inspect}
+        ret = #{code}
+        assert_equal :nomatch, ret, foo.inspect
+      end;
+    end
+  end
+
+  def test_eqq
+    [ nil, true, false, 0.1, :sym, 'str', 0xffffffffffffffff ].each do |v|
+      k = v.class.to_s
+      assert_redefine_method(k, '===', "assert_equal(#{v.inspect} === 0, 0)")
+    end
+  end
+
+  def test_opt_case_dispatch_inf
+    inf = 1.0/0.0
+    result = case inf
+             when 1 then 1
+             when 0 then 0
+             else
+               inf.to_i rescue nil
+             end
+    assert_nil result, '[ruby-dev:49423] [Bug #11804]'
+  end
+
+  def test_nil_safe_conditional_assign
+    bug11816 = '[ruby-core:74993] [Bug #11816]'
+    assert_ruby_status([], 'nil&.foo &&= false', bug11816)
+  end
+
+  def test_peephole_string_literal_range
+    code = "#{<<~"begin;"}\n#{<<~"end;"}"
+    begin;
+      case ver
+      when "2.0.0".."2.3.2" then :foo
+      when "1.8.0"..."1.8.8" then :bar
+      end
+    end;
+    [ true, false ].each do |opt|
+      iseq = RubyVM::InstructionSequence.compile(code,
+                                                 frozen_string_literal: opt)
+      insn = iseq.disasm
+      assert_match %r{putobject\s+#{Regexp.quote('"1.8.0"..."1.8.8"')}}, insn
+      assert_match %r{putobject\s+#{Regexp.quote('"2.0.0".."2.3.2"')}}, insn
+      assert_no_match(/putstring/, insn)
+      assert_no_match(/newrange/, insn)
+    end
+  end
+
+  def test_peephole_dstr
+    code = "#{<<~'begin;'}\n#{<<~'end;'}"
+    begin;
+      exp = -'a'
+      z = 'a'
+      [exp, -"#{z}"]
+    end;
+    [ false, true ].each do |fsl|
+      iseq = RubyVM::InstructionSequence.compile(code,
+                                                 frozen_string_literal: fsl)
+      assert_same(*iseq.eval,
+                  "[ruby-core:85542] [Bug #14475] fsl: #{fsl}")
+    end
+  end
+
+  def test_branch_condition_backquote
+    bug = '[ruby-core:80740] [Bug #13444] redefined backquote should be called'
+    class << self
+      def `(s)
+        @q = s
+        @r
+      end
+    end
+
+    @q = nil
+    @r = nil
+    assert_equal("bar", ("bar" unless `foo`), bug)
+    assert_equal("foo", @q, bug)
+
+    @q = nil
+    @r = true
+    assert_equal("bar", ("bar" if `foo`), bug)
+    assert_equal("foo", @q, bug)
+
+    @q = nil
+    @r = "z"
+    assert_equal("bar", ("bar" if `foo#{@r}`))
+    assert_equal("fooz", @q, bug)
+  end
+
+  def test_branch_condition_def
+    bug = '[ruby-core:80740] [Bug #13444] method should be defined'
+    c = Class.new do
+      raise "bug" unless def t;:ok;end
+    end
+    assert_nothing_raised(NoMethodError, bug) do
+      assert_equal(:ok, c.new.t)
+    end
+  end
+
+  def test_branch_condition_defs
+    bug = '[ruby-core:80740] [Bug #13444] singleton method should be defined'
+    raise "bug" unless def self.t;:ok;end
+    assert_nothing_raised(NameError, bug) do
+      assert_equal(:ok, t)
+    end
+  end
+
+  def test_retry_label_in_unreachable_chunk
+    bug = '[ruby-core:81272] [Bug #13578]'
+    assert_valid_syntax("#{<<-"begin;"}\n#{<<-"end;"}", bug)
+    begin;
+      def t; if false; case 42; when s {}; end; end; end
+    end;
+  end
+
+  def bptest_yield &b
+    yield
+  end
+
+  def bptest_yield_pass &b
+    bptest_yield(&b)
+  end
+
+  def bptest_bp_value &b
+    b
+  end
+
+  def bptest_bp_pass_bp_value &b
+    bptest_bp_value(&b)
+  end
+
+  def bptest_binding &b
+    binding
+  end
+
+  def bptest_set &b
+    b = Proc.new{2}
+  end
+
+  def test_block_parameter
+    assert_equal(1, bptest_yield{1})
+    assert_equal(1, bptest_yield_pass{1})
+    assert_equal(1, send(:bptest_yield){1})
+
+    assert_equal(Proc, bptest_bp_value{}.
