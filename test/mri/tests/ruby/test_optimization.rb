@@ -747,4 +747,190 @@ class TestRubyOptimization < Test::Unit::TestCase
     assert_equal(1, bptest_yield_pass{1})
     assert_equal(1, send(:bptest_yield){1})
 
-    assert_equal(Proc, bptest_bp_value{}.
+    assert_equal(Proc, bptest_bp_value{}.class)
+    assert_equal nil, bptest_bp_value
+    assert_equal(Proc, bptest_bp_pass_bp_value{}.class)
+    assert_equal nil, bptest_bp_pass_bp_value
+
+    assert_equal Proc, bptest_binding{}.local_variable_get(:b).class
+
+    assert_equal 2, bptest_set{1}.call
+  end
+
+  def test_block_parameter_should_not_create_objects
+    assert_separately [], <<-END
+      def foo &b
+      end
+      h1 = {}; h2 = {}
+      ObjectSpace.count_objects(h1) # rehearsal
+      GC.start; GC.disable          # to disable GC while foo{}
+      ObjectSpace.count_objects(h1)
+      foo{}
+      ObjectSpace.count_objects(h2)
+
+      assert_equal 0, h2[:T_DATA] - h1[:T_DATA] # Proc is T_DATA
+    END
+  end
+
+  def test_peephole_optimization_without_trace
+    assert_separately [], <<-END
+      RubyVM::InstructionSequence.compile_option = {trace_instruction: false}
+      eval "def foo; 1.times{|(a), &b| nil && a}; end"
+    END
+  end
+
+  def test_clear_unreachable_keyword_args
+    assert_separately [], <<-END, timeout: 60
+      script =  <<-EOS
+        if true
+        else
+          foo(k1:1)
+        end
+      EOS
+      GC.stress = true
+      30.times{
+        RubyVM::InstructionSequence.compile(script)
+      }
+    END
+  end
+
+  def test_callinfo_unreachable_path
+    assert_separately([], "#{<<~"begin;"}\n#{<<~'end;'}")
+    begin;
+      iseq = RubyVM::InstructionSequence.compile("if false; foo(bar: :baz); else :ok end")
+      bin = iseq.to_binary
+      iseq = RubyVM::InstructionSequence.load_from_binary(bin)
+      assert_instance_of(RubyVM::InstructionSequence, iseq)
+      assert_equal(:ok, iseq.eval)
+    end;
+  end
+
+  def test_side_effect_in_popped_splat
+    bug = '[ruby-core:84340] [Bug #14201]'
+    eval("{**(bug = nil; {})};42")
+    assert_nil(bug)
+
+    bug = '[ruby-core:85486] [Bug #14459]'
+    h = {}
+    assert_equal(bug, eval('{ok: 42, **h}; bug'))
+    assert_equal(:ok, eval('{ok: bug = :ok, **h}; bug'))
+    assert_empty(h)
+  end
+
+  def test_overwritten_blockparam
+    obj = Object.new
+    def obj.a(&block)
+      block = 1
+      return :ok if block
+      :ng
+    end
+    assert_equal(:ok, obj.a())
+  end
+
+  def test_blockparam_in_rescue
+    obj = Object.new
+    def obj.foo(&b)
+      raise
+    rescue
+      b.call
+    end
+    result = nil
+    assert_equal(42, obj.foo {result = 42})
+    assert_equal(42, result)
+  end
+
+  def test_unconditional_branch_to_leave_block
+    assert_valid_syntax("#{<<~"begin;"}\n#{<<~'end;'}")
+    begin;
+      tap {true || tap {}}
+    end;
+  end
+
+  def test_jump_elimination_with_optimized_out_block
+    x = Object.new
+    def x.bug(obj)
+      if obj || obj
+        obj = obj
+      else
+        raise "[ruby-core:87830] [Bug #14897]"
+      end
+      obj
+    end
+    assert_equal(:ok, x.bug(:ok))
+  end
+
+  def test_jump_elimination_with_optimized_out_block_2
+    x = Object.new
+    def x.bug
+      a = "aaa"
+      ok = :NG
+      if a == "bbb" || a == "ccc" then
+        a = a
+      else
+        ok = :ok
+      end
+      ok
+    end
+    assert_equal(:ok, x.bug)
+  end
+
+  def test_peephole_jump_after_newarray
+    i = 0
+    %w(1) || 2 while (i += 1) < 100
+    assert_equal(100, i)
+  end
+
+  def test_optimized_empty_ensure
+    assert_separately([], "#{<<~"begin;"}\n#{<<~'end;'}", timeout: 10)
+    begin;
+      assert_raise(RuntimeError) {
+        begin raise ensure nil if nil end
+      }
+    end;
+  end
+
+  def test_optimized_rescue
+    assert_in_out_err("", "#{<<~"begin;"}\n#{<<~'end;'}", [], /END \(RuntimeError\)/)
+    begin;
+      if false
+        begin
+          require "some_mad_stuff"
+        rescue LoadError
+          puts "no mad stuff loaded"
+        end
+      end
+
+      raise  "END"
+    end;
+  end
+
+  class Objtostring
+  end
+
+  def test_objtostring
+    assert_raise(NoMethodError){"#{BasicObject.new}"}
+    assert_redefine_method('Symbol', 'to_s', <<-'end')
+      assert_match %r{\A#<Symbol:0x[0-9a-f]+>\z}, "#{:foo}"
+    end
+    assert_redefine_method('NilClass', 'to_s', <<-'end')
+      assert_match %r{\A#<NilClass:0x[0-9a-f]+>\z}, "#{nil}"
+    end
+    assert_redefine_method('TrueClass', 'to_s', <<-'end')
+      assert_match %r{\A#<TrueClass:0x[0-9a-f]+>\z}, "#{true}"
+    end
+    assert_redefine_method('FalseClass', 'to_s', <<-'end')
+      assert_match %r{\A#<FalseClass:0x[0-9a-f]+>\z}, "#{false}"
+    end
+    assert_redefine_method('Integer', 'to_s', <<-'end')
+      (-1..10).each { |i|
+        assert_match %r{\A#<Integer:0x[0-9a-f]+>\z}, "#{i}"
+      }
+    end
+    assert_equal "TestRubyOptimization::Objtostring", "#{Objtostring}"
+    assert_match %r{\A#<Class:0x[0-9a-f]+>\z}, "#{Class.new}"
+    assert_match %r{\A#<Module:0x[0-9a-f]+>\z}, "#{Module.new}"
+    o = Object.new
+    def o.to_s; 1; end
+    assert_match %r{\A#<Object:0x[0-9a-f]+>\z}, "#{o}"
+  end
+end
