@@ -8,4 +8,4 @@ exclude :test_num2uint, "needs investigation"
 exclude :test_num2ulong, "needs investigation"
 exclude :test_num2ushort, "needs investigation"
 exclude :test_num2ll, "needs investigation"
-exclude :test_num2ull, "nee
+exclude :test_num2ull, "needs investigation"
