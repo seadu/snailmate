@@ -26,4 +26,266 @@ require 'stringio'
 # $`               String          The string preceding the match in a successful pattern match. This variable
 #                                  is local to the current scope. [r/o, thread]
 # $'               String          The string following the match in a successful pattern match. This variable
-#                                  
+#                                  is local to the current scope. [r/o, thread]
+# $1 to $<N>       String          The contents of successive groups matched in a successful pattern match. In
+#                                  "cat" =~/(c|a)(t|z)/, $1 will be set to “a” and $2 to “t”. This variable
+#                                  is local to the current scope. [r/o, thread]
+# $~               MatchData       An object that encapsulates the results of a successful pattern match. The
+#                                  variables $&, $`, $', and $1 to $<N> are all derived from $~. Assigning to $~
+#                                  changes the values of these derived variables. This variable is local to the
+#                                  current scope. [thread]
+
+
+describe "Predefined global $~" do
+  it "is set to contain the MatchData object of the last match if successful" do
+    md = /foo/.match 'foo'
+    $~.should be_kind_of(MatchData)
+    $~.should equal md
+
+    /bar/ =~ 'bar'
+    $~.should be_kind_of(MatchData)
+    $~.should_not equal md
+  end
+
+  it "is set to nil if the last match was unsuccessful" do
+    /foo/ =~ 'foo'
+    $~.should_not.nil?
+
+    /foo/ =~ 'bar'
+    $~.should.nil?
+  end
+
+  it "is set at the method-scoped level rather than block-scoped" do
+    obj = Object.new
+    def obj.foo; yield; end
+    def obj.foo2(&proc); proc.call; end
+
+    match2 = nil
+    match3 = nil
+    match4 = nil
+
+    match1 = /foo/.match "foo"
+
+    obj.foo { match2 = /bar/.match("bar") }
+
+    match2.should_not == nil
+    $~.should == match2
+
+    eval 'match3 = /baz/.match("baz")'
+
+    match3.should_not == nil
+    $~.should == match3
+
+    obj.foo2 { match4 = /qux/.match("qux") }
+
+    match4.should_not == nil
+    $~.should == match4
+  end
+
+  it "raises an error if assigned an object not nil or instanceof MatchData" do
+    $~ = nil
+    $~.should == nil
+    $~ = /foo/.match("foo")
+    $~.should be_an_instance_of(MatchData)
+
+    -> { $~ = Object.new }.should raise_error(TypeError)
+    -> { $~ = 1 }.should raise_error(TypeError)
+  end
+
+  it "changes the value of derived capture globals when assigned" do
+    "foo" =~ /(f)oo/
+    foo_match = $~
+    "bar" =~ /(b)ar/
+    $~ = foo_match
+    $1.should == "f"
+  end
+
+  it "changes the value of the derived preceding match global" do
+    "foo hello" =~ /hello/
+    foo_match = $~
+    "bar" =~ /(bar)/
+    $~ = foo_match
+    $`.should == "foo "
+  end
+
+  it "changes the value of the derived following match global" do
+    "foo hello" =~ /foo/
+    foo_match = $~
+    "bar" =~ /(bar)/
+    $~ = foo_match
+    $'.should == " hello"
+  end
+
+  it "changes the value of the derived full match global" do
+    "foo hello" =~ /foo/
+    foo_match = $~
+    "bar" =~ /(bar)/
+    $~ = foo_match
+    $&.should == "foo"
+  end
+end
+
+describe "Predefined global $&" do
+  it "is equivalent to MatchData#[0] on the last match $~" do
+    /foo/ =~ 'barfoobaz'
+    $&.should == $~[0]
+    $&.should == 'foo'
+  end
+
+  it "sets the encoding to the encoding of the source String" do
+    "abc".force_encoding(Encoding::EUC_JP) =~ /b/
+    $&.encoding.should equal(Encoding::EUC_JP)
+  end
+end
+
+describe "Predefined global $`" do
+  it "is equivalent to MatchData#pre_match on the last match $~" do
+    /foo/ =~ 'barfoobaz'
+    $`.should == $~.pre_match
+    $`.should == 'bar'
+  end
+
+  it "sets the encoding to the encoding of the source String" do
+    "abc".force_encoding(Encoding::EUC_JP) =~ /b/
+    $`.encoding.should equal(Encoding::EUC_JP)
+  end
+
+  it "sets an empty result to the encoding of the source String" do
+    "abc".force_encoding(Encoding::ISO_8859_1) =~ /a/
+    $`.encoding.should equal(Encoding::ISO_8859_1)
+  end
+end
+
+describe "Predefined global $'" do
+  it "is equivalent to MatchData#post_match on the last match $~" do
+    /foo/ =~ 'barfoobaz'
+    $'.should == $~.post_match
+    $'.should == 'baz'
+  end
+
+  it "sets the encoding to the encoding of the source String" do
+    "abc".force_encoding(Encoding::EUC_JP) =~ /b/
+    $'.encoding.should equal(Encoding::EUC_JP)
+  end
+
+  it "sets an empty result to the encoding of the source String" do
+    "abc".force_encoding(Encoding::ISO_8859_1) =~ /c/
+    $'.encoding.should equal(Encoding::ISO_8859_1)
+  end
+end
+
+describe "Predefined global $+" do
+  it "is equivalent to $~.captures.last" do
+    /(f(o)o)/ =~ 'barfoobaz'
+    $+.should == $~.captures.last
+    $+.should == 'o'
+  end
+
+  it "captures the last non nil capture" do
+    /(a)|(b)/ =~ 'a'
+    $+.should == 'a'
+  end
+
+  it "sets the encoding to the encoding of the source String" do
+    "abc".force_encoding(Encoding::EUC_JP) =~ /(b)/
+    $+.encoding.should equal(Encoding::EUC_JP)
+  end
+end
+
+describe "Predefined globals $1..N" do
+  it "are equivalent to $~[N]" do
+    /(f)(o)(o)/ =~ 'foo'
+    $1.should == $~[1]
+    $2.should == $~[2]
+    $3.should == $~[3]
+    $4.should == $~[4]
+
+    [$1, $2, $3, $4].should == ['f', 'o', 'o', nil]
+  end
+
+  it "are nil unless a match group occurs" do
+    def test(arg)
+      case arg
+      when /-(.)?/
+        $1
+      end
+    end
+    test("-").should == nil
+  end
+
+  it "sets the encoding to the encoding of the source String" do
+    "abc".force_encoding(Encoding::EUC_JP) =~ /(b)/
+    $1.encoding.should equal(Encoding::EUC_JP)
+  end
+end
+
+describe "Predefined global $stdout" do
+  before :each do
+    @old_stdout = $stdout
+  end
+
+  after :each do
+    $stdout = @old_stdout
+  end
+
+  it "raises TypeError error if assigned to nil" do
+    -> { $stdout = nil }.should raise_error(TypeError)
+  end
+
+  it "raises TypeError error if assigned to object that doesn't respond to #write" do
+    obj = mock('object')
+    -> { $stdout = obj }.should raise_error(TypeError)
+
+    obj.stub!(:write)
+    $stdout = obj
+    $stdout.should equal(obj)
+  end
+end
+
+describe "Predefined global $!" do
+  # See http://jira.codehaus.org/browse/JRUBY-5550
+  it "remains nil after a failed core class \"checked\" coercion against a class that defines method_missing" do
+    $!.should == nil
+
+    obj = Class.new do
+      def method_missing(*args)
+        super
+      end
+    end.new
+
+    [obj, 'foo'].join
+
+    $!.should == nil
+  end
+
+  it "should be set to the value of $! before the begin after a successful rescue" do
+    outer = StandardError.new 'outer'
+    inner = StandardError.new 'inner'
+
+    begin
+      raise outer
+    rescue
+      $!.should == outer
+
+      # nested rescue
+      begin
+        $!.should == outer
+        raise inner
+      rescue
+        $!.should == inner
+      ensure
+        $!.should == outer
+      end
+      $!.should == outer
+    end
+    $!.should == nil
+  end
+
+  it "should be set to the value of $! before the begin after a rescue which returns" do
+    def foo
+      outer = StandardError.new 'outer'
+      inner = StandardError.new 'inner'
+
+      begin
+        raise outer
+      resc
