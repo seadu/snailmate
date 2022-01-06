@@ -288,4 +288,244 @@ describe "Predefined global $!" do
 
       begin
         raise outer
-      resc
+      rescue
+        $!.should == outer
+
+        # nested rescue
+        begin
+          $!.should == outer
+          raise inner
+        rescue
+          $!.should == inner
+          return
+        ensure
+          $!.should == outer
+        end
+        $!.should == outer
+      end
+      $!.should == nil
+    end
+    foo
+  end
+
+  it "should be set to the value of $! before the begin after a successful rescue within an ensure" do
+    outer = StandardError.new 'outer'
+    inner = StandardError.new 'inner'
+
+    begin
+      begin
+        raise outer
+      ensure
+        $!.should == outer
+
+        # nested rescue
+        begin
+          $!.should == outer
+          raise inner
+        rescue
+          $!.should == inner
+        ensure
+          $!.should == outer
+        end
+        $!.should == outer
+      end
+      flunk "outer should be raised after the ensure"
+    rescue
+      $!.should == outer
+    end
+    $!.should == nil
+  end
+
+  it "should be set to the new exception after a throwing rescue" do
+    outer = StandardError.new 'outer'
+    inner = StandardError.new 'inner'
+
+    begin
+      raise outer
+    rescue
+      $!.should == outer
+
+      begin
+        # nested rescue
+        begin
+          $!.should == outer
+          raise inner
+        rescue # the throwing rescue
+          $!.should == inner
+          raise inner
+        ensure
+          $!.should == inner
+        end
+      rescue # do not make the exception fail the example
+        $!.should == inner
+      end
+      $!.should == outer
+    end
+    $!.should == nil
+  end
+
+  describe "in bodies without ensure" do
+    it "should be cleared when an exception is rescued" do
+      e = StandardError.new 'foo'
+      begin
+        raise e
+      rescue
+        $!.should == e
+      end
+      $!.should == nil
+    end
+
+    it "should be cleared when an exception is rescued even when a non-local return is present" do
+      def foo(e)
+        $!.should == e
+        yield
+      end
+      def bar
+        e = StandardError.new 'foo'
+        begin
+          raise e
+        rescue
+          $!.should == e
+          foo(e) { return }
+        end
+      end
+
+      bar
+      $!.should == nil
+    end
+
+    it "should be cleared when an exception is rescued even when a non-local return from block" do
+      def foo
+        [ 1 ].each do
+          begin
+            raise StandardError.new('err')
+          rescue => e
+            $!.should == e
+            return
+          end
+        end
+      end
+
+      foo
+      $!.should == nil
+    end
+
+    it "should not be cleared when an exception is not rescued" do
+      e = StandardError.new
+      begin
+        begin
+          begin
+            raise e
+          rescue TypeError
+            flunk
+          end
+        ensure
+          $!.should == e
+        end
+      rescue
+        $!.should == e
+      end
+      $!.should == nil
+    end
+
+    it "should not be cleared when an exception is rescued and rethrown" do
+      e = StandardError.new 'foo'
+      begin
+        begin
+          begin
+            raise e
+          rescue => e
+            $!.should == e
+            raise e
+          end
+        ensure
+          $!.should == e
+        end
+      rescue
+        $!.should == e
+      end
+      $!.should == nil
+    end
+  end
+
+  describe "in ensure-protected bodies" do
+    it "should be cleared when an exception is rescued" do
+      e = StandardError.new 'foo'
+      begin
+        raise e
+      rescue
+        $!.should == e
+      ensure
+        $!.should == nil
+      end
+      $!.should == nil
+    end
+
+    it "should not be cleared when an exception is not rescued" do
+      e = StandardError.new
+      begin
+        begin
+          begin
+            raise e
+          rescue TypeError
+            flunk
+          ensure
+            $!.should == e
+          end
+        ensure
+          $!.should == e
+        end
+      rescue
+        $!.should == e
+      end
+    end
+
+    it "should not be cleared when an exception is rescued and rethrown" do
+      e = StandardError.new
+      begin
+        begin
+          begin
+            raise e
+          rescue => e
+            $!.should == e
+            raise e
+          ensure
+            $!.should == e
+          end
+        ensure
+          $!.should == e
+        end
+      rescue
+        $!.should == e
+      end
+    end
+  end
+end
+
+# Input/Output Variables
+# ---------------------------------------------------------------------------------------------------
+#
+# $/               String          The input record separator (newline by default). This is the value that rou-
+#                                  tines such as Kernel#gets use to determine record boundaries. If set to
+#                                  nil, gets will read the entire file.
+# $-0              String          Synonym for $/.
+# $\               String          The string appended to the output of every call to methods such as
+#                                  Kernel#print and IO#write. The default value is nil.
+# $,               String          The separator string output between the parameters to methods such as
+#                                  Kernel#print and Array#join. Defaults to nil, which adds no text.
+# $.               Integer          The number of the last line read from the current input file.
+# $;               String          The default separator pattern used by String#split. May be set from the
+#                                  command line using the -F flag.
+# $<               Object          An object that provides access to the concatenation of the contents of all
+#                                  the files given as command-line arguments or $stdin (in the case where
+#                                  there are no arguments). $< supports methods similar to a File object:
+#                                  binmode, close, closed?, each, each_byte, each_line, eof, eof?,
+#                                  file, filename, fileno, getc, gets, lineno, lineno=, path, pos, pos=,
+#                                  read, readchar, readline, readlines, rewind, seek, skip, tell, to_a,
+#                                  to_i, to_io, to_s, along with the methods in Enumerable. The method
+#                                  file returns a File object for the file currently being read. This may change
+#                                  as $< reads through the files on the command line. [r/o]
+# $>               IO              The destination of output for Kernel#print and Kernel#printf. The
+#                                  default value is $stdout.
+# $_               String          The last line read by Kernel#gets or Kernel#readline. Many string-
+#       
