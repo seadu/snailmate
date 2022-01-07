@@ -808,4 +808,212 @@ end
 #                                  tion of the program. Options used by the Ruby interpreter will have been
 #                                  removed. [r/o]
 # $"               Array           An array containing the filenames of modules loaded by require. [r/o]
-# $$               Intege
+# $$               Integer          The process number of the program being executed. [r/o]
+# $?               Process::Status The exit status of the last child process to terminate. [r/o, thread]
+# $:               Array           An array of strings, where each string specifies a directory to be searched for
+#                                  Ruby scripts and binary extensions used by the load and require methods.
+#                                  The initial value is the value of the arguments passed via the -I command-
+#                                  line option, followed by an installation-defined standard library location, fol-
+#                                  lowed by the current directory (“.”). This variable may be set from within a
+#                                  program to alter the default search path; typically, programs use $: << dir
+#                                  to append dir to the path. [r/o]
+# $-a              Object          True if the -a option is specified on the command line. [r/o]
+# $-d              Object          Synonym for $DEBUG.
+# $DEBUG           Object          Set to true if the -d command-line option is specified.
+# __FILE__         String          The name of the current source file. [r/o]
+# $F               Array           The array that receives the split input line if the -a command-line option is
+#                                  used.
+# $FILENAME        String          The name of the current input file. Equivalent to $<.filename. [r/o]
+# $-i              String          If in-place edit mode is enabled (perhaps using the -i command-line
+#                                  option), $-i holds the extension used when creating the backup file. If you
+#                                  set a value into $-i, enables in-place edit mode.
+# $-I              Array           Synonym for $:. [r/o]
+# $-K              String          Sets the multibyte coding system for strings and regular expressions. Equiv-
+#                                  alent to the -K command-line option.
+# $-l              Object          Set to true if the -l option (which enables line-end processing) is present
+#                                  on the command line. [r/o]
+# __LINE__         String          The current line number in the source file. [r/o]
+# $LOAD_PATH       Array           A synonym for $:. [r/o]
+# $-p              Object          Set to true if the -p option (which puts an implicit while gets . . . end
+#                                  loop around your program) is present on the command line. [r/o]
+# $VERBOSE         Object          Set to true if the -v, --version, -W, or -w option is specified on the com-
+#                                  mand line. Set to false if no option, or -W1 is given. Set to nil if -W0
+#                                  was specified. Setting this option to true causes the interpreter and some
+#                                  library routines to report additional information. Setting to nil suppresses
+#                                  all warnings (including the output of Kernel.warn).
+# $-v              Object          Synonym for $VERBOSE.
+# $-w              Object          Synonym for $VERBOSE.
+describe "Execution variable $:" do
+  it "is initialized to an array of strings" do
+    $:.is_a?(Array).should == true
+    ($:.length > 0).should == true
+  end
+
+  it "does not include the current directory" do
+    $:.should_not include(".")
+  end
+
+  it "is the same object as $LOAD_PATH and $-I" do
+    $:.__id__.should == $LOAD_PATH.__id__
+    $:.__id__.should == $-I.__id__
+  end
+
+  it "can be changed via <<" do
+    $: << "foo"
+    $:.should include("foo")
+  ensure
+    $:.delete("foo")
+  end
+
+  it "is read-only" do
+    -> {
+      $: = []
+    }.should raise_error(NameError)
+
+    -> {
+      $LOAD_PATH = []
+    }.should raise_error(NameError)
+
+    -> {
+      $-I = []
+    }.should raise_error(NameError)
+  end
+
+  it "default $LOAD_PATH entries until sitelibdir included have @gem_prelude_index set" do
+    skip "no sense in ruby itself" if MSpecScript.instance_variable_defined?(:@testing_ruby)
+
+    $:.should.include?(RbConfig::CONFIG['sitelibdir'])
+    idx = $:.index(RbConfig::CONFIG['sitelibdir'])
+
+    $:[idx..-1].all? { |p| p.instance_variable_defined?(:@gem_prelude_index) }.should be_true
+    $:[0...idx].all? { |p| !p.instance_variable_defined?(:@gem_prelude_index) }.should be_true
+  end
+end
+
+describe "Global variable $\"" do
+  it "is an alias for $LOADED_FEATURES" do
+    $".should equal $LOADED_FEATURES
+  end
+
+  it "is read-only" do
+    -> {
+      $" = []
+    }.should raise_error(NameError)
+
+    -> {
+      $LOADED_FEATURES = []
+    }.should raise_error(NameError)
+  end
+end
+
+describe "Global variable $<" do
+  it "is read-only" do
+    -> {
+      $< = nil
+    }.should raise_error(NameError)
+  end
+end
+
+describe "Global variable $FILENAME" do
+  it "is read-only" do
+    -> {
+      $FILENAME = "-"
+    }.should raise_error(NameError)
+  end
+end
+
+describe "Global variable $?" do
+  it "is read-only" do
+    -> {
+      $? = nil
+    }.should raise_error(NameError)
+  end
+
+  it "is thread-local" do
+    system(ruby_cmd('exit 0'))
+    Thread.new { $?.should be_nil }.join
+  end
+end
+
+describe "Global variable $-a" do
+  it "is read-only" do
+    -> { $-a = true }.should raise_error(NameError)
+  end
+end
+
+describe "Global variable $-l" do
+  it "is read-only" do
+    -> { $-l = true }.should raise_error(NameError)
+  end
+end
+
+describe "Global variable $-p" do
+  it "is read-only" do
+    -> { $-p = true }.should raise_error(NameError)
+  end
+end
+
+describe "Global variable $-d" do
+  before :each do
+    @debug = $DEBUG
+  end
+
+  after :each do
+    $DEBUG = @debug
+  end
+
+  it "is an alias of $DEBUG" do
+    $DEBUG = true
+    $-d.should be_true
+    $-d = false
+    $DEBUG.should be_false
+  end
+end
+
+describe "Global variable $VERBOSE" do
+  before :each do
+    @verbose = $VERBOSE
+  end
+
+  after :each do
+    $VERBOSE = @verbose
+  end
+
+  it "is false by default" do
+    $VERBOSE.should be_false
+  end
+
+  it "converts truthy values to true" do
+    [true, 1, 0, [], ""].each do |true_value|
+      $VERBOSE = true_value
+      $VERBOSE.should be_true
+    end
+  end
+
+  it "allows false" do
+    $VERBOSE = false
+    $VERBOSE.should be_false
+  end
+
+  it "allows nil without coercing to false" do
+    $VERBOSE = nil
+    $VERBOSE.should be_nil
+  end
+end
+
+describe :verbose_global_alias, shared: true do
+  before :each do
+    @verbose = $VERBOSE
+  end
+
+  after :each do
+    $VERBOSE = @verbose
+  end
+
+  it "is an alias of $VERBOSE" do
+    $VERBOSE = true
+    eval(@method).should be_true
+    eval("#{@method} = false")
+    $VERBOSE.should be_false
+  end
+e
