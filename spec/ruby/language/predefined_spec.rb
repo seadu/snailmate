@@ -528,4 +528,284 @@ end
 # $>               IO              The destination of output for Kernel#print and Kernel#printf. The
 #                                  default value is $stdout.
 # $_               String          The last line read by Kernel#gets or Kernel#readline. Many string-
-#       
+#                                  related functions in the Kernel module operate on $_ by default. The vari-
+#                                  able is local to the current scope. [thread]
+# $-F              String          Synonym for $;.
+# $stderr          IO              The current standard error output.
+# $stdin           IO              The current standard input.
+# $stdout          IO              The current standard output. Assignment to $stdout is deprecated: use
+#                                  $stdout.reopen instead.
+
+describe "Predefined global $/" do
+  before :each do
+    @verbose, $VERBOSE = $VERBOSE, nil
+    @dollar_slash = $/
+    @dollar_dash_zero = $-0
+  end
+
+  after :each do
+    $/ = @dollar_slash
+    $-0 = @dollar_dash_zero
+    $VERBOSE = @verbose
+  end
+
+  it "can be assigned a String" do
+    str = "abc"
+    $/ = str
+    $/.should equal(str)
+  end
+
+  it "can be assigned nil" do
+    $/ = nil
+    $/.should be_nil
+  end
+
+  it "returns the value assigned" do
+    ($/ = "xyz").should == "xyz"
+  end
+
+  it "changes $-0" do
+    $/ = "xyz"
+    $-0.should equal($/)
+  end
+
+  it "does not call #to_str to convert the object to a String" do
+    obj = mock("$/ value")
+    obj.should_not_receive(:to_str)
+
+    -> { $/ = obj }.should raise_error(TypeError)
+  end
+
+  it "raises a TypeError if assigned an Integer" do
+    -> { $/ = 1 }.should raise_error(TypeError)
+  end
+
+  it "raises a TypeError if assigned a boolean" do
+    -> { $/ = true }.should raise_error(TypeError)
+  end
+end
+
+describe "Predefined global $-0" do
+  before :each do
+    @verbose, $VERBOSE = $VERBOSE, nil
+    @dollar_slash = $/
+    @dollar_dash_zero = $-0
+  end
+
+  after :each do
+    $/ = @dollar_slash
+    $-0 = @dollar_dash_zero
+    $VERBOSE = @verbose
+  end
+
+  it "can be assigned a String" do
+    str = "abc"
+    $-0 = str
+    $-0.should equal(str)
+  end
+
+  it "can be assigned nil" do
+    $-0 = nil
+    $-0.should be_nil
+  end
+
+  it "returns the value assigned" do
+    ($-0 = "xyz").should == "xyz"
+  end
+
+  it "changes $/" do
+    $-0 = "xyz"
+    $/.should equal($-0)
+  end
+
+  it "does not call #to_str to convert the object to a String" do
+    obj = mock("$-0 value")
+    obj.should_not_receive(:to_str)
+
+    -> { $-0 = obj }.should raise_error(TypeError)
+  end
+
+  it "raises a TypeError if assigned an Integer" do
+    -> { $-0 = 1 }.should raise_error(TypeError)
+  end
+
+  it "raises a TypeError if assigned a boolean" do
+    -> { $-0 = true }.should raise_error(TypeError)
+  end
+end
+
+describe "Predefined global $\\" do
+  before :each do
+    @verbose, $VERBOSE = $VERBOSE, nil
+    @dollar_backslash = $\
+  end
+
+  after :each do
+    $\ = @dollar_backslash
+    $VERBOSE = @verbose
+  end
+
+  it "can be assigned a String" do
+    str = "abc"
+    $\ = str
+    $\.should equal(str)
+  end
+
+  it "can be assigned nil" do
+    $\ = nil
+    $\.should be_nil
+  end
+
+  it "returns the value assigned" do
+    ($\ = "xyz").should == "xyz"
+  end
+
+  it "does not call #to_str to convert the object to a String" do
+    obj = mock("$\\ value")
+    obj.should_not_receive(:to_str)
+
+    -> { $\ = obj }.should raise_error(TypeError)
+  end
+
+  it "raises a TypeError if assigned not String" do
+    -> { $\ = 1 }.should raise_error(TypeError)
+    -> { $\ = true }.should raise_error(TypeError)
+  end
+end
+
+describe "Predefined global $," do
+  after :each do
+    $, = nil
+  end
+
+  it "defaults to nil" do
+    $,.should be_nil
+  end
+
+  it "raises TypeError if assigned a non-String" do
+    -> { $, = Object.new }.should raise_error(TypeError)
+  end
+
+  it "warns if assigned non-nil" do
+    -> { $, = "_" }.should complain(/warning: `\$,' is deprecated/)
+  end
+end
+
+describe "Predefined global $." do
+  it "can be assigned an Integer" do
+    $. = 123
+    $..should == 123
+  end
+
+  it "can be assigned a Float" do
+    $. = 123.5
+    $..should == 123
+  end
+
+  it "should call #to_int to convert the object to an Integer" do
+    obj = mock("good-value")
+    obj.should_receive(:to_int).and_return(321)
+
+    $. = obj
+    $..should == 321
+  end
+
+  it "raises TypeError if object can't be converted to an Integer" do
+    obj = mock("bad-value")
+    obj.should_receive(:to_int).and_return('abc')
+
+    -> { $. = obj }.should raise_error(TypeError)
+  end
+end
+
+describe "Predefined global $;" do
+  after :each do
+    $; = nil
+  end
+
+  it "warns if assigned non-nil" do
+    -> { $; = "_" }.should complain(/warning: `\$;' is deprecated/)
+  end
+end
+
+describe "Predefined global $_" do
+  it "is set to the last line read by e.g. StringIO#gets" do
+    stdin = StringIO.new("foo\nbar\n", "r")
+
+    read = stdin.gets
+    read.should == "foo\n"
+    $_.should == read
+
+    read = stdin.gets
+    read.should == "bar\n"
+    $_.should == read
+
+    read = stdin.gets
+    read.should == nil
+    $_.should == read
+  end
+
+  it "is set at the method-scoped level rather than block-scoped" do
+    obj = Object.new
+    def obj.foo; yield; end
+    def obj.foo2; yield; end
+
+    stdin = StringIO.new("foo\nbar\nbaz\nqux\n", "r")
+    match = stdin.gets
+
+    obj.foo { match = stdin.gets }
+
+    match.should == "bar\n"
+    $_.should == match
+
+    eval 'match = stdin.gets'
+
+    match.should == "baz\n"
+    $_.should == match
+
+    obj.foo2 { match = stdin.gets }
+
+    match.should == "qux\n"
+    $_.should == match
+  end
+
+  it "is Thread-local" do
+    $_ = nil
+    running = false
+
+    thr = Thread.new do
+      $_ = "last line"
+      running = true
+    end
+
+    Thread.pass until running
+    $_.should be_nil
+
+    thr.join
+  end
+
+  it "can be assigned any value" do
+    $_ = nil
+    $_.should == nil
+    $_ = "foo"
+    $_.should == "foo"
+    o = Object.new
+    $_ = o
+    $_.should == o
+    $_ = 1
+    $_.should == 1
+  end
+end
+
+# Execution Environment Variables
+# ---------------------------------------------------------------------------------------------------
+#
+# $0               String          The name of the top-level Ruby program being executed. Typically this will
+#                                  be the program’s filename. On some operating systems, assigning to this
+#                                  variable will change the name of the process reported (for example) by the
+#                                  ps(1) command.
+# $*               Array           An array of strings containing the command-line options from the invoca-
+#                                  tion of the program. Options used by the Ruby interpreter will have been
+#                                  removed. [r/o]
+# $"               Array           An array containing the filenames of modules loaded by require. [r/o]
+# $$               Intege
