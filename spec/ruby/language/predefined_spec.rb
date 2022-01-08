@@ -1016,4 +1016,198 @@ describe :verbose_global_alias, shared: true do
     eval("#{@method} = false")
     $VERBOSE.should be_false
   end
-e
+end
+
+describe "Global variable $-v" do
+  it_behaves_like :verbose_global_alias, '$-v'
+end
+
+describe "Global variable $-w" do
+  it_behaves_like :verbose_global_alias, '$-w'
+end
+
+describe "Global variable $0" do
+  before :each do
+    @orig_program_name = $0
+  end
+
+  after :each do
+    $0 = @orig_program_name
+  end
+
+  it "is the path given as the main script and the same as __FILE__" do
+    script = "fixtures/dollar_zero.rb"
+    Dir.chdir(File.dirname(__FILE__)) do
+      ruby_exe(script).should == "#{script}\n#{script}\nOK"
+    end
+  end
+
+  it "returns the program name" do
+    $0 = "rbx"
+    $0.should == "rbx"
+  end
+
+  platform_is :linux, :darwin do
+    it "actually sets the program name" do
+      title = "rubyspec-dollar0-test"
+      $0 = title
+      `ps -ocommand= -p#{$$}`.should include(title)
+    end
+  end
+
+  it "returns the given value when set" do
+    ($0 = "rbx").should == "rbx"
+  end
+
+  it "raises a TypeError when not given an object that can be coerced to a String" do
+    -> { $0 = nil }.should raise_error(TypeError)
+  end
+end
+
+# Standard Objects
+# ---------------------------------------------------------------------------------------------------
+#
+# ARGF             Object          A synonym for $<.
+# ARGV             Array           A synonym for $*.
+# ENV              Object          A hash-like object containing the program’s environment variables. An
+#                                  instance of class Object, ENV implements the full set of Hash methods. Used
+#                                  to query and set the value of an environment variable, as in ENV["PATH"]
+#                                  and ENV["term"]="ansi".
+# false            FalseClass      Singleton instance of class FalseClass. [r/o]
+# nil              NilClass        The singleton instance of class NilClass. The value of uninitialized
+#                                  instance and global variables. [r/o]
+# self             Object          The receiver (object) of the current method. [r/o]
+# true             TrueClass       Singleton instance of class TrueClass. [r/o]
+
+describe "The predefined standard objects" do
+  it "includes ARGF" do
+    Object.const_defined?(:ARGF).should == true
+  end
+
+  it "includes ARGV" do
+    Object.const_defined?(:ARGV).should == true
+  end
+
+  it "includes a hash-like object ENV" do
+    Object.const_defined?(:ENV).should == true
+    ENV.respond_to?(:[]).should == true
+  end
+end
+
+describe "The predefined standard object nil" do
+  it "is an instance of NilClass" do
+    nil.should be_kind_of(NilClass)
+  end
+
+  it "raises a SyntaxError if assigned to" do
+    -> { eval("nil = true") }.should raise_error(SyntaxError)
+  end
+end
+
+describe "The predefined standard object true" do
+  it "is an instance of TrueClass" do
+    true.should be_kind_of(TrueClass)
+  end
+
+  it "raises a SyntaxError if assigned to" do
+    -> { eval("true = false") }.should raise_error(SyntaxError)
+  end
+end
+
+describe "The predefined standard object false" do
+  it "is an instance of FalseClass" do
+    false.should be_kind_of(FalseClass)
+  end
+
+  it "raises a SyntaxError if assigned to" do
+    -> { eval("false = nil") }.should raise_error(SyntaxError)
+  end
+end
+
+describe "The self pseudo-variable" do
+  it "raises a SyntaxError if assigned to" do
+    -> { eval("self = 1") }.should raise_error(SyntaxError)
+  end
+end
+
+# Global Constants
+# ---------------------------------------------------------------------------------------------------
+#
+# The following constants are defined by the Ruby interpreter.
+#
+# DATA                 IO          If the main program file contains the directive __END__, then
+#                                  the constant DATA will be initialized so that reading from it will
+#                                  return lines following __END__ from the source file.
+# FALSE                FalseClass  Synonym for false (deprecated, removed in Ruby 3).
+# NIL                  NilClass    Synonym for nil (deprecated, removed in Ruby 3).
+# RUBY_PLATFORM        String      The identifier of the platform running this program. This string
+#                                  is in the same form as the platform identifier used by the GNU
+#                                  configure utility (which is not a coincidence).
+# RUBY_RELEASE_DATE    String      The date of this release.
+# RUBY_VERSION         String      The version number of the interpreter.
+# STDERR               IO          The actual standard error stream for the program. The initial
+#                                  value of $stderr.
+# STDIN                IO          The actual standard input stream for the program. The initial
+#                                  value of $stdin.
+# STDOUT               IO          The actual standard output stream for the program. The initial
+#                                  value of $stdout.
+# SCRIPT_LINES__       Hash        If a constant SCRIPT_LINES__ is defined and references a Hash,
+#                                  Ruby will store an entry containing the contents of each file it
+#                                  parses, with the file’s name as the key and an array of strings as
+#                                  the value.
+# TOPLEVEL_BINDING     Binding     A Binding object representing the binding at Ruby’s top level—
+#                                  the level where programs are initially executed.
+# TRUE                 TrueClass   Synonym for true (deprecated, removed in Ruby 3).
+
+describe "The predefined global constants" do
+  describe "TRUE" do
+    ruby_version_is "3.0" do
+      it "is no longer defined" do
+        Object.const_defined?(:TRUE).should == false
+      end
+    end
+
+    ruby_version_is ""..."3.0" do
+      it "includes TRUE" do
+        Object.const_defined?(:TRUE).should == true
+        -> { TRUE }.should complain(/constant ::TRUE is deprecated/)
+      end
+    end
+  end
+
+  describe "FALSE" do
+    ruby_version_is "3.0" do
+      it "is no longer defined" do
+        Object.const_defined?(:FALSE).should == false
+      end
+    end
+
+    ruby_version_is ""..."3.0" do
+      it "includes FALSE" do
+        Object.const_defined?(:FALSE).should == true
+        -> { FALSE }.should complain(/constant ::FALSE is deprecated/)
+      end
+    end
+  end
+
+  describe "NIL" do
+    ruby_version_is "3.0" do
+      it "is no longer defined" do
+        Object.const_defined?(:NIL).should == false
+      end
+    end
+
+    ruby_version_is ""..."3.0" do
+      it "includes NIL" do
+        Object.const_defined?(:NIL).should == true
+        -> { NIL }.should complain(/constant ::NIL is deprecated/)
+      end
+    end
+  end
+
+  it "includes STDIN" do
+    Object.const_defined?(:STDIN).should == true
+  end
+
+  it "includes STDOUT" do
+    Object.cons
