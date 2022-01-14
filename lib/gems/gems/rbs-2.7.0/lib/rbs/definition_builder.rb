@@ -802,3 +802,136 @@ module RBS
         parent_variable: keep_super ? variable.parent_variable : super_variable,
         type: sub.empty? ? variable.type : variable.type.sub(sub),
         declared_in: variable.declared_in
+      )
+    end
+
+    def merge_method(type_name, methods, name, method, sub, implemented_in: :keep, keep_super: false)
+      if sub.empty? && implemented_in == :keep && keep_super
+        methods[name] = method
+      else
+        if sub.empty? && implemented_in == :keep
+          defs = method.defs
+        else
+          defs = method.defs.map do |defn|
+            defn.update(
+              type: sub.empty? ? defn.type : defn.type.sub(sub),
+              implemented_in: case implemented_in
+                              when :keep
+                                defn.implemented_in
+                              when nil
+                                nil
+                              else
+                                implemented_in
+                              end
+            )
+          end
+
+          defs = method.defs.map do |defn|
+            defn.update(
+              type: sub.empty? ? defn.type : defn.type.sub(sub),
+              implemented_in: case implemented_in
+                              when :keep
+                                defn.implemented_in
+                              when nil
+                                nil
+                              else
+                                implemented_in
+                              end
+            )
+          end
+        end
+
+        super_method = methods[name]
+
+        methods[name] = Definition::Method.new(
+          super_method: keep_super ? method.super_method : super_method,
+          accessibility: method.accessibility,
+          defs: defs,
+          alias_of: method.alias_of
+        )
+      end
+    end
+
+    def try_cache(type_name, cache:, key: nil)
+      # @type var cc: Hash[untyped, Definition | nil]
+      # @type var key: untyped
+      key ||= type_name
+      cc = _ = cache
+
+      cc[key] ||= yield
+    end
+
+    def expand_alias(type_name)
+      expand_alias2(type_name, [])
+    end
+
+    def expand_alias1(type_name)
+      entry = env.alias_decls[type_name] or raise "Unknown alias name: #{type_name}"
+      as = entry.decl.type_params.each.map { Types::Bases::Any.new(location: nil) }
+      expand_alias2(type_name, as)
+    end
+
+    def expand_alias2(type_name, args)
+      entry = env.alias_decls[type_name] or raise "Unknown alias name: #{type_name}"
+
+      ensure_namespace!(type_name.namespace, location: entry.decl.location)
+      params = entry.decl.type_params.each.map(&:name)
+
+      unless params.size == args.size
+        as = "[#{args.join(", ")}]" unless args.empty?
+        ps = "[#{params.join(", ")}]" unless params.empty?
+
+        raise "Invalid type application: type = #{type_name}#{as}, decl = #{type_name}#{ps}"
+      end
+
+      type = entry.decl.type
+
+      unless params.empty?
+        subst = Substitution.build(params, args)
+        type = type.sub(subst)
+      end
+
+      type
+    end
+
+    def update(env:, except:, ancestor_builder:)
+      method_builder = self.method_builder.update(env: env, except: except)
+
+      DefinitionBuilder.new(env: env, ancestor_builder: ancestor_builder, method_builder: method_builder).tap do |builder|
+        builder.instance_cache.merge!(instance_cache)
+        builder.singleton_cache.merge!(singleton_cache)
+        builder.singleton0_cache.merge!(singleton0_cache)
+        builder.interface_cache.merge!(interface_cache)
+
+        except.each do |name|
+          builder.instance_cache.delete([name, true])
+          builder.instance_cache.delete([name, false])
+          builder.singleton_cache.delete(name)
+          builder.singleton0_cache.delete(name)
+          builder.interface_cache.delete(name)
+        end
+      end
+    end
+
+    def validate_type_presence(type)
+      case type
+      when Types::ClassInstance, Types::ClassSingleton, Types::Interface, Types::Alias
+        validate_type_name(type.name, type.location)
+      end
+
+      type.each_type do |type|
+        validate_type_presence(type)
+      end
+    end
+
+    def validate_type_name(name, location)
+      name = name.absolute!
+
+      return if name.class? && env.class_decls.key?(name)
+      return if name.interface? && env.interface_decls.key?(name)
+      return if name.alias? && env.alias_decls.key?(name)
+
+      raise NoTypeFoundError.new(type_name: name, location: location)
+    end
+  end
+end
