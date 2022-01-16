@@ -19,3 +19,23 @@ describe "String#to_c" do
   end
 
   it "understands Float::INFINITY" do
+    'Infinity'.to_c.should == Complex(0, 1)
+    '-Infinity'.to_c.should == Complex(0, -1)
+  end
+
+  it "understands Float::NAN" do
+    'NaN'.to_c.should == Complex(0, 0)
+  end
+
+  it "allows null-byte" do
+    "1-2i\0".to_c.should == Complex(1, -2)
+    "1\0-2i".to_c.should == Complex(1, 0)
+    "\01-2i".to_c.should == Complex(0, 0)
+  end
+
+  it "raises Encoding::CompatibilityError if String is in not ASCII-compatible encoding" do
+    -> {
+      '79+4i'.encode("UTF-16").to_c
+    }.should raise_error(Encoding::CompatibilityError, "ASCII incompatible encoding: UTF-16")
+  end
+end
