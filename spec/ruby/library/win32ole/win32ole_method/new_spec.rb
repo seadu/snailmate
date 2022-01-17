@@ -13,4 +13,22 @@ platform_is :windows do
 
     it "raises ArgumentError if only 1 argument is given" do
       -> { WIN32OLE_METHOD.new("hello") }.should raise_error ArgumentError
-      -> { W
+      -> { WIN32OLE_METHOD.new(@ole_type) }.should raise_error ArgumentError
+    end
+
+    it "returns a valid WIN32OLE_METHOD object" do
+      WIN32OLE_METHOD.new(@ole_type, "Open").should be_kind_of WIN32OLE_METHOD
+      WIN32OLE_METHOD.new(@ole_type, "open").should be_kind_of WIN32OLE_METHOD
+    end
+
+    it "raises WIN32OLERuntimeError if the method does not exist" do
+      -> { WIN32OLE_METHOD.new(@ole_type, "NonexistentMethod") }.should raise_error WIN32OLERuntimeError
+    end
+
+    it "raises TypeError if second argument is not a String" do
+      -> { WIN32OLE_METHOD.new(@ole_type, 5) }.should raise_error TypeError
+    end
+
+  end
+
+end
