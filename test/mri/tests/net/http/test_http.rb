@@ -301,4 +301,233 @@ module TestNetHTTP_version_1_1_methods
 
   def test_s_get_response
     res = Net::HTTP.get_response(
-      URI.parse("h
+      URI.parse("http://#{config('host')}:#{config('port')}")
+    )
+    assert_equal "application/octet-stream", res["Content-Type"]
+    assert_equal $test_net_http_data, res.body
+
+    res = Net::HTTP.get_response(
+      URI.parse("http://#{config('host')}:#{config('port')}"), "Accept" => "text/plain"
+    )
+    assert_equal "text/plain", res["Content-Type"]
+    assert_equal $test_net_http_data, res.body
+  end
+
+  def test_head
+    start {|http|
+      res = http.head('/')
+      assert_kind_of Net::HTTPResponse, res
+      assert_equal $test_net_http_data_type, res['Content-Type']
+      unless self.is_a?(TestNetHTTP_v1_2_chunked)
+        assert_equal $test_net_http_data.size, res['Content-Length'].to_i
+      end
+    }
+  end
+
+  def test_get
+    start {|http|
+      _test_get__get http
+      _test_get__iter http
+      _test_get__chunked http
+    }
+  end
+
+  def _test_get__get(http)
+    res = http.get('/')
+    assert_kind_of Net::HTTPResponse, res
+    assert_kind_of String, res.body
+    unless self.is_a?(TestNetHTTP_v1_2_chunked)
+      assert_not_nil res['content-length']
+      assert_equal $test_net_http_data.size, res['content-length'].to_i
+    end
+    assert_equal $test_net_http_data_type, res['Content-Type']
+    assert_equal $test_net_http_data.size, res.body.size
+    assert_equal $test_net_http_data, res.body
+
+    assert_nothing_raised {
+      http.get('/', { 'User-Agent' => 'test' }.freeze)
+    }
+
+    assert res.decode_content, '[Bug #7924]' if Net::HTTP::HAVE_ZLIB
+  end
+
+  def _test_get__iter(http)
+    buf = ''
+    res = http.get('/') {|s| buf << s }
+    assert_kind_of Net::HTTPResponse, res
+    # assert_kind_of String, res.body
+    unless self.is_a?(TestNetHTTP_v1_2_chunked)
+      assert_not_nil res['content-length']
+      assert_equal $test_net_http_data.size, res['content-length'].to_i
+    end
+    assert_equal $test_net_http_data_type, res['Content-Type']
+    assert_equal $test_net_http_data.size, buf.size
+    assert_equal $test_net_http_data, buf
+    # assert_equal $test_net_http_data.size, res.body.size
+    # assert_equal $test_net_http_data, res.body
+  end
+
+  def _test_get__chunked(http)
+    buf = ''
+    res = http.get('/') {|s| buf << s }
+    assert_kind_of Net::HTTPResponse, res
+    # assert_kind_of String, res.body
+    unless self.is_a?(TestNetHTTP_v1_2_chunked)
+      assert_not_nil res['content-length']
+      assert_equal $test_net_http_data.size, res['content-length'].to_i
+    end
+    assert_equal $test_net_http_data_type, res['Content-Type']
+    assert_equal $test_net_http_data.size, buf.size
+    assert_equal $test_net_http_data, buf
+    # assert_equal $test_net_http_data.size, res.body.size
+    # assert_equal $test_net_http_data, res.body
+  end
+
+  def test_get__break
+    i = 0
+    start {|http|
+      http.get('/') do |str|
+        i += 1
+        break
+      end
+    }
+    assert_equal 1, i
+    @log_tester = nil # server may encount ECONNRESET
+  end
+
+  def test_get__implicit_start
+    res = new().get('/')
+    assert_kind_of Net::HTTPResponse, res
+    assert_kind_of String, res.body
+    unless self.is_a?(TestNetHTTP_v1_2_chunked)
+      assert_not_nil res['content-length']
+    end
+    assert_equal $test_net_http_data_type, res['Content-Type']
+    assert_equal $test_net_http_data.size, res.body.size
+    assert_equal $test_net_http_data, res.body
+  end
+
+  def test_get__crlf
+    start {|http|
+      assert_raise(ArgumentError) do
+        http.get("\r")
+      end
+      assert_raise(ArgumentError) do
+        http.get("\n")
+      end
+    }
+  end
+
+  def test_get2
+    start {|http|
+      http.get2('/') {|res|
+        EnvUtil.suppress_warning do
+          assert_kind_of Net::HTTPResponse, res
+          assert_kind_of Net::HTTPResponse, res.header
+        end
+
+        unless self.is_a?(TestNetHTTP_v1_2_chunked)
+          assert_not_nil res['content-length']
+        end
+        assert_equal $test_net_http_data_type, res['Content-Type']
+        assert_kind_of String, res.body
+        assert_kind_of String, res.entity
+        assert_equal $test_net_http_data.size, res.body.size
+        assert_equal $test_net_http_data, res.body
+        assert_equal $test_net_http_data, res.entity
+      }
+    }
+  end
+
+  def test_post
+    start {|http|
+      _test_post__base http
+      _test_post__file http
+      _test_post__no_data http
+    }
+  end
+
+  def _test_post__base(http)
+    uheader = {}
+    uheader['Accept'] = 'application/octet-stream'
+    uheader['Content-Type'] = 'application/x-www-form-urlencoded'
+    data = 'post data'
+    res = http.post('/', data, uheader)
+    assert_kind_of Net::HTTPResponse, res
+    assert_kind_of String, res.body
+    assert_equal data, res.body
+    assert_equal data, res.entity
+  end
+
+  def _test_post__file(http)
+    data = 'post data'
+    f = StringIO.new
+    http.post('/', data, {'content-type' => 'application/x-www-form-urlencoded'}, f)
+    assert_equal data, f.string
+  end
+
+  def _test_post__no_data(http)
+    unless self.is_a?(TestNetHTTP_v1_2_chunked)
+      EnvUtil.suppress_warning do
+        data = nil
+        res = http.post('/', data)
+        assert_not_equal '411', res.code
+      end
+    end
+  end
+
+  def test_s_post
+    url = "http://#{config('host')}:#{config('port')}/?q=a"
+    res = assert_warning(/Content-Type did not set/) do
+      Net::HTTP.post(
+              URI.parse(url),
+              "a=x")
+    end
+    assert_equal "application/x-www-form-urlencoded", res["Content-Type"]
+    assert_equal "a=x", res.body
+    assert_equal url, res["X-request-uri"]
+
+    res = Net::HTTP.post(
+              URI.parse(url),
+              "hello world",
+              "Content-Type" => "text/plain; charset=US-ASCII")
+    assert_equal "text/plain; charset=US-ASCII", res["Content-Type"]
+    assert_equal "hello world", res.body
+  end
+
+  def test_s_post_form
+    url = "http://#{config('host')}:#{config('port')}/"
+    res = Net::HTTP.post_form(
+              URI.parse(url),
+              "a" => "x")
+    assert_equal ["a=x"], res.body.split(/[;&]/).sort
+
+    res = Net::HTTP.post_form(
+              URI.parse(url),
+              "a" => "x",
+              "b" => "y")
+    assert_equal ["a=x", "b=y"], res.body.split(/[;&]/).sort
+
+    res = Net::HTTP.post_form(
+              URI.parse(url),
+              "a" => ["x1", "x2"],
+              "b" => "y")
+    assert_equal url, res['X-request-uri']
+    assert_equal ["a=x1", "a=x2", "b=y"], res.body.split(/[;&]/).sort
+
+    res = Net::HTTP.post_form(
+              URI.parse(url + '?a=x'),
+              "b" => "y")
+    assert_equal url + '?a=x', res['X-request-uri']
+    assert_equal ["b=y"], res.body.split(/[;&]/).sort
+  end
+
+  def test_patch
+    start {|http|
+      _test_patch__base http
+    }
+  end
+
+  def _test_patch__base(http)
+    uheader = {}
+    uheader['Accept'] = 'application/octet-str
