@@ -530,4 +530,225 @@ module TestNetHTTP_version_1_1_methods
 
   def _test_patch__base(http)
     uheader = {}
-    uheader['Accept'] = 'application/octet-str
+    uheader['Accept'] = 'application/octet-stream'
+    uheader['Content-Type'] = 'application/x-www-form-urlencoded'
+    data = 'patch data'
+    res = http.patch('/', data, uheader)
+    assert_kind_of Net::HTTPResponse, res
+    assert_kind_of String, res.body
+    assert_equal data, res.body
+    assert_equal data, res.entity
+  end
+
+  def test_timeout_during_HTTP_session_write
+    th = nil
+    # listen for connections... but deliberately do not read
+    TCPServer.open('localhost', 0) {|server|
+      port = server.addr[1]
+
+      conn = Net::HTTP.new('localhost', port)
+      conn.write_timeout = EnvUtil.apply_timeout_scale(0.01)
+      conn.read_timeout = EnvUtil.apply_timeout_scale(0.01) if windows?
+      conn.open_timeout = EnvUtil.apply_timeout_scale(0.1)
+
+      th = Thread.new do
+        err = !windows? ? Net::WriteTimeout : Net::ReadTimeout
+        assert_raise(err) do
+          assert_warning(/Content-Type did not set/) do
+            conn.post('/', "a"*50_000_000)
+          end
+        end
+      end
+      assert th.join(EnvUtil.apply_timeout_scale(10))
+    }
+  ensure
+    th&.kill
+    th&.join
+  end
+
+  def test_timeout_during_non_chunked_streamed_HTTP_session_write
+    th = nil
+    # listen for connections... but deliberately do not read
+    TCPServer.open('localhost', 0) {|server|
+      port = server.addr[1]
+
+      conn = Net::HTTP.new('localhost', port)
+      conn.write_timeout = 0.01
+      conn.read_timeout = 0.01 if windows?
+      conn.open_timeout = 0.1
+
+      req = Net::HTTP::Post.new('/')
+      data = "a"*50_000_000
+      req.content_length = data.size
+      req['Content-Type'] = 'application/x-www-form-urlencoded'
+      req.body_stream = StringIO.new(data)
+
+      th = Thread.new do
+        assert_raise(Net::WriteTimeout) { conn.request(req) }
+      end
+      assert th.join(10)
+    }
+  ensure
+    th&.kill
+    th&.join
+  end
+
+  def test_timeout_during_HTTP_session
+    bug4246 = "expected the HTTP session to have timed out but have not. c.f. [ruby-core:34203]"
+
+    th = nil
+    # listen for connections... but deliberately do not read
+    TCPServer.open('localhost', 0) {|server|
+      port = server.addr[1]
+
+      conn = Net::HTTP.new('localhost', port)
+      conn.read_timeout = EnvUtil.apply_timeout_scale(0.01)
+      conn.open_timeout = EnvUtil.apply_timeout_scale(1)
+
+      th = Thread.new do
+        assert_raise(Net::ReadTimeout) {
+          conn.get('/')
+        }
+      end
+      assert th.join(EnvUtil.apply_timeout_scale(10)), bug4246
+    }
+  ensure
+    th.kill
+    th.join
+  end
+end
+
+
+module TestNetHTTP_version_1_2_methods
+
+  def test_request
+    start {|http|
+      _test_request__GET http
+      _test_request__accept_encoding http
+      _test_request__file http
+      # _test_request__range http   # WEBrick does not support Range: header.
+      _test_request__HEAD http
+      _test_request__POST http
+      _test_request__stream_body http
+      _test_request__uri http
+      _test_request__uri_host http
+    }
+  end
+
+  def _test_request__GET(http)
+    req = Net::HTTP::Get.new('/')
+    http.request(req) {|res|
+      assert_kind_of Net::HTTPResponse, res
+      assert_kind_of String, res.body
+      unless self.is_a?(TestNetHTTP_v1_2_chunked)
+        assert_not_nil res['content-length']
+        assert_equal $test_net_http_data.size, res['content-length'].to_i
+      end
+      assert_equal $test_net_http_data.size, res.body.size
+      assert_equal $test_net_http_data, res.body
+
+      assert res.decode_content, 'Bug #7831' if Net::HTTP::HAVE_ZLIB
+    }
+  end
+
+  def _test_request__accept_encoding(http)
+    req = Net::HTTP::Get.new('/', 'accept-encoding' => 'deflate')
+    http.request(req) {|res|
+      assert_kind_of Net::HTTPResponse, res
+      assert_kind_of String, res.body
+      unless self.is_a?(TestNetHTTP_v1_2_chunked)
+        assert_not_nil res['content-length']
+        assert_equal $test_net_http_data.size, res['content-length'].to_i
+      end
+      assert_equal $test_net_http_data.size, res.body.size
+      assert_equal $test_net_http_data, res.body
+
+      assert_not_predicate res, :decode_content, 'Bug #7831' if Net::HTTP::HAVE_ZLIB
+    }
+  end
+
+  def _test_request__file(http)
+    req = Net::HTTP::Get.new('/')
+    http.request(req) {|res|
+      assert_kind_of Net::HTTPResponse, res
+      unless self.is_a?(TestNetHTTP_v1_2_chunked)
+        assert_not_nil res['content-length']
+        assert_equal $test_net_http_data.size, res['content-length'].to_i
+      end
+      f = StringIO.new("".force_encoding("ASCII-8BIT"))
+      res.read_body f
+      assert_equal $test_net_http_data.bytesize, f.string.bytesize
+      assert_equal $test_net_http_data.encoding, f.string.encoding
+      assert_equal $test_net_http_data, f.string
+    }
+  end
+
+  def _test_request__range(http)
+    req = Net::HTTP::Get.new('/')
+    req['range'] = 'bytes=0-5'
+    assert_equal $test_net_http_data[0,6], http.request(req).body
+  end
+
+  def _test_request__HEAD(http)
+    req = Net::HTTP::Head.new('/')
+    http.request(req) {|res|
+      assert_kind_of Net::HTTPResponse, res
+      unless self.is_a?(TestNetHTTP_v1_2_chunked)
+        assert_not_nil res['content-length']
+        assert_equal $test_net_http_data.size, res['content-length'].to_i
+      end
+      assert_nil res.body
+    }
+  end
+
+  def _test_request__POST(http)
+    data = 'post data'
+    req = Net::HTTP::Post.new('/')
+    req['Accept'] = $test_net_http_data_type
+    req['Content-Type'] = 'application/x-www-form-urlencoded'
+    http.request(req, data) {|res|
+      assert_kind_of Net::HTTPResponse, res
+      unless self.is_a?(TestNetHTTP_v1_2_chunked)
+        assert_equal data.size, res['content-length'].to_i
+      end
+      assert_kind_of String, res.body
+      assert_equal data, res.body
+    }
+  end
+
+  def _test_request__stream_body(http)
+    req = Net::HTTP::Post.new('/')
+    data = $test_net_http_data
+    req.content_length = data.size
+    req['Content-Type'] = 'application/x-www-form-urlencoded'
+    req.body_stream = StringIO.new(data)
+    res = http.request(req)
+    assert_kind_of Net::HTTPResponse, res
+    assert_kind_of String, res.body
+    assert_equal data.size, res.body.size
+    assert_equal data, res.body
+  end
+
+  def _test_request__path(http)
+    uri = URI 'https://hostname.example/'
+    req = Net::HTTP::Get.new('/')
+
+    res = http.request(req)
+
+    assert_kind_of URI::Generic, req.uri
+
+    assert_not_equal uri, req.uri
+
+    assert_equal uri, res.uri
+
+    assert_not_same uri,     req.uri
+    assert_not_same req.uri, res.uri
+  end
+
+  def _test_request__uri(http)
+    uri = URI 'https://hostname.example/'
+    req = Net::HTTP::Get.new(uri)
+
+    res = http.request(req)
+
+    assert_kind_of URI::
