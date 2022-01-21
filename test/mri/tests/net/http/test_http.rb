@@ -995,4 +995,238 @@ class TestNetHTTPContinue < Test::Unit::TestCase
     start {|http|
       uheader = {'content-type' => 'application/x-www-form-urlencoded', 'expect' => '100-continue'}
       http.continue_timeout = 0.2
-      http.request_post('/continue', 'bo
+      http.request_post('/continue', 'body=BODY', uheader) {|res|
+        assert_equal('BODY', res.read_body)
+      }
+    }
+    assert_match(/Expect: 100-continue/, @debug.string)
+    assert_match(/HTTP\/1.1 100 continue/, @debug.string)
+  end
+
+  def test_expect_continue_timeout
+    mount_proc {|req, res|
+      sleep 0.2
+      req.continue # just ignored because it's '100'
+      res.body = req.query['body']
+    }
+    start {|http|
+      uheader = {'content-type' => 'application/x-www-form-urlencoded', 'expect' => '100-continue'}
+      http.continue_timeout = 0
+      http.request_post('/continue', 'body=BODY', uheader) {|res|
+        assert_equal('BODY', res.read_body)
+      }
+    }
+    assert_match(/Expect: 100-continue/, @debug.string)
+    assert_match(/HTTP\/1.1 100 continue/, @debug.string)
+  end
+
+  def test_expect_continue_error
+    mount_proc {|req, res|
+      res.status = 501
+      res.body = req.query['body']
+    }
+    start {|http|
+      uheader = {'content-type' => 'application/x-www-form-urlencoded', 'expect' => '100-continue'}
+      http.continue_timeout = 0
+      http.request_post('/continue', 'body=ERROR', uheader) {|res|
+        assert_equal('ERROR', res.read_body)
+      }
+    }
+    assert_match(/Expect: 100-continue/, @debug.string)
+    assert_not_match(/HTTP\/1.1 100 continue/, @debug.string)
+  end
+
+  def test_expect_continue_error_before_body
+    @log_tester = nil
+    mount_proc {|req, res|
+      raise WEBrick::HTTPStatus::Forbidden
+    }
+    start {|http|
+      uheader = {'content-type' => 'application/x-www-form-urlencoded', 'content-length' => '5', 'expect' => '100-continue'}
+      http.continue_timeout = 1 # allow the server to respond before sending
+      http.request_post('/continue', 'data', uheader) {|res|
+        assert_equal(res.code, '403')
+      }
+    }
+    assert_match(/Expect: 100-continue/, @debug.string)
+    assert_not_match(/HTTP\/1.1 100 continue/, @debug.string)
+  end
+
+  def test_expect_continue_error_while_waiting
+    mount_proc {|req, res|
+      res.status = 501
+      res.body = req.query['body']
+    }
+    start {|http|
+      uheader = {'content-type' => 'application/x-www-form-urlencoded', 'expect' => '100-continue'}
+      http.continue_timeout = 0.5
+      http.request_post('/continue', 'body=ERROR', uheader) {|res|
+        assert_equal('ERROR', res.read_body)
+      }
+    }
+    assert_match(/Expect: 100-continue/, @debug.string)
+    assert_not_match(/HTTP\/1.1 100 continue/, @debug.string)
+  end
+end
+
+class TestNetHTTPSwitchingProtocols < Test::Unit::TestCase
+  CONFIG = {
+    'host' => '127.0.0.1',
+    'proxy_host' => nil,
+    'proxy_port' => nil,
+    'chunked' => true,
+  }
+
+  include TestNetHTTPUtils
+
+  def logfile
+    @debug = StringIO.new('')
+  end
+
+  def mount_proc(&block)
+    @server.mount('/continue', WEBrick::HTTPServlet::ProcHandler.new(block.to_proc))
+  end
+
+  def test_info
+    mount_proc {|req, res|
+      req.instance_variable_get(:@socket) << "HTTP/1.1 101 Switching Protocols\r\n\r\n"
+      res.body = req.query['body']
+    }
+    start {|http|
+      http.continue_timeout = 0.2
+      http.request_post('/continue', 'body=BODY',
+                        'content-type' => 'application/x-www-form-urlencoded') {|res|
+        assert_equal('BODY', res.read_body)
+      }
+    }
+    assert_match(/HTTP\/1.1 101 Switching Protocols/, @debug.string)
+  end
+end
+
+class TestNetHTTPKeepAlive < Test::Unit::TestCase
+  CONFIG = {
+    'host' => '127.0.0.1',
+    'proxy_host' => nil,
+    'proxy_port' => nil,
+    'RequestTimeout' => 1,
+  }
+
+  include TestNetHTTPUtils
+
+  def test_keep_alive_get_auto_reconnect
+    start {|http|
+      res = http.get('/')
+      http.keep_alive_timeout = 1
+      assert_kind_of Net::HTTPResponse, res
+      assert_kind_of String, res.body
+      sleep 1.5
+      assert_nothing_raised {
+        res = http.get('/')
+      }
+      assert_kind_of Net::HTTPResponse, res
+      assert_kind_of String, res.body
+    }
+  end
+
+  def test_server_closed_connection_auto_reconnect
+    start {|http|
+      res = http.get('/')
+      http.keep_alive_timeout = 5
+      assert_kind_of Net::HTTPResponse, res
+      assert_kind_of String, res.body
+      sleep 1.5
+      assert_nothing_raised {
+        # Net::HTTP should detect the closed connection before attempting the
+        # request, since post requests cannot be retried.
+        res = http.post('/', 'query=foo', 'content-type' => 'application/x-www-form-urlencoded')
+      }
+      assert_kind_of Net::HTTPResponse, res
+      assert_kind_of String, res.body
+    }
+  end
+
+  def test_keep_alive_get_auto_retry
+    start {|http|
+      res = http.get('/')
+      http.keep_alive_timeout = 5
+      assert_kind_of Net::HTTPResponse, res
+      assert_kind_of String, res.body
+      sleep 1.5
+      res = http.get('/')
+      assert_kind_of Net::HTTPResponse, res
+      assert_kind_of String, res.body
+    }
+  end
+
+  def test_keep_alive_reset_on_new_connection
+    # Using WEBrick's debug log output on accepting connection:
+    #
+    #   "[2021-04-29 20:36:46] DEBUG accept: 127.0.0.1:50674\n"
+    @log_tester = nil
+    @server.logger.level = WEBrick::BasicLog::DEBUG
+
+    start {|http|
+      res = http.get('/')
+      http.keep_alive_timeout = 1
+      assert_kind_of Net::HTTPResponse, res
+      assert_kind_of String, res.body
+      http.finish
+      assert_equal 1, @log.grep(/accept/i).size
+
+      sleep 1.5
+      http.start
+      res = http.get('/')
+      assert_kind_of Net::HTTPResponse, res
+      assert_kind_of String, res.body
+      assert_equal 2, @log.grep(/accept/i).size
+    }
+  end
+
+  class MockSocket
+    attr_reader :count
+    def initialize(success_after: nil)
+      @success_after = success_after
+      @count = 0
+    end
+    def close
+    end
+    def closed?
+    end
+    def write(_)
+    end
+    def readline
+      @count += 1
+      if @success_after && @success_after <= @count
+        "HTTP/1.1 200 OK"
+      else
+        raise Errno::ECONNRESET
+      end
+    end
+    def readuntil(*_)
+      ""
+    end
+    def read_all(_)
+    end
+  end
+
+  def test_http_retry_success
+    start {|http|
+      socket = MockSocket.new(success_after: 10)
+      http.instance_variable_get(:@socket).close
+      http.instance_variable_set(:@socket, socket)
+      assert_equal 0, socket.count
+      http.max_retries = 10
+      res = http.get('/')
+      assert_equal 10, socket.count
+      assert_kind_of Net::HTTPResponse, res
+      assert_kind_of String, res.body
+    }
+  end
+
+  def test_http_retry_failed
+    start {|http|
+      socket = MockSocket.new
+      http.instance_variable_get(:@socket).close
+      http.instance_variable_set(:@socket, socket)
+      http.max_retries = 10
+      assert_raise(Errno::ECONNRE
