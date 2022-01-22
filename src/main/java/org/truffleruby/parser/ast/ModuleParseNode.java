@@ -77,4 +77,20 @@ public class ModuleParseNode extends ParseNode implements IScopingNode {
 
     /** Get the static scoping information.
      *
-     * @return th
+     * @return the scoping info */
+    public StaticScope getScope() {
+        return scope;
+    }
+
+    /** Gets the name.
+     * 
+     * @return Representation of the module path+name */
+    public Colon3ParseNode getCPath() {
+        return cpath;
+    }
+
+    @Override
+    public List<ParseNode> childNodes() {
+        return ParseNode.createList(cpath, bodyNode);
+    }
+}
