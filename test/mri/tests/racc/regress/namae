@@ -501,4 +501,134 @@ module_eval(<<'.,.,', 'namae.y', 80)
 module_eval(<<'.,.,', 'namae.y', 85)
   def _reduce_17(val, _values, result)
              result = Name.new({ :particle => val[0], :family => val[1],
-           :suffix => val[3][0], :given 
+           :suffix => val[3][0], :given => val[3][1] }, !!val[3][0])
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'namae.y', 90)
+  def _reduce_18(val, _values, result)
+             result = Name.new({ :particle => val[0,2].join(' '), :family => val[2],
+           :suffix => val[4][0], :given => val[4][1] }, !!val[4][0])
+
+    result
+  end
+.,.,
+
+# reduce 19 omitted
+
+module_eval(<<'.,.,', 'namae.y', 96)
+  def _reduce_20(val, _values, result)
+     result = val.join(' ')
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'namae.y', 97)
+  def _reduce_21(val, _values, result)
+     result = val.join(' ')
+    result
+  end
+.,.,
+
+# reduce 22 omitted
+
+# reduce 23 omitted
+
+module_eval(<<'.,.,', 'namae.y', 101)
+  def _reduce_24(val, _values, result)
+     result = [nil,val[0]]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'namae.y', 102)
+  def _reduce_25(val, _values, result)
+     result = [val[2],val[0]]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'namae.y', 103)
+  def _reduce_26(val, _values, result)
+     result = [val[0],nil]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'namae.y', 104)
+  def _reduce_27(val, _values, result)
+     result = [val[0],val[2]]
+    result
+  end
+.,.,
+
+# reduce 28 omitted
+
+module_eval(<<'.,.,', 'namae.y', 107)
+  def _reduce_29(val, _values, result)
+     result = val.join(' ')
+    result
+  end
+.,.,
+
+# reduce 30 omitted
+
+# reduce 31 omitted
+
+# reduce 32 omitted
+
+module_eval(<<'.,.,', 'namae.y', 112)
+  def _reduce_33(val, _values, result)
+     result = val.join(' ')
+    result
+  end
+.,.,
+
+# reduce 34 omitted
+
+# reduce 35 omitted
+
+# reduce 36 omitted
+
+# reduce 37 omitted
+
+# reduce 38 omitted
+
+# reduce 39 omitted
+
+# reduce 40 omitted
+
+# reduce 41 omitted
+
+# reduce 42 omitted
+
+# reduce 43 omitted
+
+module_eval(<<'.,.,', 'namae.y', 122)
+  def _reduce_44(val, _values, result)
+     result = val.join(' ')
+    result
+  end
+.,.,
+
+# reduce 45 omitted
+
+# reduce 46 omitted
+
+# reduce 47 omitted
+
+module_eval(<<'.,.,', 'namae.y', 127)
+  def _reduce_48(val, _values, result)
+     result = val.join(' ')
+    result
+  end
+.,.,
+
+def _reduce_none(val, _values, result)
+  val[0]
+end
+
+  end   # class Parser
+end   # module Namae
