@@ -268,4 +268,202 @@ module WEBrick
 
       # RFC3253: Versioning Extensions to WebDAV
       #          (Web Distributed Authoring and Versioning)
-   
+      #
+      # VERSION-CONTROL REPORT CHECKOUT CHECK_IN UNCHECKOUT
+      # MKWORKSPACE UPDATE LABEL MERGE ACTIVITY
+
+      private
+
+      def trailing_pathsep?(path)
+        # check for trailing path separator:
+        #   File.dirname("/aaaa/bbbb/")      #=> "/aaaa")
+        #   File.dirname("/aaaa/bbbb/x")     #=> "/aaaa/bbbb")
+        #   File.dirname("/aaaa/bbbb")       #=> "/aaaa")
+        #   File.dirname("/aaaa/bbbbx")      #=> "/aaaa")
+        return File.dirname(path) != File.dirname(path+"x")
+      end
+
+      def prevent_directory_traversal(req, res)
+        # Preventing directory traversal on Windows platforms;
+        # Backslashes (0x5c) in path_info are not interpreted as special
+        # character in URI notation. So the value of path_info should be
+        # normalize before accessing to the filesystem.
+
+        # dirty hack for filesystem encoding; in nature, File.expand_path
+        # should not be used for path normalization.  [Bug #3345]
+        path = req.path_info.dup.force_encoding(Encoding.find("filesystem"))
+        if trailing_pathsep?(req.path_info)
+          # File.expand_path removes the trailing path separator.
+          # Adding a character is a workaround to save it.
+          #  File.expand_path("/aaa/")        #=> "/aaa"
+          #  File.expand_path("/aaa/" + "x")  #=> "/aaa/x"
+          expanded = File.expand_path(path + "x")
+          expanded.chop!  # remove trailing "x"
+        else
+          expanded = File.expand_path(path)
+        end
+        expanded.force_encoding(req.path_info.encoding)
+        req.path_info = expanded
+      end
+
+      def exec_handler(req, res)
+        raise HTTPStatus::NotFound, "`#{req.path}' not found." unless @root
+        if set_filename(req, res)
+          handler = get_handler(req, res)
+          call_callback(:HandlerCallback, req, res)
+          h = handler.get_instance(@config, res.filename)
+          h.service(req, res)
+          return true
+        end
+        call_callback(:HandlerCallback, req, res)
+        return false
+      end
+
+      def get_handler(req, res)
+        suffix1 = (/\.(\w+)\z/ =~ res.filename) && $1.downcase
+        if /\.(\w+)\.([\w\-]+)\z/ =~ res.filename
+          if @options[:AcceptableLanguages].include?($2.downcase)
+            suffix2 = $1.downcase
+          end
+        end
+        handler_table = @options[:HandlerTable]
+        return handler_table[suffix1] || handler_table[suffix2] ||
+               HandlerTable[suffix1] || HandlerTable[suffix2] ||
+               DefaultFileHandler
+      end
+
+      def set_filename(req, res)
+        res.filename = @root
+        path_info = req.path_info.scan(%r|/[^/]*|)
+
+        path_info.unshift("")  # dummy for checking @root dir
+        while base = path_info.first
+          base = set_filesystem_encoding(base)
+          break if base == "/"
+          break unless File.directory?(File.expand_path(res.filename + base))
+          shift_path_info(req, res, path_info)
+          call_callback(:DirectoryCallback, req, res)
+        end
+
+        if base = path_info.first
+          base = set_filesystem_encoding(base)
+          if base == "/"
+            if file = search_index_file(req, res)
+              shift_path_info(req, res, path_info, file)
+              call_callback(:FileCallback, req, res)
+              return true
+            end
+            shift_path_info(req, res, path_info)
+          elsif file = search_file(req, res, base)
+            shift_path_info(req, res, path_info, file)
+            call_callback(:FileCallback, req, res)
+            return true
+          else
+            raise HTTPStatus::NotFound, "`#{req.path}' not found."
+          end
+        end
+
+        return false
+      end
+
+      def check_filename(req, res, name)
+        if nondisclosure_name?(name) || windows_ambiguous_name?(name)
+          @logger.warn("the request refers nondisclosure name `#{name}'.")
+          raise HTTPStatus::NotFound, "`#{req.path}' not found."
+        end
+      end
+
+      def shift_path_info(req, res, path_info, base=nil)
+        tmp = path_info.shift
+        base = base || set_filesystem_encoding(tmp)
+        req.path_info = path_info.join
+        req.script_name << base
+        res.filename = File.expand_path(res.filename + base)
+        check_filename(req, res, File.basename(res.filename))
+      end
+
+      def search_index_file(req, res)
+        @config[:DirectoryIndex].each{|index|
+          if file = search_file(req, res, "/"+index)
+            return file
+          end
+        }
+        return nil
+      end
+
+      def search_file(req, res, basename)
+        langs = @options[:AcceptableLanguages]
+        path = res.filename + basename
+        if File.file?(path)
+          return basename
+        elsif langs.size > 0
+          req.accept_language.each{|lang|
+            path_with_lang = path + ".#{lang}"
+            if langs.member?(lang) && File.file?(path_with_lang)
+              return basename + ".#{lang}"
+            end
+          }
+          (langs - req.accept_language).each{|lang|
+            path_with_lang = path + ".#{lang}"
+            if File.file?(path_with_lang)
+              return basename + ".#{lang}"
+            end
+          }
+        end
+        return nil
+      end
+
+      def call_callback(callback_name, req, res)
+        if cb = @options[callback_name]
+          cb.call(req, res)
+        end
+      end
+
+      def windows_ambiguous_name?(name)
+        return true if /[. ]+\z/ =~ name
+        return true if /::\$DATA\z/ =~ name
+        return false
+      end
+
+      def nondisclosure_name?(name)
+        @options[:NondisclosureName].each{|pattern|
+          if File.fnmatch(pattern, name, File::FNM_CASEFOLD)
+            return true
+          end
+        }
+        return false
+      end
+
+      def set_dir_list(req, res)
+        redirect_to_directory_uri(req, res)
+        unless @options[:FancyIndexing]
+          raise HTTPStatus::Forbidden, "no access permission to `#{req.path}'"
+        end
+        local_path = res.filename
+        list = Dir::entries(local_path).collect{|name|
+          next if name == "." || name == ".."
+          next if nondisclosure_name?(name)
+          next if windows_ambiguous_name?(name)
+          st = (File::stat(File.join(local_path, name)) rescue nil)
+          if st.nil?
+            [ name, nil, -1 ]
+          elsif st.directory?
+            [ name + "/", st.mtime, -1 ]
+          else
+            [ name, st.mtime, st.size ]
+          end
+        }
+        list.compact!
+
+        query = req.query
+
+        d0 = nil
+        idx = nil
+        %w[N M S].each_with_index do |q, i|
+          if d = query.delete(q)
+            idx ||= i
+            d0 ||= d
+          end
+        end
+        d0 ||= "A"
+        idx
