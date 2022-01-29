@@ -364,4 +364,134 @@ EOT
   end
 
   def test_parse_array_custom_non_array_derived_class
-    res = parse('[1,2]', :array_class => SubArrayWrap
+    res = parse('[1,2]', :array_class => SubArrayWrapper)
+    assert_equal([1,2], res.data)
+    assert_equal(SubArrayWrapper, res.class)
+    assert res.shifted?
+  end
+
+  def test_parse_object
+    assert_equal({}, parse('{}'))
+    assert_equal({}, parse('  {  }  '))
+    assert_equal({'foo'=>'bar'}, parse('{"foo":"bar"}'))
+    assert_equal({'foo'=>'bar'}, parse('    { "foo"  :   "bar"   }   '))
+  end
+
+  class SubHash < Hash
+    def []=(k, v)
+      @item_set = true
+      super
+    end
+
+    def item_set?
+      @item_set
+    end
+  end
+
+  class SubHash2 < Hash
+    def to_json(*a)
+      {
+        JSON.create_id => self.class.name,
+      }.merge(self).to_json(*a)
+    end
+
+    def self.json_create(o)
+      o.delete JSON.create_id
+      self[o]
+    end
+  end
+
+  class SubOpenStruct < OpenStruct
+    def [](k)
+      __send__(k)
+    end
+
+    def []=(k, v)
+      @item_set = true
+      __send__("#{k}=", v)
+    end
+
+    def item_set?
+      @item_set
+    end
+  end
+
+  def test_parse_object_custom_hash_derived_class
+    res = parse('{"foo":"bar"}', :object_class => SubHash)
+    assert_equal({"foo" => "bar"}, res)
+    assert_equal(SubHash, res.class)
+    assert res.item_set?
+  end
+
+  def test_parse_object_custom_non_hash_derived_class
+    res = parse('{"foo":"bar"}', :object_class => SubOpenStruct)
+    assert_equal "bar", res.foo
+    assert_equal(SubOpenStruct, res.class)
+    assert res.item_set?
+  end
+
+  def test_parse_generic_object
+    res = parse(
+      '{"foo":"bar", "baz":{}}',
+      :object_class => JSON::GenericObject
+    )
+    assert_equal(JSON::GenericObject, res.class)
+    assert_equal "bar", res.foo
+    assert_equal "bar", res["foo"]
+    assert_equal "bar", res[:foo]
+    assert_equal "bar", res.to_hash[:foo]
+    assert_equal(JSON::GenericObject, res.baz.class)
+  end
+
+  def test_generate_core_subclasses_with_new_to_json
+    obj = SubHash2["foo" => SubHash2["bar" => true]]
+    obj_json = JSON(obj)
+    obj_again = parse(obj_json, :create_additions => true)
+    assert_kind_of SubHash2, obj_again
+    assert_kind_of SubHash2, obj_again['foo']
+    assert obj_again['foo']['bar']
+    assert_equal obj, obj_again
+    assert_equal ["foo"],
+      JSON(JSON(SubArray2["foo"]), :create_additions => true)
+  end
+
+  def test_generate_core_subclasses_with_default_to_json
+    assert_equal '{"foo":"bar"}', JSON(SubHash["foo" => "bar"])
+    assert_equal '["foo"]', JSON(SubArray["foo"])
+  end
+
+  def test_generate_of_core_subclasses
+    obj = SubHash["foo" => SubHash["bar" => true]]
+    obj_json = JSON(obj)
+    obj_again = JSON(obj_json)
+    assert_kind_of Hash, obj_again
+    assert_kind_of Hash, obj_again['foo']
+    assert obj_again['foo']['bar']
+    assert_equal obj, obj_again
+  end
+
+  def test_parsing_frozen_ascii8bit_string
+    assert_equal(
+      { 'foo' => 'bar' },
+      JSON('{ "foo": "bar" }'.force_encoding(Encoding::ASCII_8BIT).freeze)
+    )
+  end
+
+  private
+
+  def string_deduplication_available?
+    r1 = rand.to_s
+    r2 = r1.dup
+    begin
+      (-r1).equal?(-r2)
+    rescue NoMethodError
+      false # No String#-@
+    end
+  end
+
+  def assert_equal_float(expected, actual, delta = 1e-2)
+    Array === expected and expected = expected.first
+    Array === actual and actual = actual.first
+    assert_in_delta(expected, actual, delta)
+  end
+end
