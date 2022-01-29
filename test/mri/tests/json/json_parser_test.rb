@@ -138,4 +138,230 @@ class JSONParserTest < Test::Unit::TestCase
     assert_equal([1,2,3], parse('[1,2,3]'))
     assert_equal([1.2,2,3], parse('[1.2,2,3]'))
     assert_equal([[],[[],[]]], parse('[[],[[],[]]]'))
-    a
+    assert_equal([], parse('[]'))
+    assert_equal([], parse('  [  ]  '))
+    assert_equal([1], parse('[1]'))
+    assert_equal([1], parse('  [ 1  ]  '))
+    ary = [[1], ["foo"], [3.14], [4711.0], [2.718], [nil],
+      [[1, -2, 3]], [false], [true]]
+    assert_equal(ary,
+      parse('[[1],["foo"],[3.14],[47.11e+2],[2718.0E-3],[null],[[1,-2,3]],[false],[true]]'))
+    assert_equal(ary, parse(%Q{   [   [1] , ["foo"]  ,  [3.14] \t ,  [47.11e+2]\s
+      , [2718.0E-3 ],\r[ null] , [[1, -2, 3 ]], [false ],[ true]\n ]  }))
+  end
+
+  def test_parse_json_primitive_values
+    assert_raise(JSON::ParserError) { parse('') }
+    assert_raise(TypeError) { parse(nil) }
+    assert_raise(JSON::ParserError) { parse('  /* foo */ ') }
+    assert_equal nil, parse('null')
+    assert_equal false, parse('false')
+    assert_equal true, parse('true')
+    assert_equal 23, parse('23')
+    assert_equal 1, parse('1')
+    assert_equal_float 3.141, parse('3.141'), 1E-3
+    assert_equal 2 ** 64, parse('18446744073709551616')
+    assert_equal 'foo', parse('"foo"')
+    assert parse('NaN', :allow_nan => true).nan?
+    assert parse('Infinity', :allow_nan => true).infinite?
+    assert parse('-Infinity', :allow_nan => true).infinite?
+    assert_raise(JSON::ParserError) { parse('[ 1, ]') }
+  end
+
+  def test_parse_some_strings
+    assert_equal([""], parse('[""]'))
+    assert_equal(["\\"], parse('["\\\\"]'))
+    assert_equal(['"'], parse('["\""]'))
+    assert_equal(['\\"\\'], parse('["\\\\\\"\\\\"]'))
+    assert_equal(
+      ["\"\b\n\r\t\0\037"],
+      parse('["\"\b\n\r\t\u0000\u001f"]')
+    )
+  end
+
+  def test_parse_big_integers
+    json1 = JSON(orig = (1 << 31) - 1)
+    assert_equal orig, parse(json1)
+    json2 = JSON(orig = 1 << 31)
+    assert_equal orig, parse(json2)
+    json3 = JSON(orig = (1 << 62) - 1)
+    assert_equal orig, parse(json3)
+    json4 = JSON(orig = 1 << 62)
+    assert_equal orig, parse(json4)
+    json5 = JSON(orig = 1 << 64)
+    assert_equal orig, parse(json5)
+  end
+
+  def test_some_wrong_inputs
+    assert_raise(ParserError) { parse('[] bla') }
+    assert_raise(ParserError) { parse('[] 1') }
+    assert_raise(ParserError) { parse('[] []') }
+    assert_raise(ParserError) { parse('[] {}') }
+    assert_raise(ParserError) { parse('{} []') }
+    assert_raise(ParserError) { parse('{} {}') }
+    assert_raise(ParserError) { parse('[NULL]') }
+    assert_raise(ParserError) { parse('[FALSE]') }
+    assert_raise(ParserError) { parse('[TRUE]') }
+    assert_raise(ParserError) { parse('[07]    ') }
+    assert_raise(ParserError) { parse('[0a]') }
+    assert_raise(ParserError) { parse('[1.]') }
+    assert_raise(ParserError) { parse('     ') }
+  end
+
+  def test_symbolize_names
+    assert_equal({ "foo" => "bar", "baz" => "quux" },
+      parse('{"foo":"bar", "baz":"quux"}'))
+    assert_equal({ :foo => "bar", :baz => "quux" },
+      parse('{"foo":"bar", "baz":"quux"}', :symbolize_names => true))
+    assert_raise(ArgumentError) do
+      parse('{}', :symbolize_names => true, :create_additions => true)
+    end
+  end
+
+  def test_freeze
+    assert_predicate parse('{}', :freeze => true), :frozen?
+    assert_predicate parse('[]', :freeze => true), :frozen?
+    assert_predicate parse('"foo"', :freeze => true), :frozen?
+
+    if string_deduplication_available?
+      assert_same(-'foo', parse('"foo"', :freeze => true))
+      assert_same(-'foo', parse('{"foo": 1}', :freeze => true).keys.first)
+    end
+  end
+
+  def test_parse_comments
+    json = <<EOT
+{
+  "key1":"value1", // eol comment
+  "key2":"value2"  /* multi line
+                    *  comment */,
+  "key3":"value3"  /* multi line
+                    // nested eol comment
+                    *  comment */
+}
+EOT
+    assert_equal(
+      { "key1" => "value1", "key2" => "value2", "key3" => "value3" },
+      parse(json))
+    json = <<EOT
+{
+  "key1":"value1"  /* multi line
+                    // nested eol comment
+                    /* illegal nested multi line comment */
+                    *  comment */
+}
+EOT
+    assert_raise(ParserError) { parse(json) }
+    json = <<EOT
+{
+  "key1":"value1"  /* multi line
+                   // nested eol comment
+                   closed multi comment */
+                   and again, throw an Error */
+}
+EOT
+    assert_raise(ParserError) { parse(json) }
+    json = <<EOT
+{
+  "key1":"value1"  /*/*/
+}
+EOT
+    assert_equal({ "key1" => "value1" }, parse(json))
+  end
+
+  def test_nesting
+    too_deep = '[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[["Too deep"]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]'
+    too_deep_ary = eval too_deep
+    assert_raise(JSON::NestingError) { parse too_deep }
+    assert_raise(JSON::NestingError) { parse too_deep, :max_nesting => 100 }
+    ok = parse too_deep, :max_nesting => 101
+    assert_equal too_deep_ary, ok
+    ok = parse too_deep, :max_nesting => nil
+    assert_equal too_deep_ary, ok
+    ok = parse too_deep, :max_nesting => false
+    assert_equal too_deep_ary, ok
+    ok = parse too_deep, :max_nesting => 0
+    assert_equal too_deep_ary, ok
+  end
+
+  def test_backslash
+    data = [ '\\.(?i:gif|jpe?g|png)$' ]
+    json = '["\\\\.(?i:gif|jpe?g|png)$"]'
+    assert_equal data, parse(json)
+    #
+    data = [ '\\"' ]
+    json = '["\\\\\""]'
+    assert_equal data, parse(json)
+    #
+    json = '["/"]'
+    data = [ '/' ]
+    assert_equal data, parse(json)
+    #
+    json = '["\""]'
+    data = ['"']
+    assert_equal data, parse(json)
+    #
+    json = '["\\\'"]'
+    data = ["'"]
+    assert_equal data, parse(json)
+
+    json = '["\/"]'
+    data = [ '/' ]
+    assert_equal data, parse(json)
+  end
+
+  class SubArray < Array
+    def <<(v)
+      @shifted = true
+      super
+    end
+
+    def shifted?
+      @shifted
+    end
+  end
+
+  class SubArray2 < Array
+    def to_json(*a)
+      {
+        JSON.create_id => self.class.name,
+        'ary'          => to_a,
+      }.to_json(*a)
+    end
+
+    def self.json_create(o)
+      o.delete JSON.create_id
+      o['ary']
+    end
+  end
+
+  class SubArrayWrapper
+    def initialize
+      @data = []
+    end
+
+    attr_reader :data
+
+    def [](index)
+      @data[index]
+    end
+
+    def <<(value)
+      @data << value
+      @shifted = true
+    end
+
+    def shifted?
+      @shifted
+    end
+  end
+
+  def test_parse_array_custom_array_derived_class
+    res = parse('[1,2]', :array_class => SubArray)
+    assert_equal([1,2], res)
+    assert_equal(SubArray, res.class)
+    assert res.shifted?
+  end
+
+  def test_parse_array_custom_non_array_derived_class
+    res = parse('[1,2]', :array_class => SubArrayWrap
