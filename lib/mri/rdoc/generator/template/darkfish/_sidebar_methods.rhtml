@@ -5,4 +5,8 @@
 
   <ul class="link-list" role="directory">
     <%- klass.each_method do |meth| -%>
-    <li <%- if meth.calls_super %>class="calls-super" <%- end %>><a href="#<%= meth.aref %>"><%= meth.singleton ? '::' : '#' %>
+    <li <%- if meth.calls_super %>class="calls-super" <%- end %>><a href="#<%= meth.aref %>"><%= meth.singleton ? '::' : '#' %><%= h meth.name -%></a>
+    <%- end -%>
+  </ul>
+</div>
+<%- end -%>
