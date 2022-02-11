@@ -215,4 +215,209 @@ module Rack
       return {} unless header
       header.split(/[;] */n).each_with_object({}) do |cookie, cookies|
         next if cookie.empty?
-        key, value =
+        key, value = cookie.split('=', 2)
+        cookies[key] = (unescape(value) rescue value) unless cookies.key?(key)
+      end
+    end
+
+    def add_cookie_to_header(header, key, value)
+      case value
+      when Hash
+        domain  = "; domain=#{value[:domain]}"   if value[:domain]
+        path    = "; path=#{value[:path]}"       if value[:path]
+        max_age = "; max-age=#{value[:max_age]}" if value[:max_age]
+        expires = "; expires=#{value[:expires].httpdate}" if value[:expires]
+        secure = "; secure"  if value[:secure]
+        httponly = "; HttpOnly" if (value.key?(:httponly) ? value[:httponly] : value[:http_only])
+        same_site =
+          case value[:same_site]
+          when false, nil
+            nil
+          when :none, 'None', :None
+            '; SameSite=None'
+          when :lax, 'Lax', :Lax
+            '; SameSite=Lax'
+          when true, :strict, 'Strict', :Strict
+            '; SameSite=Strict'
+          else
+            raise ArgumentError, "Invalid SameSite value: #{value[:same_site].inspect}"
+          end
+        value = value[:value]
+      end
+      value = [value] unless Array === value
+
+      cookie = "#{escape(key)}=#{value.map { |v| escape v }.join('&')}#{domain}" \
+        "#{path}#{max_age}#{expires}#{secure}#{httponly}#{same_site}"
+
+      case header
+      when nil, ''
+        cookie
+      when String
+        [header, cookie].join("\n")
+      when Array
+        (header + [cookie]).join("\n")
+      else
+        raise ArgumentError, "Unrecognized cookie header value. Expected String, Array, or nil, got #{header.inspect}"
+      end
+    end
+
+    def set_cookie_header!(header, key, value)
+      header[SET_COOKIE] = add_cookie_to_header(header[SET_COOKIE], key, value)
+      nil
+    end
+
+    def make_delete_cookie_header(header, key, value)
+      case header
+      when nil, ''
+        cookies = []
+      when String
+        cookies = header.split("\n")
+      when Array
+        cookies = header
+      end
+
+      key = escape(key)
+      domain = value[:domain]
+      path = value[:path]
+      regexp = if domain
+                 if path
+                   /\A#{key}=.*(?:domain=#{domain}(?:;|$).*path=#{path}(?:;|$)|path=#{path}(?:;|$).*domain=#{domain}(?:;|$))/
+                 else
+                   /\A#{key}=.*domain=#{domain}(?:;|$)/
+                 end
+               elsif path
+                 /\A#{key}=.*path=#{path}(?:;|$)/
+               else
+                 /\A#{key}=/
+               end
+
+      cookies.reject! { |cookie| regexp.match? cookie }
+
+      cookies.join("\n")
+    end
+
+    def delete_cookie_header!(header, key, value = {})
+      header[SET_COOKIE] = add_remove_cookie_to_header(header[SET_COOKIE], key, value)
+      nil
+    end
+
+    # Adds a cookie that will *remove* a cookie from the client.  Hence the
+    # strange method name.
+    def add_remove_cookie_to_header(header, key, value = {})
+      new_header = make_delete_cookie_header(header, key, value)
+
+      add_cookie_to_header(new_header, key,
+                 { value: '', path: nil, domain: nil,
+                   max_age: '0',
+                   expires: Time.at(0) }.merge(value))
+
+    end
+
+    def rfc2822(time)
+      time.rfc2822
+    end
+
+    # Modified version of stdlib time.rb Time#rfc2822 to use '%d-%b-%Y' instead
+    # of '% %b %Y'.
+    # It assumes that the time is in GMT to comply to the RFC 2109.
+    #
+    # NOTE: I'm not sure the RFC says it requires GMT, but is ambiguous enough
+    # that I'm certain someone implemented only that option.
+    # Do not use %a and %b from Time.strptime, it would use localized names for
+    # weekday and month.
+    #
+    def rfc2109(time)
+      wday = Time::RFC2822_DAY_NAME[time.wday]
+      mon = Time::RFC2822_MONTH_NAME[time.mon - 1]
+      time.strftime("#{wday}, %d-#{mon}-%Y %H:%M:%S GMT")
+    end
+
+    # Parses the "Range:" header, if present, into an array of Range objects.
+    # Returns nil if the header is missing or syntactically invalid.
+    # Returns an empty array if none of the ranges are satisfiable.
+    def byte_ranges(env, size)
+      warn "`byte_ranges` is deprecated, please use `get_byte_ranges`" if $VERBOSE
+      get_byte_ranges env['HTTP_RANGE'], size
+    end
+
+    def get_byte_ranges(http_range, size)
+      # See <http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35>
+      return nil unless http_range && http_range =~ /bytes=([^;]+)/
+      ranges = []
+      $1.split(/,\s*/).each do |range_spec|
+        return nil  unless range_spec =~ /(\d*)-(\d*)/
+        r0, r1 = $1, $2
+        if r0.empty?
+          return nil  if r1.empty?
+          # suffix-byte-range-spec, represents trailing suffix of file
+          r0 = size - r1.to_i
+          r0 = 0  if r0 < 0
+          r1 = size - 1
+        else
+          r0 = r0.to_i
+          if r1.empty?
+            r1 = size - 1
+          else
+            r1 = r1.to_i
+            return nil  if r1 < r0  # backwards range is syntactically invalid
+            r1 = size - 1  if r1 >= size
+          end
+        end
+        ranges << (r0..r1)  if r0 <= r1
+      end
+      ranges
+    end
+
+    # Constant time string comparison.
+    #
+    # NOTE: the values compared should be of fixed length, such as strings
+    # that have already been processed by HMAC. This should not be used
+    # on variable length plaintext strings because it could leak length info
+    # via timing attacks.
+    def secure_compare(a, b)
+      return false unless a.bytesize == b.bytesize
+
+      l = a.unpack("C*")
+
+      r, i = 0, -1
+      b.each_byte { |v| r |= v ^ l[i += 1] }
+      r == 0
+    end
+
+    # Context allows the use of a compatible middleware at different points
+    # in a request handling stack. A compatible middleware must define
+    # #context which should take the arguments env and app. The first of which
+    # would be the request environment. The second of which would be the rack
+    # application that the request would be forwarded to.
+    class Context
+      attr_reader :for, :app
+
+      def initialize(app_f, app_r)
+        raise 'running context does not respond to #context' unless app_f.respond_to? :context
+        @for, @app = app_f, app_r
+      end
+
+      def call(env)
+        @for.context(env, @app)
+      end
+
+      def recontext(app)
+        self.class.new(@for, app)
+      end
+
+      def context(env, app = @app)
+        recontext(app).call(env)
+      end
+    end
+
+    # A case-insensitive Hash that preserves the original case of a
+    # header when set.
+    #
+    # @api private
+    class HeaderHash < Hash # :nodoc:
+      def self.[](headers)
+        if headers.is_a?(HeaderHash) && !headers.frozen?
+          return headers
+        else
+          return self.new(headers)
+ 
