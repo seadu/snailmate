@@ -111,4 +111,27 @@ module OpenSSL::TestEOF
       end
     end
 
-    def test_eof_
+    def test_eof_0_seek
+      open_file_seek("", 10) {|f|
+        assert_equal(10, f.pos)
+        assert_equal("", f.read(0))
+        assert_equal("", f.read)
+        assert_equal("", f.read(0))
+        assert_equal("", f.read)
+      }
+    end
+
+    def test_eof_1_seek
+      open_file_seek("a", 10) {|f|
+        assert_equal("", f.read)
+        assert_equal("", f.read)
+      }
+      open_file_seek("a", 1) {|f|
+        assert_equal("", f.read)
+        assert_equal("", f.read)
+      }
+    end
+  end
+end
+
+end
