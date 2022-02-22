@@ -210,4 +210,163 @@ rule
                       result = @builder.op_assign(val[0], val[1], val[2])
                     }
                 | primary_value tLBRACK2 opt_call_args rbracket tOP_ASGN command_call
-      
+                    {
+                      result = @builder.op_assign(
+                                  @builder.index(
+                                    val[0], val[1], val[2], val[3]),
+                                  val[4], val[5])
+                    }
+                | primary_value tDOT tIDENTIFIER tOP_ASGN command_call
+                    {
+                      result = @builder.op_assign(
+                                  @builder.call_method(
+                                    val[0], val[1], val[2]),
+                                  val[3], val[4])
+                    }
+                | primary_value tDOT tCONSTANT tOP_ASGN command_call
+                    {
+                      result = @builder.op_assign(
+                                  @builder.call_method(
+                                    val[0], val[1], val[2]),
+                                  val[3], val[4])
+                    }
+                | primary_value tCOLON2 tCONSTANT tOP_ASGN command_call
+                    {
+                      result = @builder.op_assign(
+                                  @builder.call_method(
+                                    val[0], val[1], val[2]),
+                                  val[3], val[4])
+                    }
+                | primary_value tCOLON2 tIDENTIFIER tOP_ASGN command_call
+                    {
+                      result = @builder.op_assign(
+                                  @builder.call_method(
+                                    val[0], val[1], val[2]),
+                                  val[3], val[4])
+                    }
+                | backref tOP_ASGN command_call
+                    {
+                      @builder.op_assign(val[0], val[1], val[2])
+                    }
+                | lhs tEQL mrhs
+                    {
+                      result = @builder.assign(val[0], val[1],
+                                  @builder.array(nil, val[2], nil))
+                    }
+                | mlhs tEQL arg_value
+                    {
+                      result = @builder.multi_assign(val[0], val[1], val[2])
+                    }
+                | mlhs tEQL mrhs
+                    {
+                      result = @builder.multi_assign(val[0], val[1],
+                                  @builder.array(nil, val[2], nil))
+                    }
+                | expr
+
+            expr: command_call
+                | expr kAND expr
+                    {
+                      result = @builder.logical_op(:and, val[0], val[1], val[2])
+                    }
+                | expr kOR expr
+                    {
+                      result = @builder.logical_op(:or, val[0], val[1], val[2])
+                    }
+                | kNOT opt_nl expr
+                    {
+                      result = @builder.not_op(val[0], nil, val[2], nil)
+                    }
+                | tBANG command_call
+                    {
+                      result = @builder.not_op(val[0], nil, val[1], nil)
+                    }
+                | arg
+
+      expr_value: expr
+
+    command_call: command
+                | block_command
+
+   block_command: block_call
+                | block_call tDOT operation2 command_args
+                    {
+                      result = @builder.call_method(val[0], val[1], val[2],
+                                  *val[3])
+                    }
+                | block_call tCOLON2 operation2 command_args
+                    {
+                      result = @builder.call_method(val[0], val[1], val[2],
+                                  *val[3])
+                    }
+
+ cmd_brace_block: tLBRACE_ARG
+                    {
+                      @static_env.extend_dynamic
+                    }
+                    opt_block_param compstmt tRCURLY
+                    {
+                      result = [ val[0], val[2], val[3], val[4] ]
+
+                      @static_env.unextend
+                    }
+
+         command: operation command_args =tLOWEST
+                    {
+                      result = @builder.call_method(nil, nil, val[0],
+                                  *val[1])
+                    }
+                | operation command_args cmd_brace_block
+                    {
+                      method_call = @builder.call_method(nil, nil, val[0],
+                                        *val[1])
+
+                      begin_t, args, body, end_t = val[2]
+                      result      = @builder.block(method_call,
+                                      begin_t, args, body, end_t)
+                    }
+                | primary_value tDOT operation2 command_args =tLOWEST
+                    {
+                      result = @builder.call_method(val[0], val[1], val[2],
+                                  *val[3])
+                    }
+                | primary_value tDOT operation2 command_args cmd_brace_block
+                    {
+                      method_call = @builder.call_method(val[0], val[1], val[2],
+                                        *val[3])
+
+                      begin_t, args, body, end_t = val[4]
+                      result      = @builder.block(method_call,
+                                      begin_t, args, body, end_t)
+                    }
+                | primary_value tCOLON2 operation2 command_args =tLOWEST
+                    {
+                      result = @builder.call_method(val[0], val[1], val[2],
+                                  *val[3])
+                    }
+                | primary_value tCOLON2 operation2 command_args cmd_brace_block
+                    {
+                      method_call = @builder.call_method(val[0], val[1], val[2],
+                                        *val[3])
+
+                      begin_t, args, body, end_t = val[4]
+                      result      = @builder.block(method_call,
+                                      begin_t, args, body, end_t)
+                    }
+                | kSUPER command_args
+                    {
+                      result = @builder.keyword_cmd(:super, val[0],
+                                  *val[1])
+                    }
+                | kYIELD command_args
+                    {
+                      result = @builder.keyword_cmd(:yield, val[0],
+                                  *val[1])
+                    }
+                | kRETURN call_args
+                    {
+                      result = @builder.keyword_cmd(:return, val[0],
+                                  nil, val[1], nil)
+                    }
+                | kBREAK call_args
+                
