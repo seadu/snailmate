@@ -369,4 +369,187 @@ rule
                                   nil, val[1], nil)
                     }
                 | kBREAK call_args
-                
+                    {
+                      result = @builder.keyword_cmd(:break, val[0],
+                                  nil, val[1], nil)
+                    }
+                | kNEXT call_args
+                    {
+                      result = @builder.keyword_cmd(:next, val[0],
+                                  nil, val[1], nil)
+                    }
+
+            mlhs: mlhs_basic
+                    {
+                      result = @builder.multi_lhs(nil, val[0], nil)
+                    }
+                | tLPAREN mlhs_inner rparen
+                    {
+                      result = @builder.begin(val[0], val[1], val[2])
+                    }
+
+      mlhs_inner: mlhs_basic
+                    {
+                      result = @builder.multi_lhs(nil, val[0], nil)
+                    }
+                | tLPAREN mlhs_inner rparen
+                    {
+                      result = @builder.multi_lhs(val[0], val[1], val[2])
+                    }
+
+      mlhs_basic: mlhs_head
+                | mlhs_head mlhs_item
+                    {
+                      result = val[0].
+                                  push(val[1])
+                    }
+                | mlhs_head tSTAR mlhs_node
+                    {
+                      result = val[0].
+                                  push(@builder.splat(val[1], val[2]))
+                    }
+                | mlhs_head tSTAR mlhs_node tCOMMA mlhs_post
+                    {
+                      result = val[0].
+                                  push(@builder.splat(val[1], val[2])).
+                                  concat(val[4])
+                    }
+                | mlhs_head tSTAR
+                    {
+                      result = val[0].
+                                  push(@builder.splat(val[1]))
+                    }
+                | mlhs_head tSTAR tCOMMA mlhs_post
+                    {
+                      result = val[0].
+                                  push(@builder.splat(val[1])).
+                                  concat(val[3])
+                    }
+                | tSTAR mlhs_node
+                    {
+                      result = [ @builder.splat(val[0], val[1]) ]
+                    }
+                | tSTAR mlhs_node tCOMMA mlhs_post
+                    {
+                      result = [ @builder.splat(val[0], val[1]),
+                                 *val[3] ]
+                    }
+                | tSTAR
+                    {
+                      result = [ @builder.splat(val[0]) ]
+                    }
+                | tSTAR tCOMMA mlhs_post
+                    {
+                      result = [ @builder.splat(val[0]),
+                                 *val[2] ]
+                    }
+
+       mlhs_item: mlhs_node
+                | tLPAREN mlhs_inner rparen
+                    {
+                      result = @builder.begin(val[0], val[1], val[2])
+                    }
+
+       mlhs_head: mlhs_item tCOMMA
+                    {
+                      result = [ val[0] ]
+                    }
+                | mlhs_head mlhs_item tCOMMA
+                    {
+                      result = val[0] << val[1]
+                    }
+
+       mlhs_post: mlhs_item
+                    {
+                      result = [ val[0] ]
+                    }
+                | mlhs_post tCOMMA mlhs_item
+                    {
+                      result = val[0] << val[2]
+                    }
+
+       mlhs_node: variable
+                    {
+                      result = @builder.assignable(val[0])
+                    }
+                | primary_value tLBRACK2 opt_call_args rbracket
+                    {
+                      result = @builder.index_asgn(val[0], val[1], val[2], val[3])
+                    }
+                | primary_value tDOT tIDENTIFIER
+                    {
+                      result = @builder.attr_asgn(val[0], val[1], val[2])
+                    }
+                | primary_value tCOLON2 tIDENTIFIER
+                    {
+                      result = @builder.attr_asgn(val[0], val[1], val[2])
+                    }
+                | primary_value tDOT tCONSTANT
+                    {
+                      result = @builder.attr_asgn(val[0], val[1], val[2])
+                    }
+                | primary_value tCOLON2 tCONSTANT
+                    {
+                      result = @builder.assignable(
+                                  @builder.const_fetch(val[0], val[1], val[2]))
+                    }
+                | tCOLON3 tCONSTANT
+                    {
+                      result = @builder.assignable(
+                                  @builder.const_global(val[0], val[1]))
+                    }
+                | backref
+                    {
+                      result = @builder.assignable(val[0])
+                    }
+
+             lhs: variable
+                    {
+                      result = @builder.assignable(val[0])
+                    }
+                | primary_value tLBRACK2 opt_call_args rbracket
+                    {
+                      result = @builder.index_asgn(val[0], val[1], val[2], val[3])
+                    }
+                | primary_value tDOT tIDENTIFIER
+                    {
+                      result = @builder.attr_asgn(val[0], val[1], val[2])
+                    }
+                | primary_value tCOLON2 tIDENTIFIER
+                    {
+                      result = @builder.attr_asgn(val[0], val[1], val[2])
+                    }
+                | primary_value tDOT tCONSTANT
+                    {
+                      result = @builder.attr_asgn(val[0], val[1], val[2])
+                    }
+                | primary_value tCOLON2 tCONSTANT
+                    {
+                      result = @builder.assignable(
+                                  @builder.const_fetch(val[0], val[1], val[2]))
+                    }
+                | tCOLON3 tCONSTANT
+                    {
+                      result = @builder.assignable(
+                                  @builder.const_global(val[0], val[1]))
+                    }
+                | backref
+                    {
+                      result = @builder.assignable(val[0])
+                    }
+
+           cname: tIDENTIFIER
+                    {
+                      diagnostic :error, :module_name_const, nil, val[0]
+                    }
+                | tCONSTANT
+
+           cpath: tCOLON3 cname
+                    {
+                      result = @builder.const_global(val[0], val[1])
+                    }
+                | cname
+                    {
+                      result = @builder.const(val[0])
+                    }
+                | p
