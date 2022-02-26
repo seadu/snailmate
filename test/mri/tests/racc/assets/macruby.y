@@ -552,4 +552,165 @@ rule
                     {
                       result = @builder.const(val[0])
                     }
-                | p
+                | primary_value tCOLON2 cname
+                    {
+                      result = @builder.const_fetch(val[0], val[1], val[2])
+                    }
+
+           fname: tIDENTIFIER | tCONSTANT | tFID
+                | op
+                | reswords
+
+            fsym: fname
+                    {
+                      result = @builder.symbol(val[0])
+                    }
+                | symbol
+
+           fitem: fsym
+                | dsym
+
+      undef_list: fitem
+                    {
+                      result = [ val[0] ]
+                    }
+                | undef_list tCOMMA
+                    {
+                      @lexer.state = :expr_fname
+                    }
+                    fitem
+                    {
+                      result = val[0] << val[3]
+                    }
+
+              op:   tPIPE    | tCARET  | tAMPER2  | tCMP  | tEQ     | tEQQ
+                |   tMATCH   | tNMATCH | tGT      | tGEQ  | tLT     | tLEQ
+                |   tNEQ     | tLSHFT  | tRSHFT   | tPLUS | tMINUS  | tSTAR2
+                |   tSTAR    | tDIVIDE | tPERCENT | tPOW  | tBANG   | tTILDE
+                |   tUPLUS   | tUMINUS | tAREF    | tASET | tBACK_REF2
+
+        reswords: k__LINE__ | k__FILE__ | k__ENCODING__ | klBEGIN | klEND
+                | kALIAS    | kAND      | kBEGIN        | kBREAK  | kCASE
+                | kCLASS    | kDEF      | kDEFINED      | kDO     | kELSE
+                | kELSIF    | kEND      | kENSURE       | kFALSE  | kFOR
+                | kIN       | kMODULE   | kNEXT         | kNIL    | kNOT
+                | kOR       | kREDO     | kRESCUE       | kRETRY  | kRETURN
+                | kSELF     | kSUPER    | kTHEN         | kTRUE   | kUNDEF
+                | kWHEN     | kYIELD    | kIF           | kUNLESS | kWHILE
+                | kUNTIL
+
+             arg: lhs tEQL arg
+                    {
+                      result = @builder.assign(val[0], val[1], val[2])
+                    }
+                | lhs tEQL arg kRESCUE_MOD arg
+                    {
+                      rescue_body = @builder.rescue_body(val[3],
+                                        nil, nil, nil,
+                                        nil, val[4])
+
+                      rescue_ = @builder.begin_body(val[2], [ rescue_body ])
+
+                      result  = @builder.assign(val[0], val[1], rescue_)
+                    }
+                | var_lhs tOP_ASGN arg
+                    {
+                      result = @builder.op_assign(val[0], val[1], val[2])
+                    }
+                | var_lhs tOP_ASGN arg kRESCUE_MOD arg
+                    {
+                      rescue_body = @builder.rescue_body(val[3],
+                                        nil, nil, nil,
+                                        nil, val[4])
+
+                      rescue_ = @builder.begin_body(val[2], [ rescue_body ])
+
+                      result = @builder.op_assign(val[0], val[1], rescue_)
+                    }
+                | primary_value tLBRACK2 opt_call_args rbracket tOP_ASGN arg
+                    {
+                      result = @builder.op_assign(
+                                  @builder.index(
+                                    val[0], val[1], val[2], val[3]),
+                                  val[4], val[5])
+                    }
+                | primary_value tDOT tIDENTIFIER tOP_ASGN arg
+                    {
+                      result = @builder.op_assign(
+                                  @builder.call_method(
+                                    val[0], val[1], val[2]),
+                                  val[3], val[4])
+                    }
+                | primary_value tDOT tCONSTANT tOP_ASGN arg
+                    {
+                      result = @builder.op_assign(
+                                  @builder.call_method(
+                                    val[0], val[1], val[2]),
+                                  val[3], val[4])
+                    }
+                | primary_value tCOLON2 tIDENTIFIER tOP_ASGN arg
+                    {
+                      result = @builder.op_assign(
+                                  @builder.call_method(
+                                    val[0], val[1], val[2]),
+                                  val[3], val[4])
+                    }
+                | primary_value tCOLON2 tCONSTANT tOP_ASGN arg
+                    {
+                      diagnostic :error, :dynamic_const, nil, val[2], [ val[3] ]
+                    }
+                | tCOLON3 tCONSTANT tOP_ASGN arg
+                    {
+                      diagnostic :error, :dynamic_const, nil, val[1], [ val[2] ]
+                    }
+                | backref tOP_ASGN arg
+                    {
+                      result = @builder.op_assign(val[0], val[1], val[2])
+                    }
+                | arg tDOT2 arg
+                    {
+                      result = @builder.range_inclusive(val[0], val[1], val[2])
+                    }
+                | arg tDOT3 arg
+                    {
+                      result = @builder.range_exclusive(val[0], val[1], val[2])
+                    }
+                | arg tPLUS arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tMINUS arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tSTAR2 arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tDIVIDE arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tPERCENT arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tPOW arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | tUMINUS_NUM tINTEGER tPOW arg
+                    {
+                      result = @builder.unary_op(val[0],
+                                  @builder.binary_op(
+                                    @builder.integer(val[1]),
+                                      val[2], val[3]))
+                    }
+                | tUMINUS_NUM tFLOAT tPOW arg
+                    {
+                      result = @builder.unary_op(val[0],
+                                  @builder.binary_op(
+                                    @builder.float(val[1]),
+                                      val[2], val[3]))
+                    }
+  
