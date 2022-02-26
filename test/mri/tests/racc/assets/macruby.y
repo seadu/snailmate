@@ -713,4 +713,185 @@ rule
                                     @builder.float(val[1]),
                                       val[2], val[3]))
                     }
-  
+                | tUPLUS arg
+                    {
+                      result = @builder.unary_op(val[0], val[1])
+                    }
+                | tUMINUS arg
+                    {
+                      result = @builder.unary_op(val[0], val[1])
+                    }
+                | arg tPIPE arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tCARET arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tAMPER2 arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tCMP arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tGT arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tGEQ arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tLT arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tLEQ arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tEQ arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tEQQ arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tNEQ arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tMATCH arg
+                    {
+                      result = @builder.match_op(val[0], val[1], val[2])
+                    }
+                | arg tNMATCH arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | tBANG arg
+                    {
+                      result = @builder.not_op(val[0], nil, val[1], nil)
+                    }
+                | tTILDE arg
+                    {
+                      result = @builder.unary_op(val[0], val[1])
+                    }
+                | arg tLSHFT arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tRSHFT arg
+                    {
+                      result = @builder.binary_op(val[0], val[1], val[2])
+                    }
+                | arg tANDOP arg
+                    {
+                      result = @builder.logical_op(:and, val[0], val[1], val[2])
+                    }
+                | arg tOROP arg
+                    {
+                      result = @builder.logical_op(:or, val[0], val[1], val[2])
+                    }
+                | kDEFINED opt_nl arg
+                    {
+                      result = @builder.keyword_cmd(:defined?, val[0], nil, [ val[2] ], nil)
+                    }
+
+                | arg tEH arg opt_nl tCOLON arg
+                    {
+                      result = @builder.ternary(val[0], val[1],
+                                                val[2], val[4], val[5])
+                    }
+                | primary
+
+       arg_value: arg
+
+       aref_args: none
+                | args trailer
+                | args tCOMMA assocs trailer
+                    {
+                      result = val[0] << @builder.associate(nil, val[2], nil)
+                    }
+                | assocs trailer
+                    {
+                      result = [ @builder.associate(nil, val[0], nil) ]
+                    }
+
+      paren_args: tLPAREN2 opt_call_args rparen
+                    {
+                      result = val
+                    }
+
+  opt_paren_args: # nothing
+                    {
+                      result = [ nil, [], nil ]
+                    }
+                | paren_args
+
+   opt_call_args: # nothing
+                    {
+                      result = []
+                    }
+                | call_args
+
+       call_args: command
+                    {
+                      result = [ val[0] ]
+                    }
+                | args opt_block_arg
+                    {
+                      result = val[0].concat(val[1])
+                    }
+                | assocs opt_block_arg
+                    {
+                      result = [ @builder.associate(nil, val[0], nil) ]
+                      result.concat(val[1])
+                    }
+                | args tCOMMA assocs opt_block_arg
+                    {
+                      assocs = @builder.associate(nil, val[2], nil)
+                      result = val[0] << assocs
+                      result.concat(val[3])
+                    }
+                | args tCOMMA assocs tCOMMA args opt_block_arg
+                    {
+                      val[2][-1] = @builder.objc_varargs(val[2][-1], val[4])
+                      assocs = @builder.associate(nil, val[2], nil)
+                      result = val[0] << assocs
+                      result.concat(val[5])
+                    }
+                | block_arg
+                    {
+                      result =  [ val[0] ]
+                    }
+
+      call_args2: arg_value tCOMMA args opt_block_arg
+                    {
+                      result = [ val[0], *val[2].concat(val[3]) ]
+                    }
+                | arg_value tCOMMA block_arg
+                    {
+                      result = [ val[0], val[2] ]
+                    }
+                | assocs opt_block_arg
+                    {
+                      result =  [ @builder.associate(nil, val[0], nil),
+                                  *val[1] ]
+                    }
+                | arg_value tCOMMA assocs opt_block_arg
+                    {
+                      result =  [ val[0],
+                                  @builder.associate(nil, val[2], nil),
+                                  *val[3] ]
+                    }
+                | arg_value tCOMMA args tCOMMA assocs opt_block_arg
+                    {
+                      result =  [ val[0],
+                                  *val[2].
+                                    push(@builder.associate(nil, val[4], nil)).
+                          
