@@ -894,4 +894,194 @@ rule
                       result =  [ val[0],
                                   *val[2].
                                     push(@builder.associate(nil, val[4], nil)).
-                          
+                                    concat(val[5]) ]
+                    }
+                | block_arg
+                    {
+                      result = [ val[0] ]
+                    }
+
+    command_args:   {
+                      result = @lexer.cmdarg.dup
+                      @lexer.cmdarg.push(true)
+                    }
+                    open_args
+                    {
+                      @lexer.cmdarg = val[0]
+
+                      result = val[1]
+                    }
+
+       open_args: call_args
+                    {
+                      result = [ nil, val[0], nil ]
+                    }
+                | tLPAREN_ARG
+                    {
+                      @lexer.state = :expr_endarg
+                    }
+                    rparen
+                    {
+                      result = [ val[0], [], val[2] ]
+                    }
+                | tLPAREN_ARG call_args2
+                    {
+                      @lexer.state = :expr_endarg
+                    }
+                    rparen
+                    {
+                      result = [ val[0], val[1], val[3] ]
+                    }
+
+       block_arg: tAMPER arg_value
+                    {
+                      result = @builder.block_pass(val[0], val[1])
+                    }
+
+   opt_block_arg: tCOMMA block_arg
+                    {
+                      result = [ val[1] ]
+                    }
+                | tCOMMA
+                    {
+                      result = []
+                    }
+                | # nothing
+                    {
+                      result = []
+                    }
+
+            args: arg_value
+                    {
+                      result = [ val[0] ]
+                    }
+                | tSTAR arg_value
+                    {
+                      result = [ @builder.splat(val[0], val[1]) ]
+                    }
+                | args tCOMMA arg_value
+                    {
+                      result = val[0] << val[2]
+                    }
+                | args tCOMMA tSTAR arg_value
+                    {
+                      result = val[0] << @builder.splat(val[2], val[3])
+                    }
+
+            mrhs: args tCOMMA arg_value
+                    {
+                      result = val[0] << val[2]
+                    }
+                | args tCOMMA tSTAR arg_value
+                    {
+                      result = val[0] << @builder.splat(val[2], val[3])
+                    }
+                | tSTAR arg_value
+                    {
+                      result = [ @builder.splat(val[0], val[1]) ]
+                    }
+
+         primary: literal
+                | strings
+                | xstring
+                | regexp
+                | words
+                | qwords
+                | var_ref
+                | backref
+                | tFID
+                    {
+                      result = @builder.call_method(nil, nil, val[0])
+                    }
+                | kBEGIN bodystmt kEND
+                    {
+                      result = @builder.begin_keyword(val[0], val[1], val[2])
+                    }
+                | tLPAREN_ARG expr
+                    {
+                      @lexer.state = :expr_endarg
+                    }
+                    rparen
+                    {
+                      result = @builder.begin(val[0], val[1], val[3])
+                    }
+                | tLPAREN compstmt tRPAREN
+                    {
+                      result = @builder.begin(val[0], val[1], val[2])
+                    }
+                | primary_value tCOLON2 tCONSTANT
+                    {
+                      result = @builder.const_fetch(val[0], val[1], val[2])
+                    }
+                | tCOLON3 tCONSTANT
+                    {
+                      result = @builder.const_global(val[0], val[1])
+                    }
+                | tLBRACK aref_args tRBRACK
+                    {
+                      result = @builder.array(val[0], val[1], val[2])
+                    }
+                | tLBRACE assoc_list tRCURLY
+                    {
+                      result = @builder.associate(val[0], val[1], val[2])
+                    }
+                | kRETURN
+                    {
+                      result = @builder.keyword_cmd(:return, val[0])
+                    }
+                | kYIELD tLPAREN2 call_args rparen
+                    {
+                      result = @builder.keyword_cmd(:yield, val[0], val[1], val[2], val[3])
+                    }
+                | kYIELD tLPAREN2 rparen
+                    {
+                      result = @builder.keyword_cmd(:yield, val[0], val[1], [], val[2])
+                    }
+                | kYIELD
+                    {
+                      result = @builder.keyword_cmd(:yield, val[0])
+                    }
+                | kDEFINED opt_nl tLPAREN2 expr rparen
+                    {
+                      result = @builder.keyword_cmd(:defined?, val[0],
+                                                    val[2], [ val[3] ], val[4])
+                    }
+                | kNOT tLPAREN2 expr rparen
+                    {
+                      result = @builder.not_op(val[0], val[1], val[2], val[3])
+                    }
+                | kNOT tLPAREN2 rparen
+                    {
+                      result = @builder.not_op(val[0], val[1], nil, val[2])
+                    }
+                | operation brace_block
+                    {
+                      method_call = @builder.call_method(nil, nil, val[0])
+
+                      begin_t, args, body, end_t = val[1]
+                      result      = @builder.block(method_call,
+                                      begin_t, args, body, end_t)
+                    }
+                | method_call
+                | method_call brace_block
+                    {
+                      begin_t, args, body, end_t = val[1]
+                      result      = @builder.block(val[0],
+                                      begin_t, args, body, end_t)
+                    }
+                | tLAMBDA lambda
+                    {
+                      lambda_call = @builder.call_lambda(val[0])
+
+                      args, (begin_t, body, end_t) = val[1]
+                      result      = @builder.block(lambda_call,
+                                      begin_t, args, body, end_t)
+                    }
+                | kIF expr_value then compstmt if_tail kEND
+                    {
+                      else_t, else_ = val[4]
+                      result = @builder.condition(val[0], val[1], val[2],
+                                                  val[3], else_t,
+                                                  else_,  val[5])
+                    }
+     
