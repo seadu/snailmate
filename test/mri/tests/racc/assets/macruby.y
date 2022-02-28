@@ -1084,4 +1084,190 @@ rule
                                                   val[3], else_t,
                                                   else_,  val[5])
                     }
-     
+                | kUNLESS expr_value then compstmt opt_else kEND
+                    {
+                      else_t, else_ = val[4]
+                      result = @builder.condition(val[0], val[1], val[2],
+                                                  else_,  else_t,
+                                                  val[3], val[5])
+                    }
+                | kWHILE
+                    {
+                      @lexer.cond.push(true)
+                    }
+                    expr_value do
+                    {
+                      @lexer.cond.pop
+                    }
+                    compstmt kEND
+                    {
+                      result = @builder.loop(:while, val[0], val[2], val[3],
+                                             val[5], val[6])
+                    }
+                | kUNTIL
+                    {
+                      @lexer.cond.push(true)
+                    }
+                    expr_value do
+                    {
+                      @lexer.cond.pop
+                    }
+                    compstmt kEND
+                    {
+                      result = @builder.loop(:until, val[0], val[2], val[3],
+                                             val[5], val[6])
+                    }
+                | kCASE expr_value opt_terms case_body kEND
+                    {
+                      *when_bodies, (else_t, else_body) = *val[3]
+
+                      result = @builder.case(val[0], val[1],
+                                             when_bodies, else_t, else_body,
+                                             val[4])
+                    }
+                | kCASE            opt_terms case_body kEND
+                    {
+                      *when_bodies, (else_t, else_body) = *val[2]
+
+                      result = @builder.case(val[0], nil,
+                                             when_bodies, else_t, else_body,
+                                             val[3])
+                    }
+                | kFOR for_var kIN
+                    {
+                      @lexer.cond.push(true)
+                    }
+                    expr_value do
+                    {
+                      @lexer.cond.pop
+                    }
+                    compstmt kEND
+                    {
+                      result = @builder.for(val[0], val[1],
+                                            val[2], val[4],
+                                            val[5], val[7], val[8])
+                    }
+                | kCLASS cpath superclass
+                    {
+                      @static_env.extend_static
+                      @lexer.push_cmdarg
+                    }
+                    bodystmt kEND
+                    {
+                      if in_def?
+                        diagnostic :error, :class_in_def, nil, val[0]
+                      end
+
+                      lt_t, superclass = val[2]
+                      result = @builder.def_class(val[0], val[1],
+                                                  lt_t, superclass,
+                                                  val[4], val[5])
+
+                      @lexer.pop_cmdarg
+                      @static_env.unextend
+                    }
+                | kCLASS tLSHFT expr term
+                    {
+                      result = @def_level
+                      @def_level = 0
+
+                      @static_env.extend_static
+                      @lexer.push_cmdarg
+                    }
+                    bodystmt kEND
+                    {
+                      result = @builder.def_sclass(val[0], val[1], val[2],
+                                                   val[5], val[6])
+
+                      @lexer.pop_cmdarg
+                      @static_env.unextend
+
+                      @def_level = val[4]
+                    }
+                | kMODULE cpath
+                    {
+                      @static_env.extend_static
+                      @lexer.push_cmdarg
+                    }
+                    bodystmt kEND
+                    {
+                      if in_def?
+                        diagnostic :error, :module_in_def, nil, val[0]
+                      end
+
+                      result = @builder.def_module(val[0], val[1],
+                                                   val[3], val[4])
+
+                      @lexer.pop_cmdarg
+                      @static_env.unextend
+                    }
+                | kDEF fname
+                    {
+                      @def_level += 1
+                      @static_env.extend_static
+                      @lexer.push_cmdarg
+                    }
+                    f_arglist bodystmt kEND
+                    {
+                      result = @builder.def_method(val[0], val[1],
+                                  val[3], val[4], val[5])
+
+                      @lexer.pop_cmdarg
+                      @static_env.unextend
+                      @def_level -= 1
+                    }
+                | kDEF singleton dot_or_colon
+                    {
+                      @lexer.state = :expr_fname
+                    }
+                    fname
+                    {
+                      @def_level += 1
+                      @static_env.extend_static
+                      @lexer.push_cmdarg
+                    }
+                    f_arglist bodystmt kEND
+                    {
+                      result = @builder.def_singleton(val[0], val[1], val[2],
+                                  val[4], val[6], val[7], val[8])
+
+                      @lexer.pop_cmdarg
+                      @static_env.unextend
+                      @def_level -= 1
+                    }
+                | kBREAK
+                    {
+                      result = @builder.keyword_cmd(:break, val[0])
+                    }
+                | kNEXT
+                    {
+                      result = @builder.keyword_cmd(:next, val[0])
+                    }
+                | kREDO
+                    {
+                      result = @builder.keyword_cmd(:redo, val[0])
+                    }
+                | kRETRY
+                    {
+                      result = @builder.keyword_cmd(:retry, val[0])
+                    }
+
+   primary_value: primary
+
+            then: term
+                | kTHEN
+                | term kTHEN
+                    {
+                      result = val[1]
+                    }
+
+              do: term
+                | kDO_COND
+
+         if_tail: opt_else
+                | kELSIF expr_value then compstmt if_tail
+                    {
+                      else_t, else_ = val[4]
+                      result = [ val[0],
+                                 @builder.condition(val[0], val[1], val[2],
+              
