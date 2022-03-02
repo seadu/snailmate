@@ -1270,4 +1270,167 @@ rule
                       else_t, else_ = val[4]
                       result = [ val[0],
                                  @builder.condition(val[0], val[1], val[2],
-              
+                                                    val[3], else_t,
+                                                    else_,  nil),
+                               ]
+                    }
+
+        opt_else: none
+                | kELSE compstmt
+                    {
+                      result = val
+                    }
+
+         for_var: lhs
+                | mlhs
+
+          f_marg: f_norm_arg
+                | tLPAREN f_margs rparen
+                    {
+                      result = @builder.multi_lhs(val[0], val[1], val[2])
+                    }
+
+     f_marg_list: f_marg
+                    {
+                      result = [ val[0] ]
+                    }
+                | f_marg_list tCOMMA f_marg
+                    {
+                      result = val[0] << val[2]
+                    }
+
+         f_margs: f_marg_list
+                | f_marg_list tCOMMA tSTAR f_norm_arg
+                    {
+                      result = val[0].
+                                  push(@builder.objc_restarg(val[2], val[3]))
+                    }
+                | f_marg_list tCOMMA tSTAR f_norm_arg tCOMMA f_marg_list
+                    {
+                      result = val[0].
+                                  push(@builder.objc_restarg(val[2], val[3])).
+                                  concat(val[5])
+                    }
+                | f_marg_list tCOMMA tSTAR
+                    {
+                      result = val[0].
+                                  push(@builder.objc_restarg(val[2]))
+                    }
+                | f_marg_list tCOMMA tSTAR            tCOMMA f_marg_list
+                    {
+                      result = val[0].
+                                  push(@builder.objc_restarg(val[2])).
+                                  concat(val[4])
+                    }
+                |                    tSTAR f_norm_arg
+                    {
+                      result = [ @builder.objc_restarg(val[0], val[1]) ]
+                    }
+                |                    tSTAR f_norm_arg tCOMMA f_marg_list
+                    {
+                      result = [ @builder.objc_restarg(val[0], val[1]),
+                                 *val[3] ]
+                    }
+                |                    tSTAR
+                    {
+                      result = [ @builder.objc_restarg(val[0]) ]
+                    }
+                |                    tSTAR tCOMMA f_marg_list
+                    {
+                      result = [ @builder.objc_restarg(val[0]),
+                                 *val[2] ]
+                    }
+
+     block_param: f_arg tCOMMA f_block_optarg tCOMMA f_rest_arg              opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[4]).
+                                  concat(val[5])
+                    }
+                | f_arg tCOMMA f_block_optarg tCOMMA f_rest_arg tCOMMA f_arg opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[4]).
+                                  concat(val[6]).
+                                  concat(val[7])
+                    }
+                | f_arg tCOMMA f_block_optarg                                opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[3])
+                    }
+                | f_arg tCOMMA f_block_optarg tCOMMA                   f_arg opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[4]).
+                                  concat(val[5])
+                    }
+                | f_arg tCOMMA                       f_rest_arg              opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[3])
+                    }
+                | f_arg tCOMMA
+                | f_arg tCOMMA                       f_rest_arg tCOMMA f_arg opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[4]).
+                                  concat(val[5])
+                    }
+                | f_arg                                                      opt_f_block_arg
+                    {
+                      result = val[0].concat(val[1])
+                    }
+                | f_block_optarg tCOMMA f_rest_arg              opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[3])
+                    }
+                | f_block_optarg tCOMMA f_rest_arg tCOMMA f_arg opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[4]).
+                                  concat(val[5])
+                    }
+                | f_block_optarg                                opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[1])
+                    }
+                | f_block_optarg tCOMMA                   f_arg opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[3])
+                    }
+                |                       f_rest_arg              opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[1])
+                    }
+                |                       f_rest_arg tCOMMA f_arg opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[3])
+                    }
+                |                                                   f_block_arg
+                    {
+                      result = [ val[0] ]
+                    }
+
+ opt_block_param: # nothing
+                    {
+                      result = @builder.args(nil, [], nil)
+                    }
+                | block_param_def
+                    {
+                      @lexer.state = :expr_valu
