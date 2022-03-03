@@ -1433,4 +1433,192 @@ rule
                     }
                 | block_param_def
                     {
-                      @lexer.state = :expr_valu
+                      @lexer.state = :expr_value
+                    }
+
+ block_param_def: tPIPE opt_bv_decl tPIPE
+                    {
+                      result = @builder.args(val[0], val[1], val[2])
+                    }
+                | tOROP
+                    {
+                      result = @builder.args(val[0], [], val[0])
+                    }
+                | tPIPE block_param opt_bv_decl tPIPE
+                    {
+                      result = @builder.args(val[0], val[1].concat(val[2]), val[3])
+                    }
+
+     opt_bv_decl: # nothing
+                    {
+                      result = []
+                    }
+                | tSEMI bv_decls
+                    {
+                      result = val[1]
+                    }
+
+        bv_decls: bvar
+                    {
+                      result = [ val[0] ]
+                    }
+                | bv_decls tCOMMA bvar
+                    {
+                      result = val[0] << val[2]
+                    }
+
+            bvar: tIDENTIFIER
+                    {
+                      result = @builder.shadowarg(val[0])
+                    }
+                | f_bad_arg
+
+          lambda:   {
+                      @static_env.extend_dynamic
+                    }
+                  f_larglist lambda_body
+                    {
+                      result = [ val[1], val[2] ]
+
+                      @static_env.unextend
+                    }
+
+     f_larglist: tLPAREN2 f_args opt_bv_decl rparen
+                    {
+                      result = @builder.args(val[0], val[1].concat(val[2]), val[3])
+                    }
+                | f_args
+                    {
+                      result = @builder.args(nil, val[0], nil)
+                    }
+
+     lambda_body: tLAMBEG compstmt tRCURLY
+                    {
+                      result = [ val[0], val[1], val[2] ]
+                    }
+                | kDO_LAMBDA compstmt kEND
+                    {
+                      result = [ val[0], val[1], val[2] ]
+                    }
+
+        do_block: kDO_BLOCK
+                    {
+                      @static_env.extend_dynamic
+                    }
+                    opt_block_param compstmt kEND
+                    {
+                      result = [ val[0], val[2], val[3], val[4] ]
+
+                      @static_env.unextend
+                    }
+
+      block_call: command do_block
+                    {
+                      begin_t, block_args, body, end_t = val[1]
+                      result      = @builder.block(val[0],
+                                      begin_t, block_args, body, end_t)
+                    }
+                | block_call tDOT operation2 opt_paren_args
+                    {
+                      lparen_t, args, rparen_t = val[3]
+                      result = @builder.call_method(val[0], val[1], val[2],
+                                  lparen_t, args, rparen_t)
+                    }
+                | block_call tCOLON2 operation2 opt_paren_args
+                    {
+                      lparen_t, args, rparen_t = val[3]
+                      result = @builder.call_method(val[0], val[1], val[2],
+                                  lparen_t, args, rparen_t)
+                    }
+
+     method_call: operation paren_args
+                    {
+                      lparen_t, args, rparen_t = val[1]
+                      result = @builder.call_method(nil, nil, val[0],
+                                  lparen_t, args, rparen_t)
+                    }
+                | primary_value tDOT operation2 opt_paren_args
+                    {
+                      lparen_t, args, rparen_t = val[3]
+                      result = @builder.call_method(val[0], val[1], val[2],
+                                  lparen_t, args, rparen_t)
+                    }
+                | primary_value tCOLON2 operation2 paren_args
+                    {
+                      lparen_t, args, rparen_t = val[3]
+                      result = @builder.call_method(val[0], val[1], val[2],
+                                  lparen_t, args, rparen_t)
+                    }
+                | primary_value tCOLON2 operation3
+                    {
+                      result = @builder.call_method(val[0], val[1], val[2])
+                    }
+                | primary_value tDOT paren_args
+                    {
+                      lparen_t, args, rparen_t = val[2]
+                      result = @builder.call_method(val[0], val[1], nil,
+                                  lparen_t, args, rparen_t)
+                    }
+                | primary_value tCOLON2 paren_args
+                    {
+                      lparen_t, args, rparen_t = val[2]
+                      result = @builder.call_method(val[0], val[1], nil,
+                                  lparen_t, args, rparen_t)
+                    }
+                | kSUPER paren_args
+                    {
+                      lparen_t, args, rparen_t = val[1]
+                      result = @builder.keyword_cmd(:super, val[0],
+                                  lparen_t, args, rparen_t)
+                    }
+                | kSUPER
+                    {
+                      result = @builder.keyword_cmd(:zsuper, val[0])
+                    }
+                | primary_value tLBRACK2 opt_call_args rbracket
+                    {
+                      result = @builder.index(val[0], val[1], val[2], val[3])
+                    }
+
+     brace_block: tLCURLY
+                    {
+                      @static_env.extend_dynamic
+                    }
+                    opt_block_param compstmt tRCURLY
+                    {
+                      result = [ val[0], val[2], val[3], val[4] ]
+
+                      @static_env.unextend
+                    }
+                | kDO
+                    {
+                      @static_env.extend_dynamic
+                    }
+                    opt_block_param compstmt kEND
+                    {
+                      result = [ val[0], val[2], val[3], val[4] ]
+
+                      @static_env.unextend
+                    }
+
+       case_body: kWHEN args then compstmt cases
+                    {
+                      result = [ @builder.when(val[0], val[1], val[2], val[3]),
+                                 *val[4] ]
+                    }
+
+           cases: opt_else
+                    {
+                      result = [ val[0] ]
+                    }
+                | case_body
+
+      opt_rescue: kRESCUE exc_list exc_var then compstmt opt_rescue
+                    {
+                      assoc_t, exc_var = val[2]
+
+                      if val[1]
+                        exc_list = @builder.array(nil, val[1], nil)
+                      end
+
+                 
