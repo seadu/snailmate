@@ -1621,4 +1621,228 @@ rule
                         exc_list = @builder.array(nil, val[1], nil)
                       end
 
-                 
+                      result = [ @builder.rescue_body(val[0],
+                                      exc_list, assoc_t, exc_var,
+                                      val[3], val[4]),
+                                 *val[5] ]
+                    }
+                |
+                    {
+                      result = []
+                    }
+
+        exc_list: arg_value
+                    {
+                      result = [ val[0] ]
+                    }
+                | mrhs
+                | none
+
+         exc_var: tASSOC lhs
+                    {
+                      result = [ val[0], val[1] ]
+                    }
+                | none
+
+      opt_ensure: kENSURE compstmt
+                    {
+                      result = [ val[0], val[1] ]
+                    }
+                | none
+
+         literal: numeric
+                | symbol
+                | dsym
+
+         strings: string
+                    {
+                      result = @builder.string_compose(nil, val[0], nil)
+                    }
+
+          string: string1
+                    {
+                      result = [ val[0] ]
+                    }
+                | string string1
+                    {
+                      result = val[0] << val[1]
+                    }
+
+         string1: tSTRING_BEG string_contents tSTRING_END
+                    {
+                      result = @builder.string_compose(val[0], val[1], val[2])
+                    }
+                | tSTRING
+                    {
+                      result = @builder.string(val[0])
+                    }
+                | tCHARACTER
+                    {
+                      result = @builder.character(val[0])
+                    }
+
+         xstring: tXSTRING_BEG xstring_contents tSTRING_END
+                    {
+                      result = @builder.xstring_compose(val[0], val[1], val[2])
+                    }
+
+          regexp: tREGEXP_BEG regexp_contents tSTRING_END tREGEXP_OPT
+                    {
+                      opts   = @builder.regexp_options(val[3])
+                      result = @builder.regexp_compose(val[0], val[1], val[2], opts)
+                    }
+
+           words: tWORDS_BEG word_list tSTRING_END
+                    {
+                      result = @builder.words_compose(val[0], val[1], val[2])
+                    }
+
+       word_list: # nothing
+                    {
+                      result = []
+                    }
+                | word_list word tSPACE
+                    {
+                      result = val[0] << @builder.word(val[1])
+                    }
+
+            word: string_content
+                    {
+                      result = [ val[0] ]
+                    }
+                | word string_content
+                    {
+                      result = val[0] << val[1]
+                    }
+
+          qwords: tQWORDS_BEG qword_list tSTRING_END
+                    {
+                      result = @builder.words_compose(val[0], val[1], val[2])
+                    }
+
+      qword_list: # nothing
+                    {
+                      result = []
+                    }
+                | qword_list tSTRING_CONTENT tSPACE
+                    {
+                      result = val[0] << @builder.string_internal(val[1])
+                    }
+
+ string_contents: # nothing
+                    {
+                      result = []
+                    }
+                | string_contents string_content
+                    {
+                      result = val[0] << val[1]
+                    }
+
+xstring_contents: # nothing
+                    {
+                      result = []
+                    }
+                | xstring_contents string_content
+                    {
+                      result = val[0] << val[1]
+                    }
+
+regexp_contents: # nothing
+                    {
+                      result = []
+                    }
+                | regexp_contents string_content
+                    {
+                      result = val[0] << val[1]
+                    }
+
+  string_content: tSTRING_CONTENT
+                    {
+                      result = @builder.string_internal(val[0])
+                    }
+                | tSTRING_DVAR string_dvar
+                    {
+                      result = val[1]
+                    }
+                | tSTRING_DBEG
+                    {
+                      @lexer.cond.push(false)
+                      @lexer.cmdarg.push(false)
+                    }
+                    compstmt tRCURLY
+                    {
+                      @lexer.cond.lexpop
+                      @lexer.cmdarg.lexpop
+
+                      result = @builder.begin(val[0], val[2], val[3])
+                    }
+
+     string_dvar: tGVAR
+                    {
+                      result = @builder.gvar(val[0])
+                    }
+                | tIVAR
+                    {
+                      result = @builder.ivar(val[0])
+                    }
+                | tCVAR
+                    {
+                      result = @builder.cvar(val[0])
+                    }
+                | backref
+
+
+          symbol: tSYMBOL
+                    {
+                      result = @builder.symbol(val[0])
+                    }
+
+            dsym: tSYMBEG xstring_contents tSTRING_END
+                    {
+                      result = @builder.symbol_compose(val[0], val[1], val[2])
+                    }
+
+         numeric: tINTEGER
+                    {
+                      result = @builder.integer(val[0])
+                    }
+                | tFLOAT
+                    {
+                      result = @builder.float(val[0])
+                    }
+                | tUMINUS_NUM tINTEGER =tLOWEST
+                    {
+                      result = @builder.negate(val[0],
+                                  @builder.integer(val[1]))
+                    }
+                | tUMINUS_NUM tFLOAT   =tLOWEST
+                    {
+                      result = @builder.negate(val[0],
+                                  @builder.float(val[1]))
+                    }
+
+        variable: tIDENTIFIER
+                    {
+                      result = @builder.ident(val[0])
+                    }
+                | tIVAR
+                    {
+                      result = @builder.ivar(val[0])
+                    }
+                | tGVAR
+                    {
+                      result = @builder.gvar(val[0])
+                    }
+                | tCONSTANT
+                    {
+                      result = @builder.const(val[0])
+                    }
+                | tCVAR
+                    {
+                      result = @builder.cvar(val[0])
+                    }
+                | kNIL
+                    {
+                      result = @builder.nil(val[0])
+                    }
+         
