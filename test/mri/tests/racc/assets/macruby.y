@@ -1845,4 +1845,185 @@ regexp_contents: # nothing
                     {
                       result = @builder.nil(val[0])
                     }
-         
+                | kSELF
+                    {
+                      result = @builder.self(val[0])
+                    }
+                | kTRUE
+                    {
+                      result = @builder.true(val[0])
+                    }
+                | kFALSE
+                    {
+                      result = @builder.false(val[0])
+                    }
+                | k__FILE__
+                    {
+                      result = @builder.__FILE__(val[0])
+                    }
+                | k__LINE__
+                    {
+                      result = @builder.__LINE__(val[0])
+                    }
+                | k__ENCODING__
+                    {
+                      result = @builder.__ENCODING__(val[0])
+                    }
+
+         var_ref: variable
+                    {
+                      result = @builder.accessible(val[0])
+                    }
+
+         var_lhs: variable
+                    {
+                      result = @builder.assignable(val[0])
+                    }
+
+         backref: tNTH_REF
+                    {
+                      result = @builder.nth_ref(val[0])
+                    }
+                | tBACK_REF
+                    {
+                      result = @builder.back_ref(val[0])
+                    }
+
+      superclass: term
+                    {
+                      result = nil
+                    }
+                | tLT expr_value term
+                    {
+                      result = [ val[0], val[1] ]
+                    }
+                | error term
+                    {
+                      yyerrok
+                      result = nil
+                    }
+
+       f_arglist: tLPAREN2 f_args rparen
+                    {
+                      result = @builder.args(val[0], val[1], val[2])
+
+                      @lexer.state = :expr_value
+                    }
+                | f_args term
+                    {
+                      result = @builder.args(nil, val[0], nil)
+                    }
+
+          f_args: f_arg tCOMMA f_optarg tCOMMA f_rest_arg              opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[4]).
+                                  concat(val[5])
+                    }
+                | f_arg tCOMMA f_optarg tCOMMA f_rest_arg tCOMMA f_arg opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[4]).
+                                  concat(val[6]).
+                                  concat(val[7])
+                    }
+                | f_arg tCOMMA f_optarg                                opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[3])
+                    }
+                | f_arg tCOMMA f_optarg tCOMMA                   f_arg opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[4]).
+                                  concat(val[5])
+                    }
+                | f_arg tCOMMA                 f_rest_arg              opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[3])
+                    }
+                | f_arg tCOMMA                 f_rest_arg tCOMMA f_arg opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[4]).
+                                  concat(val[5])
+                    }
+                | f_arg                                                opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[1])
+                    }
+                |              f_optarg tCOMMA f_rest_arg              opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[3])
+                    }
+                |              f_optarg tCOMMA f_rest_arg tCOMMA f_arg opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[4]).
+                                  concat(val[5])
+                    }
+                |              f_optarg                                opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[1])
+                    }
+                |              f_optarg tCOMMA                   f_arg opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[3])
+                    }
+                |                              f_rest_arg              opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[1])
+                    }
+                |                              f_rest_arg tCOMMA f_arg opt_f_block_arg
+                    {
+                      result = val[0].
+                                  concat(val[2]).
+                                  concat(val[3])
+                    }
+                |                                                          f_block_arg
+                    {
+                      result = [ val[0] ]
+                    }
+                | # nothing
+                    {
+                      result = []
+                    }
+
+       f_bad_arg: tCONSTANT
+                    {
+                      diagnostic :error, :argument_const, nil, val[0]
+                    }
+                | tIVAR
+                    {
+                      diagnostic :error, :argument_ivar, nil, val[0]
+                    }
+                | tGVAR
+                    {
+                      diagnostic :error, :argument_gvar, nil, val[0]
+                    }
+                | tCVAR
+                    {
+                      diagnostic :error, :argument_cvar, nil, val[0]
+                    }
+
+      f_norm_arg: f_bad_arg
+                | tIDENTIFIER
+                    {
+                      @static_env.declare val[0][0]
+
+                      r
