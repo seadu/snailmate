@@ -2026,4 +2026,172 @@ regexp_contents: # nothing
                     {
                       @static_env.declare val[0][0]
 
-                      r
+                      result = @builder.arg(val[0])
+                    }
+                | tIDENTIFIER tASSOC tIDENTIFIER
+                    {
+                      @static_env.declare val[2][0]
+
+                      result = @builder.objc_kwarg(val[0], val[1], val[2])
+                    }
+                | tLABEL tIDENTIFIER
+                    {
+                      @static_env.declare val[1][0]
+
+                      result = @builder.objc_kwarg(val[0], nil, val[1])
+                    }
+
+      f_arg_item: f_norm_arg
+                | tLPAREN f_margs rparen
+                    {
+                      result = @builder.multi_lhs(val[0], val[1], val[2])
+                    }
+
+           f_arg: f_arg_item
+                    {
+                      result = [ val[0] ]
+                    }
+                | f_arg tCOMMA f_arg_item
+                    {
+                      result = val[0] << val[2]
+                    }
+
+           f_opt: tIDENTIFIER tEQL arg_value
+                    {
+                      @static_env.declare val[0][0]
+
+                      result = @builder.optarg(val[0], val[1], val[2])
+                    }
+
+     f_block_opt: tIDENTIFIER tEQL primary_value
+                    {
+                      @static_env.declare val[0][0]
+
+                      result = @builder.optarg(val[0], val[1], val[2])
+                    }
+
+  f_block_optarg: f_block_opt
+                    {
+                      result = [ val[0] ]
+                    }
+                | f_block_optarg tCOMMA f_block_opt
+                    {
+                      result = val[0] << val[2]
+                    }
+
+        f_optarg: f_opt
+                    {
+                      result = [ val[0] ]
+                    }
+                | f_optarg tCOMMA f_opt
+                    {
+                      result = val[0] << val[2]
+                    }
+
+    restarg_mark: tSTAR2 | tSTAR
+
+      f_rest_arg: restarg_mark tIDENTIFIER
+                    {
+                      @static_env.declare val[1][0]
+
+                      result = [ @builder.restarg(val[0], val[1]) ]
+                    }
+                | restarg_mark
+                    {
+                      result = [ @builder.restarg(val[0]) ]
+                    }
+
+     blkarg_mark: tAMPER2 | tAMPER
+
+     f_block_arg: blkarg_mark tIDENTIFIER
+                    {
+                      @static_env.declare val[1][0]
+
+                      result = @builder.blockarg(val[0], val[1])
+                    }
+
+ opt_f_block_arg: tCOMMA f_block_arg
+                    {
+                      result = [ val[1] ]
+                    }
+                | # nothing
+                    {
+                      result = []
+                    }
+
+       singleton: var_ref
+                | tLPAREN2 expr rparen
+                    {
+                      result = val[1]
+                    }
+
+      assoc_list: # nothing
+                    {
+                      result = []
+                    }
+                | assocs trailer
+
+          assocs: assoc
+                    {
+                      result = [ val[0] ]
+                    }
+                | assocs tCOMMA assoc
+                    {
+                      result = val[0] << val[2]
+                    }
+
+           assoc: arg_value tASSOC arg_value
+                    {
+                      result = @builder.pair(val[0], val[1], val[2])
+                    }
+                | tLABEL arg_value
+                    {
+                      result = @builder.pair_keyword(val[0], val[1])
+                    }
+
+       operation: tIDENTIFIER | tCONSTANT | tFID
+      operation2: tIDENTIFIER | tCONSTANT | tFID | op
+      operation3: tIDENTIFIER | tFID | op
+    dot_or_colon: tDOT | tCOLON2
+       opt_terms:  | terms
+          opt_nl:  | tNL
+          rparen: opt_nl tRPAREN
+                    {
+                      result = val[1]
+                    }
+        rbracket: opt_nl tRBRACK
+                    {
+                      result = val[1]
+                    }
+         trailer:  | tNL | tCOMMA
+
+            term: tSEMI
+                  {
+                    yyerrok
+                  }
+                | tNL
+
+           terms: term
+                | terms tSEMI
+
+            none: # nothing
+                  {
+                    result = nil
+                  }
+end
+
+---- header
+
+require 'parser'
+
+Parser.check_for_encoding_support
+
+---- inner
+
+  def version
+    19 # closest released match: v1_9_0_2
+  end
+
+  def default_encoding
+    Encoding::BINARY
+  end
