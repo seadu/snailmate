@@ -223,4 +223,180 @@ class TestDelegateClass < Test::Unit::TestCase
     assert_operator(s0, :eql?, "foo")
     assert_operator(s0, :eql?, s2)
     assert_not_operator(s0, :eql?, s1)
-    asser
+    assert_not_operator(s0, :eql?, "bar")
+  end
+
+  def test_keyword_and_hash
+    foo = Object.new
+    def foo.bar(*args)
+      args
+    end
+    def foo.foo(*args, **kw)
+      [args, kw]
+    end
+    d = SimpleDelegator.new(foo)
+    assert_equal([[], {}], d.foo)
+    assert_equal([], d.bar)
+    assert_equal([[], {:a=>1}], d.foo(:a=>1))
+    assert_equal([{:a=>1}], d.bar(:a=>1))
+    assert_equal([[{:a=>1}], {}], d.foo({:a=>1}))
+    assert_equal([{:a=>1}], d.bar({:a=>1}))
+  end
+
+  class Foo
+    private
+    def delegate_test_private
+      :m
+    end
+  end
+
+  def test_private_method
+    foo = Foo.new
+    d = SimpleDelegator.new(foo)
+    assert_raise(NoMethodError) {foo.delegate_test_private}
+    assert_equal(:m, foo.send(:delegate_test_private))
+    assert_raise(NoMethodError, '[ruby-dev:40314]#4') {d.delegate_test_private}
+    assert_raise(NoMethodError, '[ruby-dev:40314]#5') {d.send(:delegate_test_private)}
+  end
+
+  def test_global_function
+    klass = Class.new do
+      def open
+      end
+    end
+    obj = klass.new
+    d = SimpleDelegator.new(obj)
+    assert_nothing_raised(ArgumentError) {obj.open}
+    assert_nothing_raised(ArgumentError) {d.open}
+    assert_nothing_raised(ArgumentError) {d.send(:open)}
+  end
+
+  def test_send_method_in_delegator
+    d = Class.new(SimpleDelegator) do
+      def foo
+        "foo"
+      end
+    end.new(Object.new)
+    assert_equal("foo", d.send(:foo))
+  end
+
+  def test_unset_simple_delegator
+    d = SimpleDelegator.allocate
+    assert_raise_with_message(ArgumentError, /not delegated/) {
+      d.__getobj__
+    }
+  end
+
+  def test_unset_delegate_class
+    d = IV.allocate
+    assert_raise_with_message(ArgumentError, /not delegated/) {
+      d.__getobj__
+    }
+  end
+
+  class Bug9155 < DelegateClass(Integer)
+    def initialize(value)
+      super(Integer(value))
+    end
+  end
+
+  def test_global_method_if_no_target
+    bug9155 = '[ruby-core:58572] [Bug #9155]'
+    x = assert_nothing_raised(ArgumentError, bug9155) {break Bug9155.new(1)}
+    assert_equal(1, x.to_i, bug9155)
+  end
+
+  class Bug9403
+    Name = '[ruby-core:59718] [Bug #9403]'
+    SD = SimpleDelegator.new(new)
+    class << SD
+      def method_name
+        __method__
+      end
+      def callee_name
+        __callee__
+      end
+      alias aliased_name callee_name
+      def dir_name
+        __dir__
+      end
+    end
+    dc = DelegateClass(self)
+    dc.class_eval do
+      def method_name
+        __method__
+      end
+      def callee_name
+        __callee__
+      end
+      alias aliased_name callee_name
+      def dir_name
+        __dir__
+      end
+    end
+    DC = dc.new(new)
+  end
+
+  def test_method_in_simple_delegator
+    assert_equal(:method_name, Bug9403::SD.method_name, Bug9403::Name)
+  end
+
+  def test_callee_in_simple_delegator
+    assert_equal(:callee_name, Bug9403::SD.callee_name, Bug9403::Name)
+    assert_equal(:aliased_name, Bug9403::SD.aliased_name, Bug9403::Name)
+  end
+
+  def test_dir_in_simple_delegator
+    assert_equal(__dir__, Bug9403::SD.dir_name, Bug9403::Name)
+  end
+
+  def test_method_in_delegator_class
+    assert_equal(:method_name, Bug9403::DC.method_name, Bug9403::Name)
+  end
+
+  def test_callee_in_delegator_class
+    assert_equal(:callee_name, Bug9403::DC.callee_name, Bug9403::Name)
+    assert_equal(:aliased_name, Bug9403::DC.aliased_name, Bug9403::Name)
+  end
+
+  def test_dir_in_delegator_class
+    assert_equal(__dir__, Bug9403::DC.dir_name, Bug9403::Name)
+  end
+
+  def test_module_methods_vs_kernel_methods
+    delegate = SimpleDelegator.new(Object.new)
+    assert_raise(NoMethodError) do
+      delegate.constants
+    end
+  end
+
+  def test_basicobject
+    o = BasicObject.new
+    def o.bar; 1; end
+    delegate = SimpleDelegator.new(o)
+    assert_equal(1, delegate.bar)
+    assert_raise(NoMethodError, /undefined method `foo' for/) { delegate.foo }
+  end
+
+  def test_basicobject_respond_to
+    o = BasicObject.new
+    def o.bar
+      nil
+    end
+
+    def o.respond_to?(method, include_private=false)
+      return false if method == :bar
+      ::Kernel.instance_method(:respond_to?).bind_call(self, method, include_private)
+    end
+    delegate = SimpleDelegator.new(o)
+    refute delegate.respond_to?(:bar)
+  end
+
+  def test_keyword_argument
+    k = EnvUtil.labeled_class("Target") do
+      def test(a, k:) [a, k]; end
+    end
+    a = DelegateClass(k).new(k.new)
+    assert_equal([1, 0], a.test(1, k: 0))
+  end
+end
