@@ -60,4 +60,9 @@ describe "Exception#==" do
 
   it "returns false if the two exceptions differ only in their message" do
     one = RuntimeError.new("message")
-    one.
+    one.set_backtrace [File.dirname(__FILE__)]
+    two = RuntimeError.new("message2")
+    two.set_backtrace [File.dirname(__FILE__)]
+    one.should_not == two
+  end
+end
