@@ -359,4 +359,200 @@ class TestMethod < Test::Unit::TestCase
 
   def test_define_method_transplating
     feature4254 = '[ruby-core:34267]'
-    m = Module.new {define_m
+    m = Module.new {define_method(:meth, M.instance_method(:meth))}
+    assert_equal(:meth, Object.new.extend(m).meth, feature4254)
+    c = Class.new {define_method(:meth, M.instance_method(:meth))}
+    assert_equal(:meth, c.new.meth, feature4254)
+  end
+
+  def test_define_method_visibility
+    c = Class.new do
+      public
+      define_method(:foo) {:foo}
+      protected
+      define_method(:bar) {:bar}
+      private
+      define_method(:baz) {:baz}
+    end
+
+    assert_equal(true, c.public_method_defined?(:foo))
+    assert_equal(false, c.public_method_defined?(:bar))
+    assert_equal(false, c.public_method_defined?(:baz))
+
+    assert_equal(false, c.protected_method_defined?(:foo))
+    assert_equal(true, c.protected_method_defined?(:bar))
+    assert_equal(false, c.protected_method_defined?(:baz))
+
+    assert_equal(false, c.private_method_defined?(:foo))
+    assert_equal(false, c.private_method_defined?(:bar))
+    assert_equal(true, c.private_method_defined?(:baz))
+
+    m = Module.new do
+      module_function
+      define_method(:foo) {:foo}
+    end
+    assert_equal(true, m.respond_to?(:foo))
+    assert_equal(false, m.public_method_defined?(:foo))
+    assert_equal(false, m.protected_method_defined?(:foo))
+    assert_equal(true, m.private_method_defined?(:foo))
+  end
+
+  def test_define_method_in_private_scope
+    bug9005 = '[ruby-core:57747] [Bug #9005]'
+    c = Class.new
+    class << c
+      public :define_method
+    end
+    TOPLEVEL_BINDING.eval("proc{|c|c.define_method(:x) {|x|throw x}}").call(c)
+    o = c.new
+    assert_throw(bug9005) {o.x(bug9005)}
+  end
+
+  def test_singleton_define_method_in_private_scope
+    bug9141 = '[ruby-core:58497] [Bug #9141]'
+    o = Object.new
+    class << o
+      public :define_singleton_method
+    end
+    TOPLEVEL_BINDING.eval("proc{|o|o.define_singleton_method(:x) {|x|throw x}}").call(o)
+    assert_throw(bug9141) do
+      o.x(bug9141)
+    end
+  end
+
+  def test_super_in_proc_from_define_method
+    c1 = Class.new {
+      def m
+        :m1
+      end
+    }
+    c2 = Class.new(c1) { define_method(:m) { Proc.new { super() } } }
+    assert_equal(:m1, c2.new.m.call, 'see [Bug #4881] and [Bug #3136]')
+  end
+
+  def test_clone
+    o = Object.new
+    def o.foo; :foo; end
+    m = o.method(:foo)
+    def m.bar; :bar; end
+    assert_equal(:foo, m.clone.call)
+    assert_equal(:bar, m.clone.bar)
+  end
+
+  def test_inspect
+    o = Object.new
+    def o.foo; end; line_no = __LINE__
+    m = o.method(:foo)
+    assert_equal("#<Method: #{ o.inspect }.foo() #{__FILE__}:#{line_no}>", m.inspect)
+    m = o.method(:foo)
+    assert_match("#<UnboundMethod: #{ class << o; self; end.inspect }#foo() #{__FILE__}:#{line_no}", m.unbind.inspect)
+
+    c = Class.new
+    c.class_eval { def foo; end; }; line_no = __LINE__
+    m = c.new.method(:foo)
+    assert_equal("#<Method: #{ c.inspect }#foo() #{__FILE__}:#{line_no}>", m.inspect)
+    m = c.instance_method(:foo)
+    assert_equal("#<UnboundMethod: #{ c.inspect }#foo() #{__FILE__}:#{line_no}>", m.inspect)
+
+    c2 = Class.new(c)
+    c2.class_eval { private :foo }
+    m2 = c2.new.method(:foo)
+    assert_equal("#<Method: #{ c2.inspect }(#{ c.inspect })#foo() #{__FILE__}:#{line_no}>", m2.inspect)
+
+    bug7806 = '[ruby-core:52048] [Bug #7806]'
+    c3 = Class.new(c)
+    c3.class_eval { alias bar foo }
+    m3 = c3.new.method(:bar)
+    assert_equal("#<Method: #{c3.inspect}(#{c.inspect})#bar(foo)() #{__FILE__}:#{line_no}>", m3.inspect, bug7806)
+
+    bug15608 = '[ruby-core:91570] [Bug #15608]'
+    c4 = Class.new(c)
+    c4.class_eval { alias bar foo }
+    o = c4.new
+    o.singleton_class
+    m4 = o.method(:bar)
+    assert_equal("#<Method: #{c4.inspect}(#{c.inspect})#bar(foo)() #{__FILE__}:#{line_no}>", m4.inspect, bug15608)
+
+    bug17428 = '[ruby-core:101635] [Bug #17428]'
+    assert_equal("#<Method: #<Class:String>(Module)#prepend(*)>", String.method(:prepend).inspect, bug17428)
+
+    c5 = Class.new(String)
+    m = Module.new{def prepend; end; alias prep prepend}; line_no = __LINE__
+    c5.extend(m)
+    c6 = Class.new(c5)
+    assert_equal("#<Method: #<Class:#{c6.inspect}>(#{m.inspect})#prep(prepend)() #{__FILE__}:#{line_no}>", c6.method(:prep).inspect, bug17428)
+  end
+
+  def test_callee_top_level
+    assert_in_out_err([], "p __callee__", %w(nil), [])
+  end
+
+  def test_caller_top_level
+    assert_in_out_err([], "p caller", %w([]), [])
+  end
+
+  def test_caller_negative_level
+    assert_raise(ArgumentError) { caller(-1) }
+  end
+
+  def test_attrset_ivar
+    c = Class.new
+    c.class_eval { attr_accessor :foo }
+    o = c.new
+    o.method(:foo=).call(42)
+    assert_equal(42, o.foo)
+    assert_raise(ArgumentError) { o.method(:foo=).call(1, 2, 3) }
+    assert_raise(ArgumentError) { o.method(:foo).call(1) }
+  end
+
+  def test_default_accessibility
+    tmethods = T.public_instance_methods
+    assert_include tmethods, :normal_method, 'normal methods are public by default'
+    assert_not_include tmethods, :initialize, '#initialize is private'
+    assert_not_include tmethods, :initialize_copy, '#initialize_copy is private'
+    assert_not_include tmethods, :initialize_clone, '#initialize_clone is private'
+    assert_not_include tmethods, :initialize_dup, '#initialize_dup is private'
+    assert_not_include tmethods, :respond_to_missing?, '#respond_to_missing? is private'
+    mmethods = M.public_instance_methods
+    assert_not_include mmethods, :func, 'module methods are private by default'
+    assert_include mmethods, :meth, 'normal methods are public by default'
+  end
+
+  def test_respond_to_missing_argument
+    obj = Struct.new(:mid).new
+    def obj.respond_to_missing?(id, *)
+      self.mid = id
+      true
+    end
+    assert_kind_of(Method, obj.method("bug15640"))
+    assert_kind_of(Symbol, obj.mid)
+    assert_equal("bug15640", obj.mid.to_s)
+
+    arg = Struct.new(:to_str).new("bug15640_2")
+    assert_kind_of(Method, obj.method(arg))
+    assert_kind_of(Symbol, obj.mid)
+    assert_equal("bug15640_2", obj.mid.to_s)
+  end
+
+  define_method(:pm0) {||}
+  define_method(:pm1) {|a|}
+  define_method(:pm2) {|a, b|}
+  define_method(:pmo1) {|a = nil, &b|}
+  define_method(:pmo2) {|a, b = nil|}
+  define_method(:pmo3) {|*a|}
+  define_method(:pmo4) {|a, *b, &c|}
+  define_method(:pmo5) {|a, *b, c|}
+  define_method(:pmo6) {|a, *b, c, &d|}
+  define_method(:pmo7) {|a, b = nil, *c, d, &e|}
+  define_method(:pma1) {|(a), &b| nil && a}
+  define_method(:pmk1) {|**|}
+  define_method(:pmk2) {|**o|}
+  define_method(:pmk3) {|a, **o|}
+  define_method(:pmk4) {|a = nil, **o|}
+  define_method(:pmk5) {|a, b = nil, **o|}
+  define_method(:pmk6) {|a, b = nil, c, **o|}
+  define_method(:pmk7) {|a, b = nil, *c, d, **o|}
+  define_method(:pmk8) {|a, b = nil, *c, d, e:, f: nil, **o|}
+  define_method(:pmnk) {|**nil|}
+
+  d
