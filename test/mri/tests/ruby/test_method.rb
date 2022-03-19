@@ -555,4 +555,91 @@ class TestMethod < Test::Unit::TestCase
   define_method(:pmk8) {|a, b = nil, *c, d, e:, f: nil, **o|}
   define_method(:pmnk) {|**nil|}
 
-  d
+  def test_bound_parameters
+    assert_equal([], method(:m0).parameters)
+    assert_equal([[:req, :a]], method(:m1).parameters)
+    assert_equal([[:req, :a], [:req, :b]], method(:m2).parameters)
+    assert_equal([[:opt, :a], [:block, :b]], method(:mo1).parameters)
+    assert_equal([[:req, :a], [:opt, :b]], method(:mo2).parameters)
+    assert_equal([[:rest, :a]], method(:mo3).parameters)
+    assert_equal([[:req, :a], [:rest, :b], [:block, :c]], method(:mo4).parameters)
+    assert_equal([[:req, :a], [:rest, :b], [:req, :c]], method(:mo5).parameters)
+    assert_equal([[:req, :a], [:rest, :b], [:req, :c], [:block, :d]], method(:mo6).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest, :c], [:req, :d], [:block, :e]], method(:mo7).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest], [:req, :d], [:block, :e]], method(:mo8).parameters)
+    assert_equal([[:req], [:block, :b]], method(:ma1).parameters)
+    assert_equal([[:keyrest]], method(:mk1).parameters)
+    assert_equal([[:keyrest, :o]], method(:mk2).parameters)
+    assert_equal([[:req, :a], [:keyrest, :o]], method(:mk3).parameters)
+    assert_equal([[:opt, :a], [:keyrest, :o]], method(:mk4).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:keyrest, :o]], method(:mk5).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:req, :c], [:keyrest, :o]], method(:mk6).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest, :c], [:req, :d], [:keyrest, :o]], method(:mk7).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest, :c], [:req, :d], [:keyreq, :e], [:key, :f], [:keyrest, :o]], method(:mk8).parameters)
+    assert_equal([[:nokey]], method(:mnk).parameters)
+    # pending
+    assert_equal([[:rest, :*], [:keyrest, :**], [:block, :&]], method(:mf).parameters)
+  end
+
+  def test_unbound_parameters
+    assert_equal([], self.class.instance_method(:m0).parameters)
+    assert_equal([[:req, :a]], self.class.instance_method(:m1).parameters)
+    assert_equal([[:req, :a], [:req, :b]], self.class.instance_method(:m2).parameters)
+    assert_equal([[:opt, :a], [:block, :b]], self.class.instance_method(:mo1).parameters)
+    assert_equal([[:req, :a], [:opt, :b]], self.class.instance_method(:mo2).parameters)
+    assert_equal([[:rest, :a]], self.class.instance_method(:mo3).parameters)
+    assert_equal([[:req, :a], [:rest, :b], [:block, :c]], self.class.instance_method(:mo4).parameters)
+    assert_equal([[:req, :a], [:rest, :b], [:req, :c]], self.class.instance_method(:mo5).parameters)
+    assert_equal([[:req, :a], [:rest, :b], [:req, :c], [:block, :d]], self.class.instance_method(:mo6).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest, :c], [:req, :d], [:block, :e]], self.class.instance_method(:mo7).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest], [:req, :d], [:block, :e]], self.class.instance_method(:mo8).parameters)
+    assert_equal([[:req], [:block, :b]], self.class.instance_method(:ma1).parameters)
+    assert_equal([[:keyrest]], self.class.instance_method(:mk1).parameters)
+    assert_equal([[:keyrest, :o]], self.class.instance_method(:mk2).parameters)
+    assert_equal([[:req, :a], [:keyrest, :o]], self.class.instance_method(:mk3).parameters)
+    assert_equal([[:opt, :a], [:keyrest, :o]], self.class.instance_method(:mk4).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:keyrest, :o]], self.class.instance_method(:mk5).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:req, :c], [:keyrest, :o]], self.class.instance_method(:mk6).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest, :c], [:req, :d], [:keyrest, :o]], self.class.instance_method(:mk7).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest, :c], [:req, :d], [:keyreq, :e], [:key, :f], [:keyrest, :o]], self.class.instance_method(:mk8).parameters)
+    assert_equal([[:nokey]], self.class.instance_method(:mnk).parameters)
+    # pending
+    assert_equal([[:rest, :*], [:keyrest, :**], [:block, :&]], self.class.instance_method(:mf).parameters)
+  end
+
+  def test_bmethod_bound_parameters
+    assert_equal([], method(:pm0).parameters)
+    assert_equal([[:req, :a]], method(:pm1).parameters)
+    assert_equal([[:req, :a], [:req, :b]], method(:pm2).parameters)
+    assert_equal([[:opt, :a], [:block, :b]], method(:pmo1).parameters)
+    assert_equal([[:req, :a], [:opt, :b]], method(:pmo2).parameters)
+    assert_equal([[:rest, :a]], method(:pmo3).parameters)
+    assert_equal([[:req, :a], [:rest, :b], [:block, :c]], method(:pmo4).parameters)
+    assert_equal([[:req, :a], [:rest, :b], [:req, :c]], method(:pmo5).parameters)
+    assert_equal([[:req, :a], [:rest, :b], [:req, :c], [:block, :d]], method(:pmo6).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest, :c], [:req, :d], [:block, :e]], method(:pmo7).parameters)
+    assert_equal([[:req], [:block, :b]], method(:pma1).parameters)
+    assert_equal([[:keyrest]], method(:pmk1).parameters)
+    assert_equal([[:keyrest, :o]], method(:pmk2).parameters)
+    assert_equal([[:req, :a], [:keyrest, :o]], method(:pmk3).parameters)
+    assert_equal([[:opt, :a], [:keyrest, :o]], method(:pmk4).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:keyrest, :o]], method(:pmk5).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:req, :c], [:keyrest, :o]], method(:pmk6).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest, :c], [:req, :d], [:keyrest, :o]], method(:pmk7).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest, :c], [:req, :d], [:keyreq, :e], [:key, :f], [:keyrest, :o]], method(:pmk8).parameters)
+    assert_equal([[:nokey]], method(:pmnk).parameters)
+  end
+
+  def test_bmethod_unbound_parameters
+    assert_equal([], self.class.instance_method(:pm0).parameters)
+    assert_equal([[:req, :a]], self.class.instance_method(:pm1).parameters)
+    assert_equal([[:req, :a], [:req, :b]], self.class.instance_method(:pm2).parameters)
+    assert_equal([[:opt, :a], [:block, :b]], self.class.instance_method(:pmo1).parameters)
+    assert_equal([[:req, :a], [:opt, :b]], self.class.instance_method(:pmo2).parameters)
+    assert_equal([[:rest, :a]], self.class.instance_method(:pmo3).parameters)
+    assert_equal([[:req, :a], [:rest, :b], [:block, :c]], self.class.instance_method(:pmo4).parameters)
+    assert_equal([[:req, :a], [:rest, :b], [:req, :c]], self.class.instance_method(:pmo5).parameters)
+    assert_equal([[:req, :a], [:rest, :b], [:req, :c], [:block, :d]], self.class.instance_method(:pmo6).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest, :c], [:req, :d], [:block, :e]], self.class.instance_method(:pmo7).parameters)
+    assert_equal([[:req], [:block, :b]], self.class.instance_method(:pma1).parameters)
+    assert_equal([[:req], [:block, :b]], self.class.instance_method(:
