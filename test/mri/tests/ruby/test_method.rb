@@ -642,4 +642,154 @@ class TestMethod < Test::Unit::TestCase
     assert_equal([[:req, :a], [:rest, :b], [:req, :c], [:block, :d]], self.class.instance_method(:pmo6).parameters)
     assert_equal([[:req, :a], [:opt, :b], [:rest, :c], [:req, :d], [:block, :e]], self.class.instance_method(:pmo7).parameters)
     assert_equal([[:req], [:block, :b]], self.class.instance_method(:pma1).parameters)
-    assert_equal([[:req], [:block, :b]], self.class.instance_method(:
+    assert_equal([[:req], [:block, :b]], self.class.instance_method(:pma1).parameters)
+    assert_equal([[:keyrest]], self.class.instance_method(:pmk1).parameters)
+    assert_equal([[:keyrest, :o]], self.class.instance_method(:pmk2).parameters)
+    assert_equal([[:req, :a], [:keyrest, :o]], self.class.instance_method(:pmk3).parameters)
+    assert_equal([[:opt, :a], [:keyrest, :o]], self.class.instance_method(:pmk4).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:keyrest, :o]], self.class.instance_method(:pmk5).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:req, :c], [:keyrest, :o]], self.class.instance_method(:pmk6).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest, :c], [:req, :d], [:keyrest, :o]], self.class.instance_method(:pmk7).parameters)
+    assert_equal([[:req, :a], [:opt, :b], [:rest, :c], [:req, :d], [:keyreq, :e], [:key, :f], [:keyrest, :o]], self.class.instance_method(:pmk8).parameters)
+    assert_equal([[:nokey]], self.class.instance_method(:pmnk).parameters)
+  end
+
+  def test_hidden_parameters
+    instance_eval("def m((_)"+",(_)"*256+");end")
+    assert_empty(method(:m).parameters.map{|_,n|n}.compact)
+  end
+
+  def test_method_parameters_inspect
+    assert_include(method(:m0).inspect, "()")
+    assert_include(method(:m1).inspect, "(a)")
+    assert_include(method(:m2).inspect, "(a, b)")
+    assert_include(method(:mo1).inspect, "(a=..., &b)")
+    assert_include(method(:mo2).inspect, "(a, b=...)")
+    assert_include(method(:mo3).inspect, "(*a)")
+    assert_include(method(:mo4).inspect, "(a, *b, &c)")
+    assert_include(method(:mo5).inspect, "(a, *b, c)")
+    assert_include(method(:mo6).inspect, "(a, *b, c, &d)")
+    assert_include(method(:mo7).inspect, "(a, b=..., *c, d, &e)")
+    assert_include(method(:mo8).inspect, "(a, b=..., *, d, &e)")
+    assert_include(method(:ma1).inspect, "(_, &b)")
+    assert_include(method(:mk1).inspect, "(**)")
+    assert_include(method(:mk2).inspect, "(**o)")
+    assert_include(method(:mk3).inspect, "(a, **o)")
+    assert_include(method(:mk4).inspect, "(a=..., **o)")
+    assert_include(method(:mk5).inspect, "(a, b=..., **o)")
+    assert_include(method(:mk6).inspect, "(a, b=..., c, **o)")
+    assert_include(method(:mk7).inspect, "(a, b=..., *c, d, **o)")
+    assert_include(method(:mk8).inspect, "(a, b=..., *c, d, e:, f: ..., **o)")
+    assert_include(method(:mnk).inspect, "(**nil)")
+    assert_include(method(:mf).inspect, "(...)")
+  end
+
+  def test_unbound_method_parameters_inspect
+    assert_include(self.class.instance_method(:m0).inspect, "()")
+    assert_include(self.class.instance_method(:m1).inspect, "(a)")
+    assert_include(self.class.instance_method(:m2).inspect, "(a, b)")
+    assert_include(self.class.instance_method(:mo1).inspect, "(a=..., &b)")
+    assert_include(self.class.instance_method(:mo2).inspect, "(a, b=...)")
+    assert_include(self.class.instance_method(:mo3).inspect, "(*a)")
+    assert_include(self.class.instance_method(:mo4).inspect, "(a, *b, &c)")
+    assert_include(self.class.instance_method(:mo5).inspect, "(a, *b, c)")
+    assert_include(self.class.instance_method(:mo6).inspect, "(a, *b, c, &d)")
+    assert_include(self.class.instance_method(:mo7).inspect, "(a, b=..., *c, d, &e)")
+    assert_include(self.class.instance_method(:mo8).inspect, "(a, b=..., *, d, &e)")
+    assert_include(self.class.instance_method(:ma1).inspect, "(_, &b)")
+    assert_include(self.class.instance_method(:mk1).inspect, "(**)")
+    assert_include(self.class.instance_method(:mk2).inspect, "(**o)")
+    assert_include(self.class.instance_method(:mk3).inspect, "(a, **o)")
+    assert_include(self.class.instance_method(:mk4).inspect, "(a=..., **o)")
+    assert_include(self.class.instance_method(:mk5).inspect, "(a, b=..., **o)")
+    assert_include(self.class.instance_method(:mk6).inspect, "(a, b=..., c, **o)")
+    assert_include(self.class.instance_method(:mk7).inspect, "(a, b=..., *c, d, **o)")
+    assert_include(self.class.instance_method(:mk8).inspect, "(a, b=..., *c, d, e:, f: ..., **o)")
+    assert_include(self.class.instance_method(:mnk).inspect, "(**nil)")
+    assert_include(self.class.instance_method(:mf).inspect, "(...)")
+  end
+
+  def test_public_method_with_zsuper_method
+    c = Class.new
+    c.class_eval do
+      def foo
+        :ok
+      end
+      private :foo
+    end
+    d = Class.new(c)
+    d.class_eval do
+      public :foo
+    end
+    assert_equal(:ok, d.new.public_method(:foo).call)
+  end
+
+  def test_public_methods_with_extended
+    m = Module.new do def m1; end end
+    a = Class.new do def a; end end
+    bug = '[ruby-dev:41553]'
+    obj = a.new
+    assert_equal([:a], obj.public_methods(false), bug)
+    obj.extend(m)
+    assert_equal([:m1, :a], obj.public_methods(false), bug)
+  end
+
+  def test_visibility
+    assert_equal('method', defined?(mv1))
+    assert_equal('method', defined?(mv2))
+    assert_equal('method', defined?(mv3))
+
+    assert_equal('method', defined?(self.mv1))
+    assert_equal(nil,      defined?(self.mv2))
+    assert_equal('method', defined?(self.mv3))
+
+    assert_equal(true,  respond_to?(:mv1))
+    assert_equal(false, respond_to?(:mv2))
+    assert_equal(false, respond_to?(:mv3))
+
+    assert_equal(true,  respond_to?(:mv1, true))
+    assert_equal(true,  respond_to?(:mv2, true))
+    assert_equal(true,  respond_to?(:mv3, true))
+
+    assert_nothing_raised { mv1 }
+    assert_nothing_raised { mv2 }
+    assert_nothing_raised { mv3 }
+
+    assert_nothing_raised { self.mv1 }
+    assert_nothing_raised { self.mv2 }
+    assert_raise(NoMethodError) { (self).mv2 }
+    assert_nothing_raised { self.mv3 }
+
+    v = Visibility.new
+
+    assert_equal('method', defined?(v.mv1))
+    assert_equal(nil,      defined?(v.mv2))
+    assert_equal(nil,      defined?(v.mv3))
+
+    assert_equal(true,  v.respond_to?(:mv1))
+    assert_equal(false, v.respond_to?(:mv2))
+    assert_equal(false, v.respond_to?(:mv3))
+
+    assert_equal(true,  v.respond_to?(:mv1, true))
+    assert_equal(true,  v.respond_to?(:mv2, true))
+    assert_equal(true,  v.respond_to?(:mv3, true))
+
+    assert_nothing_raised { v.mv1 }
+    assert_raise(NoMethodError) { v.mv2 }
+    assert_raise(NoMethodError) { v.mv3 }
+
+    assert_nothing_raised { v.__send__(:mv1) }
+    assert_nothing_raised { v.__send__(:mv2) }
+    assert_nothing_raised { v.__send__(:mv3) }
+
+    assert_nothing_raised { v.instance_eval { mv1 } }
+    assert_nothing_raised { v.instance_eval { mv2 } }
+    assert_nothing_raised { v.instance_eval { mv3 } }
+  end
+
+  def test_bound_method_entry
+    bug6171 = '[ruby-core:43383]'
+    assert_ruby_status([], <<-EOC, bug6171)
+      class Bug6171
+        def initialize(target)
+          define_singleton_method(:rever
