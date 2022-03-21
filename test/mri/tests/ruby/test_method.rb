@@ -792,4 +792,248 @@ class TestMethod < Test::Unit::TestCase
     assert_ruby_status([], <<-EOC, bug6171)
       class Bug6171
         def initialize(target)
-          define_singleton_method(:rever
+          define_singleton_method(:reverse, target.method(:reverse).to_proc)
+        end
+      end
+      100.times {p = Bug6171.new('test'); 1000.times {p.reverse}}
+      EOC
+  end
+
+  def test_unbound_method_proc_coerce
+    # '&' coercion of an UnboundMethod raises TypeError
+    assert_raise(TypeError) do
+      Class.new do
+        define_method('foo', &Object.instance_method(:to_s))
+      end
+    end
+  end
+
+  def test___dir__
+    assert_instance_of String, __dir__
+    assert_equal(File.dirname(File.realpath(__FILE__)), __dir__)
+    bug8436 = '[ruby-core:55123] [Bug #8436]'
+    file, line = *binding.source_location
+    file = File.realpath(file)
+    assert_equal(__dir__, eval("__dir__", binding, file, line), bug8436)
+    bug8662 = '[ruby-core:56099] [Bug #8662]'
+    assert_equal("arbitrary", eval("__dir__", binding, "arbitrary/file.rb"), bug8662)
+    assert_equal("arbitrary", Object.new.instance_eval("__dir__", "arbitrary/file.rb"), bug8662)
+  end
+
+  def test_alias_owner
+    bug7613 = '[ruby-core:51105]'
+    bug7993 = '[Bug #7993]'
+    c = Class.new {
+      def foo
+      end
+      prepend Module.new
+      attr_reader :zot
+    }
+    x = c.new
+    class << x
+      alias bar foo
+    end
+    assert_equal(c, c.instance_method(:foo).owner)
+    assert_equal(c, x.method(:foo).owner)
+    assert_equal(x.singleton_class, x.method(:bar).owner)
+    assert_equal(x.method(:foo), x.method(:bar), bug7613)
+    assert_equal(c, x.method(:zot).owner, bug7993)
+    assert_equal(c, c.instance_method(:zot).owner, bug7993)
+  end
+
+  def test_included
+    m = Module.new {
+      def foo
+      end
+    }
+    c = Class.new {
+      def foo
+      end
+      include m
+    }
+    assert_equal(c, c.instance_method(:foo).owner)
+  end
+
+  def test_prepended
+    bug7836 = '[ruby-core:52160] [Bug #7836]'
+    bug7988 = '[ruby-core:53038] [Bug #7988]'
+    m = Module.new {
+      def foo
+      end
+    }
+    c = Class.new {
+      def foo
+      end
+      prepend m
+    }
+    assert_raise(NameError, bug7988) {Module.new{prepend m}.instance_method(:bar)}
+    true || c || bug7836
+  end
+
+  def test_gced_bmethod
+    assert_normal_exit %q{
+      require 'irb'
+      IRB::Irb.module_eval do
+        define_method(:eval_input) do
+          IRB::Irb.module_eval { alias_method :eval_input, :to_s }
+          GC.start
+          Kernel
+        end
+      end
+      IRB.start
+    }, '[Bug #7825]'
+  end
+
+  def test_singleton_method
+    feature8391 = '[ruby-core:54914] [Feature #8391]'
+    c1 = Class.new
+    c1.class_eval { def foo; :foo; end }
+    o = c1.new
+    def o.bar; :bar; end
+    assert_nothing_raised(NameError) {o.method(:foo)}
+    assert_raise(NameError, feature8391) {o.singleton_method(:foo)}
+    m = assert_nothing_raised(NameError, feature8391) {break o.singleton_method(:bar)}
+    assert_equal(:bar, m.call, feature8391)
+  end
+
+  def test_singleton_method_prepend
+    bug14658 = '[Bug #14658]'
+    c1 = Class.new
+    o = c1.new
+    def o.bar; :bar; end
+    class << o; prepend Module.new; end
+    m = assert_nothing_raised(NameError, bug14658) {o.singleton_method(:bar)}
+    assert_equal(:bar, m.call, bug14658)
+
+    o = Object.new
+    assert_raise(NameError, bug14658) {o.singleton_method(:bar)}
+  end
+
+  Feature9783 = '[ruby-core:62212] [Feature #9783]'
+
+  def assert_curry_three_args(m)
+    curried = m.curry
+    assert_equal(6, curried.(1).(2).(3), Feature9783)
+
+    curried = m.curry(3)
+    assert_equal(6, curried.(1).(2).(3), Feature9783)
+
+    assert_raise_with_message(ArgumentError, /wrong number/) {m.curry(2)}
+  end
+
+  def test_curry_method
+    c = Class.new {
+      def three_args(a,b,c) a + b + c end
+    }
+    assert_curry_three_args(c.new.method(:three_args))
+  end
+
+  def test_curry_from_proc
+    c = Class.new {
+      define_method(:three_args) {|x,y,z| x + y + z}
+    }
+    assert_curry_three_args(c.new.method(:three_args))
+  end
+
+  def assert_curry_var_args(m)
+    curried = m.curry(3)
+    assert_equal([1, 2, 3], curried.(1).(2).(3), Feature9783)
+
+    curried = m.curry(2)
+    assert_equal([1, 2], curried.(1).(2), Feature9783)
+
+    curried = m.curry(0)
+    assert_equal([1], curried.(1), Feature9783)
+  end
+
+  def test_curry_var_args
+    c = Class.new {
+      def var_args(*args) args end
+    }
+    assert_curry_var_args(c.new.method(:var_args))
+  end
+
+  def test_curry_from_proc_var_args
+    c = Class.new {
+      define_method(:var_args) {|*args| args}
+    }
+    assert_curry_var_args(c.new.method(:var_args))
+  end
+
+  Feature9781 = '[ruby-core:62202] [Feature #9781]'
+
+  def test_super_method
+    o = Derived.new
+    m = o.method(:foo).super_method
+    assert_equal(Base, m.owner, Feature9781)
+    assert_same(o, m.receiver, Feature9781)
+    assert_equal(:foo, m.name, Feature9781)
+    m = assert_nothing_raised(NameError, Feature9781) {break m.super_method}
+    assert_nil(m, Feature9781)
+  end
+
+  def test_super_method_unbound
+    m = Derived.instance_method(:foo)
+    m = m.super_method
+    assert_equal(Base.instance_method(:foo), m, Feature9781)
+    m = assert_nothing_raised(NameError, Feature9781) {break m.super_method}
+    assert_nil(m, Feature9781)
+
+    bug11419 = '[ruby-core:70254]'
+    m = Object.instance_method(:tap)
+    m = assert_nothing_raised(NameError, bug11419) {break m.super_method}
+    assert_nil(m, bug11419)
+  end
+
+  def test_super_method_module
+    m1 = Module.new {def foo; end}
+    c1 = Class.new(Derived) {include m1; def foo; end}
+    m = c1.instance_method(:foo)
+    assert_equal(c1, m.owner, Feature9781)
+    m = m.super_method
+    assert_equal(m1, m.owner, Feature9781)
+    m = m.super_method
+    assert_equal(Derived, m.owner, Feature9781)
+    m = m.super_method
+    assert_equal(Base, m.owner, Feature9781)
+    m2 = Module.new {def foo; end}
+    o = c1.new.extend(m2)
+    m = o.method(:foo)
+    assert_equal(m2, m.owner, Feature9781)
+    m = m.super_method
+    assert_equal(c1, m.owner, Feature9781)
+    assert_same(o, m.receiver, Feature9781)
+
+    c1 = Class.new {def foo; end}
+    c2 = Class.new(c1) {include m1; include m2}
+    m = c2.instance_method(:foo)
+    assert_equal(m2, m.owner)
+    m = m.super_method
+    assert_equal(m1, m.owner)
+    m = m.super_method
+    assert_equal(c1, m.owner)
+    assert_nil(m.super_method)
+  end
+
+  def test_super_method_bind_unbind_clone
+    bug15629_m1 = Module.new do
+      def foo; end
+    end
+
+    bug15629_m2 = Module.new do
+      def foo; end
+    end
+
+    bug15629_c = Class.new do
+      include bug15629_m1
+      include bug15629_m2
+    end
+
+    o  = bug15629_c.new
+    m = o.method(:foo)
+    sm = m.super_method
+    im = bug15629_c.instance_method(:foo)
+    sim = im.super_method
+
+    assert_equal(sm, m.clone.super_method)
+    assert_equal(sim
