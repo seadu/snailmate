@@ -1036,4 +1036,258 @@ class TestMethod < Test::Unit::TestCase
     sim = im.super_method
 
     assert_equal(sm, m.clone.super_method)
-    assert_equal(sim
+    assert_equal(sim, m.unbind.super_method)
+    assert_equal(sim, m.unbind.clone.super_method)
+    assert_equal(sim, im.clone.super_method)
+    assert_equal(sm, m.unbind.bind(o).super_method)
+    assert_equal(sm, m.unbind.clone.bind(o).super_method)
+    assert_equal(sm, im.bind(o).super_method)
+    assert_equal(sm, im.clone.bind(o).super_method)
+  end
+
+  def test_super_method_removed_public
+    c1 = Class.new {private def foo; end}
+    c2 = Class.new(c1) {public :foo}
+    c3 = Class.new(c2) {def foo; end}
+    c1.class_eval {undef foo}
+    m = c3.instance_method(:foo)
+    m = assert_nothing_raised(NameError, Feature9781) {break m.super_method}
+    assert_nil(m, Feature9781)
+  end
+
+  def test_super_method_removed_regular
+    c1 = Class.new { def foo; end }
+    c2 = Class.new(c1) { def foo; end }
+    assert_equal c1.instance_method(:foo), c2.instance_method(:foo).super_method
+    c1.remove_method :foo
+    assert_equal nil, c2.instance_method(:foo).super_method
+  end
+
+  def test_prepended_public_zsuper
+    mod = EnvUtil.labeled_module("Mod") {private def foo; [:ok] end}
+    obj = Object.new.extend(mod)
+
+    class << obj
+      public :foo
+    end
+
+    mod1 = EnvUtil.labeled_module("Mod1") {def foo; [:mod1] + super end}
+    obj.singleton_class.prepend(mod1)
+
+    mod2 = EnvUtil.labeled_module("Mod2") {def foo; [:mod2] + super end}
+    obj.singleton_class.prepend(mod2)
+
+    m = obj.method(:foo)
+    assert_equal mod2, m.owner
+    assert_equal mod1, m.super_method.owner
+    assert_equal obj.singleton_class, m.super_method.super_method.owner
+    assert_equal nil, m.super_method.super_method.super_method
+
+    assert_equal [:mod2, :mod1, :ok], obj.foo
+  end
+
+  def test_super_method_with_prepended_module
+    bug = '[ruby-core:81666] [Bug #13656] should be the method of the parent'
+    c1 = EnvUtil.labeled_class("C1") {def m; end}
+    c2 = EnvUtil.labeled_class("C2", c1) {def m; end}
+    c2.prepend(EnvUtil.labeled_module("M"))
+    m1 = c1.instance_method(:m)
+    m2 = c2.instance_method(:m).super_method
+    assert_equal(m1, m2, bug)
+    assert_equal(c1, m2.owner, bug)
+    assert_equal(m1.source_location, m2.source_location, bug)
+  end
+
+  def test_super_method_after_bind
+    assert_nil String.instance_method(:length).bind(String.new).super_method,
+      '[ruby-core:85231] [Bug #14421]'
+  end
+
+  def test_super_method_alias
+    c0 = Class.new do
+      def m1
+        [:C0_m1]
+      end
+      def m2
+        [:C0_m2]
+      end
+    end
+
+    c1 = Class.new(c0) do
+      def m1
+        [:C1_m1] + super
+      end
+      alias m2 m1
+    end
+
+    c2 = Class.new(c1) do
+      def m2
+        [:C2_m2] + super
+      end
+    end
+    o1 = c2.new
+    assert_equal([:C2_m2, :C1_m1, :C0_m1], o1.m2)
+
+    m = o1.method(:m2)
+    assert_equal([:C2_m2, :C1_m1, :C0_m1], m.call)
+
+    m = m.super_method
+    assert_equal([:C1_m1, :C0_m1], m.call)
+
+    m = m.super_method
+    assert_equal([:C0_m1], m.call)
+
+    assert_nil(m.super_method)
+  end
+
+  def test_super_method_alias_to_prepended_module
+    m = Module.new do
+      def m1
+        [:P_m1] + super
+      end
+
+      def m2
+        [:P_m2] + super
+      end
+    end
+
+    c0 = Class.new do
+      def m1
+        [:C0_m1]
+      end
+    end
+
+    c1 = Class.new(c0) do
+      def m1
+        [:C1_m1] + super
+      end
+      prepend m
+      alias m2 m1
+    end
+
+    o1 = c1.new
+    assert_equal([:P_m2, :P_m1, :C1_m1, :C0_m1], o1.m2)
+
+    m = o1.method(:m2)
+    assert_equal([:P_m2, :P_m1, :C1_m1, :C0_m1], m.call)
+
+    m = m.super_method
+    assert_equal([:P_m1, :C1_m1, :C0_m1], m.call)
+
+    m = m.super_method
+    assert_equal([:C1_m1, :C0_m1], m.call)
+
+    m = m.super_method
+    assert_equal([:C0_m1], m.call)
+
+    assert_nil(m.super_method)
+  end
+
+  # Bug 17780
+  def test_super_method_module_alias
+    m = Module.new do
+      def foo
+      end
+      alias :f :foo
+    end
+
+    method = m.instance_method(:f)
+    super_method = method.super_method
+    assert_nil(super_method)
+  end
+
+  def test_method_visibility_predicates
+    v = Visibility.new
+    assert_equal(true, v.method(:mv1).public?)
+    assert_equal(true, v.method(:mv2).private?)
+    assert_equal(true, v.method(:mv3).protected?)
+    assert_equal(false, v.method(:mv2).public?)
+    assert_equal(false, v.method(:mv3).private?)
+    assert_equal(false, v.method(:mv1).protected?)
+  end
+
+  def test_unbound_method_visibility_predicates
+    assert_equal(true, Visibility.instance_method(:mv1).public?)
+    assert_equal(true, Visibility.instance_method(:mv2).private?)
+    assert_equal(true, Visibility.instance_method(:mv3).protected?)
+    assert_equal(false, Visibility.instance_method(:mv2).public?)
+    assert_equal(false, Visibility.instance_method(:mv3).private?)
+    assert_equal(false, Visibility.instance_method(:mv1).protected?)
+  end
+
+  # Bug 18435
+  def test_instance_methods_owner_consistency
+    a = Module.new { def method1; end }
+
+    b = Class.new do
+      include a
+      protected :method1
+    end
+
+    assert_equal [:method1], b.instance_methods(false)
+    assert_equal b, b.instance_method(:method1).owner
+  end
+
+  def test_zsuper_method_removed
+    a = EnvUtil.labeled_class('A') do
+      private
+      def foo(arg = nil)
+        1
+      end
+    end
+    line = __LINE__ - 4
+
+    b = EnvUtil.labeled_class('B', a) do
+      public :foo
+    end
+
+    unbound = b.instance_method(:foo)
+
+    assert_equal unbound, b.public_instance_method(:foo)
+    assert_equal "#<UnboundMethod: B(A)#foo(arg=...) #{__FILE__}:#{line}>", unbound.inspect
+    assert_equal [[:opt, :arg]], unbound.parameters
+
+    a.remove_method(:foo)
+
+    assert_equal "#<UnboundMethod: B(A)#foo(arg=...) #{__FILE__}:#{line}>", unbound.inspect
+    assert_equal [[:opt, :arg]], unbound.parameters
+
+    obj = b.new
+    assert_equal 1, unbound.bind_call(obj)
+
+    assert_include b.instance_methods(false), :foo
+    link = 'https://github.com/ruby/ruby/pull/6467#issuecomment-1262159088'
+    assert_raise(NameError, link) { b.instance_method(:foo) }
+    # For #test_method_list below, otherwise we get the same error as just above
+    b.remove_method(:foo)
+  end
+
+  def test_zsuper_method_removed_higher_method
+    a0 = EnvUtil.labeled_class('A0') do
+      def foo(arg1 = nil, arg2 = nil)
+        0
+      end
+    end
+    line0 = __LINE__ - 4
+    a0_foo = a0.instance_method(:foo)
+
+    a = EnvUtil.labeled_class('A', a0) do
+      private
+      def foo(arg = nil)
+        1
+      end
+    end
+    line = __LINE__ - 4
+
+    b = EnvUtil.labeled_class('B', a) do
+      public :foo
+    end
+
+    unbound = b.instance_method(:foo)
+
+    assert_equal a0_foo, unbound.super_method
+
+    a.remove_method(:foo)
+
+    assert_equal "#<UnboundMethod: B(A)#foo(arg=...) #{__FILE__}:#{line}>", unbound.inspect
+    assert_equal [[:opt, :arg]
