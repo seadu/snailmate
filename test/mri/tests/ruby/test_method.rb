@@ -1290,4 +1290,262 @@ class TestMethod < Test::Unit::TestCase
     a.remove_method(:foo)
 
     assert_equal "#<UnboundMethod: B(A)#foo(arg=...) #{__FILE__}:#{line}>", unbound.inspect
-    assert_equal [[:opt, :arg]
+    assert_equal [[:opt, :arg]], unbound.parameters
+    assert_equal a0_foo, unbound.super_method
+
+    obj = b.new
+    assert_equal 1, unbound.bind_call(obj)
+
+    assert_include b.instance_methods(false), :foo
+    assert_equal "#<UnboundMethod: B(A0)#foo(arg1=..., arg2=...) #{__FILE__}:#{line0}>", b.instance_method(:foo).inspect
+  end
+
+  def test_zsuper_method_redefined_bind_call
+    c0 = EnvUtil.labeled_class('C0') do
+      def foo
+        [:foo]
+      end
+    end
+
+    c1 = EnvUtil.labeled_class('C1', c0) do
+      def foo
+        super + [:bar]
+      end
+    end
+    m1 = c1.instance_method(:foo)
+
+    c2 = EnvUtil.labeled_class('C2', c1) do
+      private :foo
+    end
+
+    assert_equal [:foo], c2.private_instance_methods(false)
+    m2 = c2.instance_method(:foo)
+
+    c1.class_exec do
+      def foo
+        [:bar2]
+      end
+    end
+
+    m3 = c2.instance_method(:foo)
+    c = c2.new
+    assert_equal [:foo, :bar], m1.bind_call(c)
+    assert_equal c1, m1.owner
+    assert_equal [:foo, :bar], m2.bind_call(c)
+    assert_equal c2, m2.owner
+    assert_equal [:bar2], m3.bind_call(c)
+    assert_equal c2, m3.owner
+  end
+
+  # Bug #18751
+  def method_equality_visbility_alias
+    c = Class.new do
+      class << self
+        alias_method :n, :new
+        private :new
+      end
+    end
+
+    assert_equal c.method(:n), c.method(:new)
+
+    assert_not_equal c.method(:n), Class.method(:new)
+    assert_equal c.method(:n) == Class.instance_method(:new).bind(c)
+
+    assert_not_equal c.method(:new), Class.method(:new)
+    assert_equal c.method(:new), Class.instance_method(:new).bind(c)
+  end
+
+  def rest_parameter(*rest)
+    rest
+  end
+
+  def test_splat_long_array
+    if File.exist?('/etc/os-release') && File.read('/etc/os-release').include?('openSUSE Leap')
+      # For RubyCI's openSUSE machine http://rubyci.s3.amazonaws.com/opensuseleap/ruby-trunk/recent.html, which tends to die with NoMemoryError here.
+      skip 'do not exhaust memory on RubyCI openSUSE Leap machine'
+    end
+    n = 10_000_000
+    assert_equal n  , rest_parameter(*(1..n)).size, '[Feature #10440]'
+  end
+
+  class C
+    D = "Const_D"
+    def foo
+      a = b = c = a = b = c = 12345
+    end
+  end
+
+  def test_to_proc_binding
+    bug11012 = '[ruby-core:68673] [Bug #11012]'
+
+    b = C.new.method(:foo).to_proc.binding
+    assert_equal([], b.local_variables, bug11012)
+    assert_equal("Const_D", b.eval("D"), bug11012) # Check CREF
+
+    assert_raise(NameError, bug11012){ b.local_variable_get(:foo) }
+    assert_equal(123, b.local_variable_set(:foo, 123), bug11012)
+    assert_equal(123, b.local_variable_get(:foo), bug11012)
+    assert_equal(456, b.local_variable_set(:bar, 456), bug11012)
+    assert_equal(123, b.local_variable_get(:foo), bug11012)
+    assert_equal(456, b.local_variable_get(:bar), bug11012)
+    assert_equal([:bar, :foo], b.local_variables.sort, bug11012)
+  end
+
+  MethodInMethodClass_Setup = -> do
+    remove_const :MethodInMethodClass if defined? MethodInMethodClass
+
+    class MethodInMethodClass
+      def m1
+        def m2
+        end
+        self.class.send(:define_method, :m3){} # [Bug #11754]
+      end
+      private
+    end
+  end
+
+  def test_method_in_method_visibility_should_be_public
+    MethodInMethodClass_Setup.call
+
+    assert_equal([:m1].sort, MethodInMethodClass.public_instance_methods(false).sort)
+    assert_equal([].sort, MethodInMethodClass.private_instance_methods(false).sort)
+
+    MethodInMethodClass.new.m1
+    assert_equal([:m1, :m2, :m3].sort, MethodInMethodClass.public_instance_methods(false).sort)
+    assert_equal([].sort, MethodInMethodClass.private_instance_methods(false).sort)
+  end
+
+  def test_define_method_with_symbol
+    assert_normal_exit %q{
+      define_method(:foo, &:to_s)
+      define_method(:bar, :to_s.to_proc)
+    }, '[Bug #11850]'
+    c = Class.new{
+      define_method(:foo, &:to_s)
+      define_method(:bar, :to_s.to_proc)
+    }
+    obj = c.new
+    assert_equal('1', obj.foo(1))
+    assert_equal('1', obj.bar(1))
+  end
+
+  def test_argument_error_location
+    body = <<-'END_OF_BODY'
+    eval <<-'EOS'
+    $line_lambda = __LINE__; $f = lambda do
+      _x = 1
+    end
+    $line_method = __LINE__; def foo
+      _x = 1
+    end
+    begin
+      $f.call(1)
+    rescue ArgumentError => e
+      assert_equal "(eval):#{$line_lambda.to_s}:in `block in <main>'", e.backtrace.first
+    end
+    begin
+      foo(1)
+    rescue ArgumentError => e
+      assert_equal "(eval):#{$line_method}:in `foo'", e.backtrace.first
+    end
+    EOS
+    END_OF_BODY
+
+    assert_separately [], body
+    # without trace insn
+    assert_separately [], "RubyVM::InstructionSequence.compile_option = {trace_instruction: false}\n" + body
+  end
+
+  def test_zsuper_private_override_instance_method
+    assert_separately(%w(--disable-gems), <<-'end;', timeout: 30)
+      # Bug #16942 [ruby-core:98691]
+      module M
+        def x
+        end
+      end
+
+      module M2
+        prepend Module.new
+        include M
+        private :x
+      end
+
+      ::Object.prepend(M2)
+
+      m = Object.instance_method(:x)
+      assert_equal M2, m.owner
+    end;
+  end
+
+  def test_override_optimized_method_on_class_using_prepend
+    assert_separately(%w(--disable-gems), <<-'end;', timeout: 30)
+      # Bug #17725 [ruby-core:102884]
+      $VERBOSE = nil
+      String.prepend(Module.new)
+      class String
+        def + other
+          'blah blah'
+        end
+      end
+
+      assert_equal('blah blah', 'a' + 'b')
+    end;
+  end
+
+  def test_eqq
+    assert_operator(0.method(:<), :===, 5)
+    assert_not_operator(0.method(:<), :===, -5)
+  end
+
+  def test_compose_with_method
+    c = Class.new {
+      def f(x) x * 2 end
+      def g(x) x + 1 end
+    }
+    f = c.new.method(:f)
+    g = c.new.method(:g)
+
+    assert_equal(6, (f << g).call(2))
+    assert_equal(6, (g >> f).call(2))
+  end
+
+  def test_compose_with_proc
+    c = Class.new {
+      def f(x) x * 2 end
+    }
+    f = c.new.method(:f)
+    g = proc {|x| x + 1}
+
+    assert_equal(6, (f << g).call(2))
+    assert_equal(6, (g >> f).call(2))
+  end
+
+  def test_compose_with_callable
+    c = Class.new {
+      def f(x) x * 2 end
+    }
+    c2 = Class.new {
+      def call(x) x + 1 end
+    }
+    f = c.new.method(:f)
+    g = c2.new
+
+    assert_equal(6, (f << g).call(2))
+    assert_equal(5, (f >> g).call(2))
+  end
+
+  def test_compose_with_noncallable
+    c = Class.new {
+      def f(x) x * 2 end
+    }
+    f = c.new.method(:f)
+
+    assert_raise(TypeError) {
+      f << 5
+    }
+    assert_raise(TypeError) {
+      f >> 5
+    }
+  end
+
+  def test
