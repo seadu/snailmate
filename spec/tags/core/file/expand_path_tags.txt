@@ -1,0 +1,4 @@
+fails:File.expand_path does not replace multiple '/' at the beginning of the path
+slow:File.expand_path converts a pathname to an absolute pathname
+slow:File.expand_path converts a pathname to an absolute pathname, Ruby-Talk:18512
+s
