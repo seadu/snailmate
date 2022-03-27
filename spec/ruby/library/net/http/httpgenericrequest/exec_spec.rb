@@ -88,4 +88,44 @@ describe "Net::HTTPGenericRequest#exec when passed socket, version, path" do
 
       str.should =~ %r[POST /some/other/path HTTP/1.1\r\n]
       str.should =~ %r[Accept: \*/\*\r\n]
-      str.should =~ %r[Content-Typ
+      str.should =~ %r[Content-Type: text/html\r\n]
+      str.should =~ %r[Content-Length: 10\r\n]
+      str[-24..-1].should == "\r\n\r\naaaaaaaaaaaaaaaaaaaa"
+    end
+
+    it "sends the request in chunks when 'Transfer-Encoding' is set to 'chunked'" do
+      request = Net::HTTPGenericRequest.new("POST", true, true, "/some/path",
+                                            "Content-Type" => "text/html",
+                                            "Transfer-Encoding" => "chunked")
+      datasize = 1024 * 10
+      request.body_stream = StringIO.new("a" * datasize)
+
+      request.exec(@buffered_socket, "1.1", "/some/other/path")
+      str = @socket.string
+
+      str.should =~ %r[POST /some/other/path HTTP/1.1\r\n]
+      str.should =~ %r[Accept: \*/\*\r\n]
+      str.should =~ %r[Content-Type: text/html\r\n]
+      str.should =~ %r[Transfer-Encoding: chunked\r\n]
+      str =~ %r[\r\n\r\n]
+      str = $'
+      while datasize > 0
+        chunk_size_line, str = str.split(/\r\n/, 2)
+        chunk_size = chunk_size_line[/\A[0-9A-Fa-f]+/].to_i(16)
+        str.slice!(0, chunk_size).should == 'a' * chunk_size
+        datasize -= chunk_size
+        str.slice!(0, 2).should == "\r\n"
+      end
+      datasize.should == 0
+      str.should == %"0\r\n\r\n"
+    end
+
+    it "raises an ArgumentError when the 'Content-Length' is not set or 'Transfer-Encoding' is not set to 'chunked'" do
+      request = Net::HTTPGenericRequest.new("POST", true, true, "/some/path",
+                                            "Content-Type" => "text/html")
+      request.body_stream = StringIO.new("Some Content")
+
+      -> { request.exec(@buffered_socket, "1.1", "/some/other/path") }.should raise_error(ArgumentError)
+    end
+  end
+end
