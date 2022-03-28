@@ -134,4 +134,122 @@ struct vm_ifunc *rb_vm_ifunc_new(rb_block_call_func_t func, const void *data, in
 void rb_strterm_mark(VALUE obj);
 static inline enum imemo_type imemo_type(VALUE imemo);
 static inline int imemo_type_p(VALUE imemo, enum imemo_type imemo_type);
-static inline bool imemo_throw_data_p(VALUE im
+static inline bool imemo_throw_data_p(VALUE imemo);
+static inline struct vm_ifunc *rb_vm_ifunc_proc_new(rb_block_call_func_t func, const void *data);
+#ifdef TRUFFLERUBY
+VALUE rb_imemo_tmpbuf_auto_free_pointer(void);
+#else
+static inline VALUE rb_imemo_tmpbuf_auto_free_pointer(void);
+#endif
+static inline void *RB_IMEMO_TMPBUF_PTR(VALUE v);
+#ifdef TRUFFLERUBY
+void *rb_imemo_tmpbuf_set_ptr(VALUE v, void *ptr);
+#else
+static inline void *rb_imemo_tmpbuf_set_ptr(VALUE v, void *ptr);
+#endif
+static inline VALUE rb_imemo_tmpbuf_auto_free_pointer_new_from_an_RString(VALUE str);
+static inline void MEMO_V1_SET(struct MEMO *m, VALUE v);
+static inline void MEMO_V2_SET(struct MEMO *m, VALUE v);
+
+RUBY_SYMBOL_EXPORT_BEGIN
+#if IMEMO_DEBUG
+VALUE rb_imemo_new_debug(enum imemo_type type, VALUE v1, VALUE v2, VALUE v3, VALUE v0, const char *file, int line);
+#define rb_imemo_new(type, v1, v2, v3, v0) rb_imemo_new_debug(type, v1, v2, v3, v0, __FILE__, __LINE__)
+#else
+VALUE rb_imemo_new(enum imemo_type type, VALUE v1, VALUE v2, VALUE v3, VALUE v0);
+#endif
+const char *rb_imemo_name(enum imemo_type type);
+RUBY_SYMBOL_EXPORT_END
+
+static inline enum imemo_type
+imemo_type(VALUE imemo)
+{
+    return (RBASIC(imemo)->flags >> FL_USHIFT) & IMEMO_MASK;
+}
+
+static inline int
+imemo_type_p(VALUE imemo, enum imemo_type imemo_type)
+{
+    if (LIKELY(!RB_SPECIAL_CONST_P(imemo))) {
+        /* fixed at compile time if imemo_type is given. */
+        const VALUE mask = (IMEMO_MASK << FL_USHIFT) | RUBY_T_MASK;
+        const VALUE expected_type = (imemo_type << FL_USHIFT) | T_IMEMO;
+        /* fixed at runtime. */
+        return expected_type == (RBASIC(imemo)->flags & mask);
+    }
+    else {
+        return 0;
+    }
+}
+
+#define IMEMO_TYPE_P(v, t) imemo_type_p((VALUE)v, t)
+
+static inline bool
+imemo_throw_data_p(VALUE imemo)
+{
+    return RB_TYPE_P(imemo, T_IMEMO);
+}
+
+static inline struct vm_ifunc *
+rb_vm_ifunc_proc_new(rb_block_call_func_t func, const void *data)
+{
+    return rb_vm_ifunc_new(func, data, 0, UNLIMITED_ARGUMENTS);
+}
+
+#ifndef TRUFFLERUBY
+static inline VALUE
+rb_imemo_tmpbuf_auto_free_pointer(void)
+{
+    return rb_imemo_new(imemo_tmpbuf, 0, 0, 0, 0);
+}
+#endif
+
+static inline void *
+RB_IMEMO_TMPBUF_PTR(VALUE v)
+{
+    const struct rb_imemo_tmpbuf_struct *p = (const void *)v;
+    return p->ptr;
+}
+
+#ifndef TRUFFLERUBY
+static inline void *
+rb_imemo_tmpbuf_set_ptr(VALUE v, void *ptr)
+{
+    return ((rb_imemo_tmpbuf_t *)v)->ptr = ptr;
+}
+#endif
+
+static inline VALUE
+rb_imemo_tmpbuf_auto_free_pointer_new_from_an_RString(VALUE str)
+{
+    const void *src;
+    VALUE imemo;
+    rb_imemo_tmpbuf_t *tmpbuf;
+    void *dst;
+    size_t len;
+
+    SafeStringValue(str);
+    /* create tmpbuf to keep the pointer before xmalloc */
+    imemo = rb_imemo_tmpbuf_auto_free_pointer();
+    tmpbuf = (rb_imemo_tmpbuf_t *)imemo;
+    len = RSTRING_LEN(str);
+    src = RSTRING_PTR(str);
+    dst = ruby_xmalloc(len);
+    memcpy(dst, src, len);
+    tmpbuf->ptr = dst;
+    return imemo;
+}
+
+static inline void
+MEMO_V1_SET(struct MEMO *m, VALUE v)
+{
+    RB_OBJ_WRITE(m, &m->v1, v);
+}
+
+static inline void
+MEMO_V2_SET(struct MEMO *m, VALUE v)
+{
+    RB_OBJ_WRITE(m, &m->v2, v);
+}
+
+#endif /* INTERNAL_IMEMO_H */
