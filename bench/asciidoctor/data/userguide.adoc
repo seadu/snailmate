@@ -115,4 +115,178 @@ Books share the same format as articles, with the following
 differences:
 
 - The part titles in multi-part books are <<X17,top level titles>>
-  (same level as book ti
+  (same level as book title).
+- Some sections are book specific e.g. preface and colophon.
+
+Book documents will normally be used to produce DocBook output since
+DocBook processors can automatically generate footnotes, table of
+contents, list of tables, list of figures, list of examples and
+indexes.
+
+AsciiDoc defines standard DocBook book frontmatter and backmatter
+<<X93,section markup templates>> (appendix, dedication, preface,
+bibliography, glossary, index, colophon).
+
+.Example book documents
+Book::
+  The `./doc/book.txt` file in the AsciiDoc distribution.
+
+Multi-part book::
+  The `./doc/book-multi.txt` file in the AsciiDoc distribution.
+
+manpage
+~~~~~~~
+Used to generate roff format UNIX manual pages.  AsciiDoc manpage
+documents observe special header title and section naming conventions
+-- see the <<X1,Manpage Documents>> section for details.
+
+AsciiDoc defines the 'synopsis' <<X93,section markup template>> to
+generate the DocBook `refsynopsisdiv` section.
+
+See also the asciidoc(1) man page source (`./doc/asciidoc.1.txt`) from
+the AsciiDoc distribution.
+
+
+[[X5]]
+AsciiDoc Backends
+-----------------
+The asciidoc(1) command translates an AsciiDoc formatted file to the
+backend format specified by the `-b` (`--backend`) command-line
+option. asciidoc(1) itself has little intrinsic knowledge of backend
+formats, all translation rules are contained in customizable cascading
+configuration files. Backend specific attributes are listed in the
+<<X88,Backend Attributes>> section.
+
+docbook45::
+  Outputs DocBook XML 4.5 markup.
+
+html4::
+  This backend generates plain HTML 4.01 Transitional markup.
+
+xhtml11::
+  This backend generates XHTML 1.1 markup styled with CSS2. Output
+  files have an `.html` extension.
+
+html5::
+  This backend generates HTML 5 markup, apart from the inclusion of
+  <<X98,audio and video block macros>> it is functionally identical to
+  the 'xhtml11' backend.
+
+slidy::
+  Use this backend to generate self-contained
+  http://www.w3.org/Talks/Tools/Slidy2/[Slidy] HTML slideshows for
+  your web browser from AsciiDoc documents. The Slidy backend is
+  documented in the distribution `doc/slidy.txt` file and
+  {website}slidy.html[online].
+
+wordpress::
+  A minor variant of the 'html4' backend to support
+  http://srackham.wordpress.com/blogpost1/[blogpost].
+
+latex::
+  Experimental LaTeX backend.
+
+Backend Aliases
+~~~~~~~~~~~~~~~
+Backend aliases are alternative names for AsciiDoc backends.  AsciiDoc
+comes with two backend aliases: 'html' (aliased to 'xhtml11') and
+'docbook' (aliased to 'docbook45').
+
+You can assign (or reassign) backend aliases by setting an AsciiDoc
+attribute named like `backend-alias-<alias>` to an AsciiDoc backend
+name. For example, the following backend alias attribute definitions
+appear in the `[attributes]` section of the global `asciidoc.conf`
+configuration file:
+
+  backend-alias-html=xhtml11
+  backend-alias-docbook=docbook45
+
+[[X100]]
+Backend Plugins
+~~~~~~~~~~~~~~~
+The asciidoc(1) `--backend` option is also used to install and manage
+backend <<X101,plugins>>.
+
+- A backend plugin is used just like the built-in backends.
+- Backend plugins <<X27,take precedence>> over built-in backends with
+  the same name.
+- You can use the `{asciidoc-confdir}` <<X60, intrinsic attribute>> to
+  refer to the built-in backend configuration file location from
+  backend plugin configuration files.
+- You can use the `{backend-confdir}` <<X60, intrinsic attribute>> to
+  refer to the backend plugin configuration file location.
+- By default backends plugins are installed in
+  `$HOME/.asciidoc/backends/<backend>` where `<backend>` is the
+  backend name.
+
+
+DocBook
+-------
+AsciiDoc generates 'article', 'book' and 'refentry'
+http://www.docbook.org/[DocBook] documents (corresponding to the
+AsciiDoc 'article', 'book' and 'manpage' document types).
+
+Most Linux distributions come with conversion tools (collectively
+called a toolchain) for <<X12,converting DocBook files>> to
+presentation formats such as Postscript, HTML, PDF, EPUB, DVI,
+PostScript, LaTeX, roff (the native man page format), HTMLHelp,
+JavaHelp and text.  There are also programs that allow you to view
+DocBook files directly, for example http://live.gnome.org/Yelp[Yelp]
+(the GNOME help viewer).
+
+[[X12]]
+Converting DocBook to other file formats
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+DocBook files are validated, parsed and translated various
+presentation file formats using a combination of applications
+collectively called a DocBook 'tool chain'. The function of a tool
+chain is to read the DocBook markup (produced by AsciiDoc) and
+transform it to a presentation format (for example HTML, PDF, HTML
+Help, EPUB, DVI, PostScript, LaTeX).
+
+A wide range of user output format requirements coupled with a choice
+of available tools and stylesheets results in many valid tool chain
+combinations.
+
+[[X43]]
+a2x Toolchain Wrapper
+~~~~~~~~~~~~~~~~~~~~~
+One of the biggest hurdles for new users is installing, configuring
+and using a DocBook XML toolchain. `a2x(1)` can help -- it's a
+toolchain wrapper command that will generate XHTML (chunked and
+unchunked), PDF, EPUB, DVI, PS, LaTeX, man page, HTML Help and text
+file outputs from an AsciiDoc text file.  `a2x(1)` does all the grunt
+work associated with generating and sequencing the toolchain commands
+and managing intermediate and output files.  `a2x(1)` also optionally
+deploys admonition and navigation icons and a CSS stylesheet. See the
+`a2x(1)` man page for more details. In addition to `asciidoc(1)` you
+also need <<X40,xsltproc(1)>>, <<X13,DocBook XSL Stylesheets>> and
+optionally: <<X31,dblatex>> or <<X14,FOP>> (to generate PDF);
+`w3m(1)` or `lynx(1)` (to generate text).
+
+The following examples generate `doc/source-highlight-filter.pdf` from
+the AsciiDoc `doc/source-highlight-filter.txt` source file. The first
+example uses `dblatex(1)` (the default PDF generator) the second
+example forces FOP to be used:
+
+  $ a2x -f pdf doc/source-highlight-filter.txt
+  $ a2x -f pdf --fop doc/source-highlight-filter.txt
+
+See the `a2x(1)` man page for details.
+
+TIP: Use the `--verbose` command-line option to view executed
+toolchain commands.
+
+HTML generation
+~~~~~~~~~~~~~~~
+AsciiDoc produces nicely styled HTML directly without requiring a
+DocBook toolchain but there are also advantages in going the DocBook
+route:
+
+- HTML from DocBook can optionally include automatically generated
+  indexes, tables of contents, footnotes, lists of figures and tables.
+- DocBook toolchains can also (optionally) generate separate (chunked)
+  linked HTML pages for each document section.
+- Toolchain processing performs link and document validity checks.
+- If the DocBook 'lang' attribute is set then things like table of
+  contents, figure and table captions and admonition 
