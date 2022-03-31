@@ -289,4 +289,163 @@ route:
   linked HTML pages for each document section.
 - Toolchain processing performs link and document validity checks.
 - If the DocBook 'lang' attribute is set then things like table of
-  contents, figure and table captions and admonition 
+  contents, figure and table captions and admonition captions will be
+  output in the specified language (setting the AsciiDoc 'lang'
+  attribute sets the DocBook 'lang' attribute).
+
+On the other hand, HTML output directly from AsciiDoc is much faster,
+is easily customized and can be used in situations where there is no
+suitable DocBook toolchain (for example, see the {website}[AsciiDoc
+website]).
+
+PDF generation
+~~~~~~~~~~~~~~
+There are two commonly used tools to generate PDFs from DocBook,
+<<X31,dblatex>> and <<X14,FOP>>.
+
+.dblatex or FOP?
+- 'dblatex' is easier to install, there's zero configuration
+  required and no Java VM to install -- it just works out of the box.
+- 'dblatex' source code highlighting and numbering is superb.
+- 'dblatex' is easier to use as it converts DocBook directly to PDF
+  whereas before using 'FOP' you have to convert DocBook to XML-FO
+  using <<X13,DocBook XSL Stylesheets>>.
+- 'FOP' is more feature complete (for example, callouts are processed
+  inside literal layouts) and arguably produces nicer looking output.
+
+HTML Help generation
+~~~~~~~~~~~~~~~~~~~~
+. Convert DocBook XML documents to HTML Help compiler source files
+  using <<X13,DocBook XSL Stylesheets>> and <<X40,xsltproc(1)>>.
+. Convert the HTML Help source (`.hhp` and `.html`) files to HTML Help
+  (`.chm`) files using the <<X67,Microsoft HTML Help Compiler>>.
+
+Toolchain components summary
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+AsciiDoc::
+    Converts AsciiDoc (`.txt`) files to DocBook XML (`.xml`) files.
+
+[[X13]]http://docbook.sourceforge.net/projects/xsl/[DocBook XSL Stylesheets]::
+  These are a set of XSL stylesheets containing rules for converting
+  DocBook XML documents to HTML, XSL-FO, manpage and HTML Help files.
+  The stylesheets are used in conjunction with an XML parser such as
+  <<X40,xsltproc(1)>>.
+
+[[X40]]http://www.xmlsoft.org[xsltproc]::
+  An XML parser for applying XSLT stylesheets (in our case the
+  <<X13,DocBook XSL Stylesheets>>) to XML documents.
+
+[[X31]]http://dblatex.sourceforge.net/[dblatex]::
+  Generates PDF, DVI, PostScript and LaTeX formats directly from
+  DocBook source via the intermediate LaTeX typesetting language --
+  uses <<X13,DocBook XSL Stylesheets>>, <<X40,xsltproc(1)>> and
+  `latex(1)`.
+
+[[X14]]http://xml.apache.org/fop/[FOP]::
+  The Apache Formatting Objects Processor converts XSL-FO (`.fo`)
+  files to PDF files.  The XSL-FO files are generated from DocBook
+  source files using <<X13,DocBook XSL Stylesheets>> and
+  <<X40,xsltproc(1)>>.
+
+[[X67]]Microsoft Help Compiler::
+  The Microsoft HTML Help Compiler (`hhc.exe`) is a command-line tool
+  that converts HTML Help source files to a single HTML Help (`.chm`)
+  file. It runs on MS Windows platforms and can be downloaded from
+  http://www.microsoft.com.
+
+AsciiDoc dblatex configuration files
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The AsciiDoc distribution `./dblatex` directory contains
+`asciidoc-dblatex.xsl` (customized XSL parameter settings) and
+`asciidoc-dblatex.sty` (customized LaTeX settings). These are examples
+of optional <<X31,dblatex>> output customization and are used by
+<<X43,a2x(1)>>.
+
+AsciiDoc DocBook XSL Stylesheets drivers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+You will have noticed that the distributed HTML and HTML Help
+documentation files (for example `./doc/asciidoc.html`) are not the
+plain outputs produced using the default 'DocBook XSL Stylesheets'
+configuration.  This is because they have been processed using
+customized DocBook XSL Stylesheets along with (in the case of HTML
+outputs) the custom `./stylesheets/docbook-xsl.css` CSS stylesheet.
+
+You'll find the customized DocBook XSL drivers along with additional
+documentation in the distribution `./docbook-xsl` directory. The
+examples that follow are executed from the distribution documentation
+(`./doc`) directory. These drivers are also used by <<X43,a2x(1)>>.
+
+`common.xsl`::
+    Shared driver parameters.  This file is not used directly but is
+    included in all the following drivers.
+
+`chunked.xsl`::
+    Generate chunked XHTML (separate HTML pages for each document
+    section) in the `./doc/chunked` directory. For example:
+
+    $ python ../asciidoc.py -b docbook asciidoc.txt
+    $ xsltproc --nonet ../docbook-xsl/chunked.xsl asciidoc.xml
+
+`epub.xsl`::
+    Used by <<X43,a2x(1)>> to generate EPUB formatted documents.
+
+`fo.xsl`::
+    Generate XSL Formatting Object (`.fo`) files for subsequent PDF
+    file generation using FOP. For example:
+
+    $ python ../asciidoc.py -b docbook article.txt
+    $ xsltproc --nonet ../docbook-xsl/fo.xsl article.xml > article.fo
+    $ fop article.fo article.pdf
+
+`htmlhelp.xsl`::
+    Generate Microsoft HTML Help source files for the MS HTML Help
+    Compiler in the `./doc/htmlhelp` directory. This example is run on
+    MS Windows from a Cygwin shell prompt:
+
+    $ python ../asciidoc.py -b docbook asciidoc.txt
+    $ xsltproc --nonet ../docbook-xsl/htmlhelp.xsl asciidoc.xml
+    $ c:/Program\ Files/HTML\ Help\ Workshop/hhc.exe htmlhelp.hhp
+
+`manpage.xsl`::
+    Generate a `roff(1)` format UNIX man page from a DocBook XML
+    'refentry' document. This example generates an `asciidoc.1` man
+    page file:
+
+    $ python ../asciidoc.py -d manpage -b docbook asciidoc.1.txt
+    $ xsltproc --nonet ../docbook-xsl/manpage.xsl asciidoc.1.xml
+
+`xhtml.xsl`::
+    Convert a DocBook XML file to a single XHTML file. For example:
+
+    $ python ../asciidoc.py -b docbook asciidoc.txt
+    $ xsltproc --nonet ../docbook-xsl/xhtml.xsl asciidoc.xml > asciidoc.html
+
+If you want to see how the complete documentation set is processed
+take a look at the A-A-P script `./doc/main.aap`.
+
+
+Generating Plain Text Files
+---------------------------
+AsciiDoc does not have a text backend (for most purposes AsciiDoc
+source text is fine), however you can convert AsciiDoc text files to
+formatted text using the AsciiDoc <<X43,a2x(1)>> toolchain wrapper
+utility.
+
+
+[[X35]]
+HTML5 and XHTML 1.1
+-------------------
+The 'xhtml11' and 'html5' backends embed or link CSS and JavaScript
+files in their outputs, there is also a <<X99,themes>> plugin
+framework.
+
+- If the AsciiDoc 'linkcss' attribute is defined then CSS and
+  JavaScript files are linked to the output document, otherwise they
+  are embedded (the default behavior).
+- The default locations for CSS and JavaScript files can be changed by
+  setting the AsciiDoc 'stylesdir' and 'scriptsdir' attributes
+  respectively.
+- The default locations for embedded and linked files differ and are
+  calculated at different times -- embedded files are loaded when
+  asciidoc(1) generates the output document, linked files are loaded
+  by the browser when the user views the o
