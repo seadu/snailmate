@@ -607,4 +607,186 @@ The author information line contains the author's name optionally
 followed by the author's email address. The author's name is formatted
 like:
 
-  firstname[ [mid
+  firstname[ [middlename ]lastname][ <email>]]
+
+i.e. a first name followed by optional middle and last names followed
+by an email address in that order.  Multi-word first, middle and last
+names can be entered using the underscore as a word separator.  The
+email address comes last and must be enclosed in angle <> brackets.
+Here a some examples of author information lines:
+
+  Joe Bloggs <jbloggs@mymail.com>
+  Joe Bloggs
+  Vincent Willem van_Gogh
+
+If the author line does not match the above specification then the
+entire author line is treated as the first name.
+
+The optional revision information line follows the author information
+line. The revision information can be one of two formats:
+
+. An optional document revision number followed by an optional
+  revision date followed by an optional revision remark:
++
+--
+  * If the revision number is specified it must be followed by a
+    comma.
+  * The revision number must contain at least one numeric character.
+  * Any non-numeric characters preceding the first numeric character
+    will be dropped.
+  * If a revision remark is specified it must be preceded by a colon.
+    The revision remark extends from the colon up to the next blank
+    line, attribute entry or comment and is subject to normal text
+    substitutions.
+  * If a revision number or remark has been set but the revision date
+    has not been set then the revision date is set to the value of the
+    'docdate' attribute.
+
+Examples:
+
+  v2.0, February 2003
+  February 2003
+  v2.0,
+  v2.0, February 2003: Rewritten for version 2 release.
+  February 2003: Rewritten for version 2 release.
+  v2.0,: Rewritten for version 2 release.
+  :Rewritten for version 2 release.
+--
+
+. The revision information line can also be an RCS/CVS/SVN $Id$
+  marker:
++
+--
+  * AsciiDoc extracts the 'revnumber', 'revdate', and 'author'
+    attributes from the $Id$ revision marker and displays them in the
+    document header.
+  * If an $Id$ revision marker is used the header author line can be
+    omitted.
+
+Example:
+
+  $Id: mydoc.txt,v 1.5 2009/05/17 17:58:44 jbloggs Exp $
+--
+
+You can override or set header parameters by passing 'revnumber',
+'revremark', 'revdate', 'email', 'author', 'authorinitials',
+'firstname' and 'lastname' attributes using the asciidoc(1) `-a`
+(`--attribute`) command-line option. For example:
+
+  $ asciidoc -a revdate=2004/07/27 article.txt
+
+Attribute entries can also be added to the header for substitution in
+the header template with <<X18,Attribute Entry>> elements.
+
+The 'title' element in HTML outputs is set to the AsciiDoc document
+title, you can set it to a different value by including a 'title'
+attribute entry in the document header.
+
+[[X87]]
+Additional document header information
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AsciiDoc has two mechanisms for optionally including additional
+meta-data in the header of the output document:
+
+'docinfo' configuration file sections::
+If a <<X7,configuration file>> section named 'docinfo' has been loaded
+then it will be included in the document header. Typically the
+'docinfo' section name will be prefixed with a '+' character so that it
+is appended to (rather than replace) other 'docinfo' sections.
+
+'docinfo' files::
+Two docinfo files are recognized: one named `docinfo` and a second
+named like the AsciiDoc source file with a `-docinfo` suffix.  For
+example, if the source document is called `mydoc.txt` then the
+document information files would be `docinfo.xml` and
+`mydoc-docinfo.xml` (for DocBook outputs) and `docinfo.html` and
+`mydoc-docinfo.html` (for HTML outputs).  The <<X97,docinfo, docinfo1
+and docinfo2>> attributes control which docinfo files are included in
+the output files.
+
+The contents docinfo templates and files is dependent on the type of
+output:
+
+HTML::
+  Valid 'head' child elements. Typically 'style' and 'script' elements
+  for CSS and JavaScript inclusion.
+
+DocBook::
+  Valid 'articleinfo' or 'bookinfo' child elements.  DocBook defines
+  numerous elements for document meta-data, for example: copyrights,
+  document history and authorship information.  See the DocBook
+  `./doc/article-docinfo.xml` example that comes with the AsciiDoc
+  distribution.  The rendering of meta-data elements (or not) is
+  DocBook processor dependent.
+
+
+[[X86]]
+Preamble
+~~~~~~~~
+The Preamble is an optional untitled section body between the document
+Header and the first Section title.
+
+Sections
+~~~~~~~~
+In addition to the document title (level 0), AsciiDoc supports four
+section levels: 1 (top) to 4 (bottom).  Section levels are delimited
+by section <<X17,titles>>.  Sections are translated using
+configuration file <<X93,section markup templates>>. AsciiDoc
+generates the following <<X60,intrinsic attributes>> specifically for
+use in section markup templates:
+
+level::
+The `level` attribute is the section level number, it is normally just
+the <<X17,title>> level number (1..4). However, if the `leveloffset`
+attribute is defined it will be added to the `level` attribute. The
+`leveloffset` attribute is useful for <<X90,combining documents>>.
+
+sectnum::
+The `-n` (`--section-numbers`) command-line option generates the
+`sectnum` (section number) attribute.  The `sectnum` attribute is used
+for section numbers in HTML outputs (DocBook section numbering are
+handled automatically by the DocBook toolchain commands).
+
+[[X93]]
+Section markup templates
+^^^^^^^^^^^^^^^^^^^^^^^^
+Section markup templates specify output markup and are defined in
+AsciiDoc configuration files.  Section markup template names are
+derived as follows (in order of precedence):
+
+1. From the title's first positional attribute or 'template'
+   attribute. For example, the following three section titles are
+   functionally equivalent:
++
+.....................................................................
+[[terms]]
+[glossary]
+List of Terms
+-------------
+
+["glossary",id="terms"]
+List of Terms
+-------------
+
+[template="glossary",id="terms"]
+List of Terms
+-------------
+.....................................................................
+
+2. When the title text matches a configuration file
+   <<X16,`[specialsections]`>> entry.
+3. If neither of the above the default `sect<level>` template is used
+   (where `<level>` is a number from 1 to 4).
+
+In addition to the normal section template names ('sect1', 'sect2',
+'sect3', 'sect4') AsciiDoc has the following templates for
+frontmatter, backmatter and other special sections: 'abstract',
+'preface', 'colophon', 'dedication', 'glossary', 'bibliography',
+'synopsis', 'appendix', 'index'.  These special section templates
+generate the corresponding Docbook elements; for HTML outputs they
+default to the 'sect1' section template.
+
+Section IDs
+^^^^^^^^^^^
+If no explicit section ID is specified an ID will be synthesised from
+the sectio
