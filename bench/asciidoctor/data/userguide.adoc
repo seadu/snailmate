@@ -448,4 +448,163 @@ framework.
 - The default locations for embedded and linked files differ and are
   calculated at different times -- embedded files are loaded when
   asciidoc(1) generates the output document, linked files are loaded
-  by the browser when the user views the o
+  by the browser when the user views the output document.
+- Embedded files are automatically inserted in the output files but
+  you need to manually copy linked CSS and Javascript files from
+  AsciiDoc <<X27,configuration directories>> to the correct location
+  relative to the output document.
+
+.Stylesheet file locations
+[cols="3*",frame="topbot",options="header"]
+|====================================================================
+|'stylesdir' attribute
+|Linked location ('linkcss' attribute defined)
+|Embedded location ('linkcss' attribute undefined)
+
+|Undefined (default).
+|Same directory as the output document.
+|`stylesheets` subdirectory in the AsciiDoc configuration directory
+(the directory containing the backend conf file).
+
+|Absolute or relative directory name.
+|Absolute or relative to the output document.
+|Absolute or relative to the AsciiDoc configuration directory (the
+directory containing the backend conf file).
+
+|====================================================================
+
+.JavaScript file locations
+[cols="3*",frame="topbot",options="header"]
+|====================================================================
+|'scriptsdir' attribute
+|Linked location ('linkcss' attribute defined)
+|Embedded location ('linkcss' attribute undefined)
+
+|Undefined (default).
+|Same directory as the output document.
+|`javascripts` subdirectory in the AsciiDoc configuration directory
+(the directory containing the backend conf file).
+
+|Absolute or relative directory name.
+|Absolute or relative to the output document.
+|Absolute or relative to the AsciiDoc configuration directory (the
+directory containing the backend conf file).
+
+|====================================================================
+
+[[X99]]
+Themes
+~~~~~~
+The AsciiDoc 'theme' attribute is used to select an alternative CSS
+stylesheet and to optionally include additional JavaScript code.
+
+- Theme files reside in an AsciiDoc <<X27,configuration directory>>
+  named `themes/<theme>/` (where `<theme>` is the the theme name set
+  by the 'theme' attribute). asciidoc(1) sets the 'themedir' attribute
+  to the theme directory path name.
+- The 'theme' attribute can also be set using the asciidoc(1)
+  `--theme` option, the `--theme` option can also be used to manage
+  theme <<X101,plugins>>.
+- AsciiDoc ships with two themes: 'flask' and 'volnitsky'.
+- The `<theme>.css` file replaces the default `asciidoc.css` CSS file.
+- The `<theme>.js` file is included in addition to the default
+  `asciidoc.js` JavaScript file.
+- If the <<X66,data-uri>> attribute is defined then icons are loaded
+  from the theme `icons` sub-directory if it exists (i.e.  the
+  'iconsdir' attribute is set to theme `icons` sub-directory path).
+- Embedded theme files are automatically inserted in the output files
+  but you need to manually copy linked CSS and Javascript files to the
+  location of the output documents.
+- Linked CSS and JavaScript theme files are linked to the same linked
+  locations as <<X35,other CSS and JavaScript files>>.
+
+For example, the command-line option `--theme foo` (or `--attribute
+theme=foo`) will cause asciidoc(1) to search <<X27,configuration
+file locations 1, 2 and 3>> for a sub-directory called `themes/foo`
+containing the stylesheet `foo.css` and optionally a JavaScript file
+name `foo.js`.
+
+
+Document Structure
+------------------
+An AsciiDoc document consists of a series of <<X8,block elements>>
+starting with an optional document Header, followed by an optional
+Preamble, followed by zero or more document Sections.
+
+Almost any combination of zero or more elements constitutes a valid
+AsciiDoc document: documents can range from a single sentence to a
+multi-part book.
+
+Block Elements
+~~~~~~~~~~~~~~
+Block elements consist of one or more lines of text and may contain
+other block elements.
+
+The AsciiDoc block structure can be informally summarized as follows
+footnote:[This is a rough structural guide, not a rigorous syntax
+definition]:
+
+  Document      ::= (Header?,Preamble?,Section*)
+  Header        ::= (Title,(AuthorInfo,RevisionInfo?)?)
+  AuthorInfo    ::= (FirstName,(MiddleName?,LastName)?,EmailAddress?)
+  RevisionInfo  ::= (RevisionNumber?,RevisionDate,RevisionRemark?)
+  Preamble      ::= (SectionBody)
+  Section       ::= (Title,SectionBody?,(Section)*)
+  SectionBody   ::= ((BlockTitle?,Block)|BlockMacro)+
+  Block         ::= (Paragraph|DelimitedBlock|List|Table)
+  List          ::= (BulletedList|NumberedList|LabeledList|CalloutList)
+  BulletedList  ::= (ListItem)+
+  NumberedList  ::= (ListItem)+
+  CalloutList   ::= (ListItem)+
+  LabeledList   ::= (ListEntry)+
+  ListEntry     ::= (ListLabel,ListItem)
+  ListLabel     ::= (ListTerm+)
+  ListItem      ::= (ItemText,(List|ListParagraph|ListContinuation)*)
+
+Where:
+
+- '?' implies zero or one occurrence, '+' implies one or more
+  occurrences, '*' implies zero or more occurrences.
+- All block elements are separated by line boundaries.
+- `BlockId`, `AttributeEntry` and `AttributeList` block elements (not
+  shown) can occur almost anywhere.
+- There are a number of document type and backend specific
+  restrictions imposed on the block syntax.
+- The following elements cannot contain blank lines: Header, Title,
+  Paragraph, ItemText.
+- A ListParagraph is a Paragraph with its 'listelement' option set.
+- A ListContinuation is a <<X15,list continuation element>>.
+
+[[X95]]
+Header
+~~~~~~
+The Header contains document meta-data, typically title plus optional
+authorship and revision information:
+
+- The Header is optional, but if it is used it must start with a
+  document <<X17,title>>.
+- Optional Author and Revision information immediately follows the
+  header title.
+- The document header must be separated from the remainder of the
+  document by one or more blank lines and cannot contain blank lines.
+- The header can include comments.
+- The header can include <<X18,attribute entries>>, typically
+  'doctype', 'lang', 'encoding', 'icons', 'data-uri', 'toc',
+  'numbered'.
+- Header attributes are overridden by command-line attributes.
+- If the header contains non-UTF-8 characters then the 'encoding' must
+  precede the header (either in the document or on the command-line).
+
+Here's an example AsciiDoc document header:
+
+  Writing Documentation using AsciiDoc
+  ====================================
+  Joe Bloggs <jbloggs@mymail.com>
+  v2.0, February 2003:
+  Rewritten for version 2 release.
+
+The author information line contains the author's name optionally
+followed by the author's email address. The author's name is formatted
+like:
+
+  firstname[ [mid
