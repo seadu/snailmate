@@ -1709,4 +1709,197 @@ Which is rendered as:
 
 [quote, Sir Arthur Conan Doyle, The Adventures of Sherlock Holmes]
 ____________________________________________________________________
-As he 
+As he spoke there was the sharp sound of horses' hoofs and
+grating wheels against the curb, followed by a sharp pull at the
+bell. Holmes whistled.
+
+"A pair, by the sound," said he. "Yes," he continued, glancing
+out of the window. "A nice little brougham and a pair of
+beauties. A hundred and fifty guineas apiece. There's money in
+this case, Watson, if there is nothing else."
+____________________________________________________________________
+
+[[X48]]
+Example Blocks
+~~~~~~~~~~~~~~
+'ExampleBlocks' encapsulate the DocBook Example element and are used
+for, well, examples.  Example blocks can be titled by preceding them
+with a 'BlockTitle'.  DocBook toolchains will normally automatically
+number examples and generate a 'List of Examples' backmatter section.
+
+Example blocks are delimited by lines of equals characters and can
+contain any block elements apart from Titles, BlockTitles and
+Sidebars) inside an example block. For example:
+
+---------------------------------------------------------------------
+.An example
+=====================================================================
+Qui in magna commodo, est labitur dolorum an. Est ne magna primis
+adolescens.
+=====================================================================
+---------------------------------------------------------------------
+
+Renders:
+
+.An example
+=====================================================================
+Qui in magna commodo, est labitur dolorum an. Est ne magna primis
+adolescens.
+=====================================================================
+
+A title prefix that can be inserted with the `caption` attribute
+(HTML backends). For example:
+
+---------------------------------------------------------------------
+[caption="Example 1: "]
+.An example with a custom caption
+=====================================================================
+Qui in magna commodo, est labitur dolorum an. Est ne magna primis
+adolescens.
+=====================================================================
+---------------------------------------------------------------------
+
+[[X22]]
+Admonition Blocks
+~~~~~~~~~~~~~~~~~
+The 'ExampleBlock' definition includes a set of admonition
+<<X23,styles>> ('NOTE', 'TIP', 'IMPORTANT', 'WARNING', 'CAUTION') for
+generating admonition blocks (admonitions containing more than a
+<<X28,single paragraph>>).  Just precede the 'ExampleBlock' with an
+attribute list specifying the admonition style name. For example:
+
+---------------------------------------------------------------------
+[NOTE]
+.A NOTE admonition block
+=====================================================================
+Qui in magna commodo, est labitur dolorum an. Est ne magna primis
+adolescens.
+
+. Fusce euismod commodo velit.
+. Vivamus fringilla mi eu lacus.
+  .. Fusce euismod commodo velit.
+  .. Vivamus fringilla mi eu lacus.
+. Donec eget arcu bibendum
+  nunc consequat lobortis.
+=====================================================================
+---------------------------------------------------------------------
+
+Renders:
+
+[NOTE]
+.A NOTE admonition block
+=====================================================================
+Qui in magna commodo, est labitur dolorum an. Est ne magna primis
+adolescens.
+
+. Fusce euismod commodo velit.
+. Vivamus fringilla mi eu lacus.
+  .. Fusce euismod commodo velit.
+  .. Vivamus fringilla mi eu lacus.
+. Donec eget arcu bibendum
+  nunc consequat lobortis.
+=====================================================================
+
+See also <<X47,Admonition Icons and Captions>>.
+
+[[X29]]
+Open Blocks
+~~~~~~~~~~~
+Open blocks are special:
+
+- The open block delimiter is line containing two hyphen characters
+  (instead of four or more repeated characters).
+
+- They can be used to group block elements for <<X15,List item
+  continuation>>.
+
+- Open blocks can be styled to behave like any other type of delimited
+  block.  The  following built-in styles can be applied to open
+  blocks: 'literal', 'verse', 'quote', 'listing', 'TIP', 'NOTE',
+  'IMPORTANT', 'WARNING', 'CAUTION', 'abstract', 'partintro',
+  'comment', 'example', 'sidebar', 'source', 'music', 'latex',
+  'graphviz'. For example, the following open block and listing block
+  are functionally identical:
+
+  [listing]
+  --
+  Lorum ipsum ...
+  --
+
+  ---------------
+  Lorum ipsum ...
+  ---------------
+
+- An unstyled open block groups section elements but otherwise does
+  nothing.
+
+Open blocks are used to generate document abstracts and book part
+introductions:
+
+- Apply the 'abstract' style to generate an abstract, for example:
+
+  [abstract]
+  --
+  In this paper we will ...
+  --
+
+. Apply the 'partintro' style to generate a book part introduction for
+  a multi-part book, for example:
+
+  [partintro]
+  .Optional part introduction title
+  --
+  Optional part introduction goes here.
+  --
+
+
+[[X64]]
+Lists
+-----
+.List types
+- Bulleted lists. Also known as itemized or unordered lists.
+- Numbered lists. Also called ordered lists.
+- Labeled lists. Sometimes called variable or definition lists.
+- Callout lists (a list of callout annotations).
+
+.List behavior
+- List item indentation is optional and does not determine nesting,
+  indentation does however make the source more readable.
+- Another list or a literal paragraph immediately following a list
+  item will be implicitly included in the list item; use <<X15, list
+  item continuation>> to explicitly append other block elements to a
+  list item.
+- A comment block or a comment line block macro element will terminate
+  a list -- use inline comment lines to put comments inside lists.
+- The `listindex` <<X60,intrinsic attribute>> is the current list item
+  index (1..). If this attribute is used outside a list then it's value
+  is the number of items in the most recently closed list. Useful for
+  displaying the number of items in a list.
+
+Bulleted Lists
+~~~~~~~~~~~~~~
+Bulleted list items start with a single dash or one to five asterisks
+followed by some white space then some text. Bulleted list syntaxes
+are:
+
+...................
+- List item.
+* List item.
+** List item.
+*** List item.
+**** List item.
+***** List item.
+...................
+
+Numbered Lists
+~~~~~~~~~~~~~~
+List item numbers are explicit or implicit.
+
+.Explicit numbering
+List items begin with a number followed by some white space then the
+item text. The numbers can be decimal (arabic), roman (upper or lower
+case) or alpha (upper or lower case). Decimal and alpha numbers are
+terminated with a period, roman numbers are terminated with a closing
+parenthesis. The different terminators are necessary to ensure 'i',
+'v' and 'x' roman numbers are are distinguishable from 'x', 'v' and
+'x' alpha
