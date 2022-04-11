@@ -1518,4 +1518,195 @@ in configuration file `[blockdef-*]` sections.
 Predefined Delimited Blocks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 AsciiDoc ships with a number of predefined DelimitedBlocks (see the
-`asciido
+`asciidoc.conf` configuration file in the asciidoc(1) program
+directory):
+
+Predefined delimited block underlines:
+
+  CommentBlock:     //////////////////////////
+  PassthroughBlock: ++++++++++++++++++++++++++
+  ListingBlock:     --------------------------
+  LiteralBlock:     ..........................
+  SidebarBlock:     **************************
+  QuoteBlock:       __________________________
+  ExampleBlock:     ==========================
+  OpenBlock:        --
+
+.Default DelimitedBlock substitutions
+[cols="2e,7*^",frame="topbot",options="header,autowidth"]
+|=====================================================
+| |Attributes |Callouts |Macros | Quotes |Replacements
+|Special chars |Special words
+
+|PassthroughBlock |Yes |No  |Yes |No  |No  |No  |No
+|ListingBlock     |No  |Yes |No  |No  |No  |Yes |No
+|LiteralBlock     |No  |Yes |No  |No  |No  |Yes |No
+|SidebarBlock     |Yes |No  |Yes |Yes |Yes |Yes |Yes
+|QuoteBlock       |Yes |No  |Yes |Yes |Yes |Yes |Yes
+|ExampleBlock     |Yes |No  |Yes |Yes |Yes |Yes |Yes
+|OpenBlock        |Yes |No  |Yes |Yes |Yes |Yes |Yes
+|=====================================================
+
+Listing Blocks
+~~~~~~~~~~~~~~
+'ListingBlocks' are rendered verbatim in a monospaced font, they
+retain line and whitespace formatting and are often distinguished by a
+background or border. There is no text formatting or substitutions
+within Listing blocks apart from Special Characters and Callouts.
+Listing blocks are often used for computer output and file listings.
+
+Here's an example:
+
+[listing]
+......................................
+--------------------------------------
+#include <stdio.h>
+
+int main() {
+   printf("Hello World!\n");
+   exit(0);
+}
+--------------------------------------
+......................................
+
+Which will be rendered like:
+
+--------------------------------------
+#include <stdio.h>
+
+int main() {
+    printf("Hello World!\n");
+    exit(0);
+}
+--------------------------------------
+
+By convention <<X59,filter blocks>> use the listing block syntax and
+are implemented as distinct listing block styles.
+
+[[X65]]
+Literal Blocks
+~~~~~~~~~~~~~~
+'LiteralBlocks' are rendered just like <<X85,literal paragraphs>>.
+Example:
+
+---------------------------------------------------------------------
+...................................
+Consul *necessitatibus* per id,
+consetetur, eu pro everti postulant
+homero verear ea mea, qui.
+...................................
+---------------------------------------------------------------------
+
+Renders:
+...................................
+Consul *necessitatibus* per id,
+consetetur, eu pro everti postulant
+homero verear ea mea, qui.
+...................................
+
+If the 'listing' style is applied to a LiteralBlock it will be
+rendered as a ListingBlock (this is handy if you have a listing
+containing a ListingBlock).
+
+Sidebar Blocks
+~~~~~~~~~~~~~~
+A sidebar is a short piece of text presented outside the narrative
+flow of the main text. The sidebar is normally presented inside a
+bordered box to set it apart from the main text.
+
+The sidebar body is treated like a normal section body.
+
+Here's an example:
+
+---------------------------------------------------------------------
+.An Example Sidebar
+************************************************
+Any AsciiDoc SectionBody element (apart from
+SidebarBlocks) can be placed inside a sidebar.
+************************************************
+---------------------------------------------------------------------
+
+Which will be rendered like:
+
+.An Example Sidebar
+************************************************
+Any AsciiDoc SectionBody element (apart from
+SidebarBlocks) can be placed inside a sidebar.
+************************************************
+
+[[X26]]
+Comment Blocks
+~~~~~~~~~~~~~~
+The contents of 'CommentBlocks' are not processed; they are useful for
+annotations and for excluding new or outdated content that you don't
+want displayed. CommentBlocks are never written to output files.
+Example:
+
+---------------------------------------------------------------------
+//////////////////////////////////////////
+CommentBlock contents are not processed by
+asciidoc(1).
+//////////////////////////////////////////
+---------------------------------------------------------------------
+
+See also <<X25,Comment Lines>>.
+
+NOTE: System macros are executed inside comment blocks.
+
+[[X76]]
+Passthrough Blocks
+~~~~~~~~~~~~~~~~~~
+By default the block contents is subject only to 'attributes' and
+'macros' substitutions (use an explicit 'subs' attribute to apply
+different substitutions).  PassthroughBlock content will often be
+backend specific. Here's an example:
+
+---------------------------------------------------------------------
+[subs="quotes"]
+++++++++++++++++++++++++++++++++++++++
+<table border="1"><tr>
+  <td>*Cell 1*</td>
+  <td>*Cell 2*</td>
+</tr></table>
+++++++++++++++++++++++++++++++++++++++
+---------------------------------------------------------------------
+
+The following styles can be applied to passthrough blocks:
+
+pass::
+  No substitutions are performed. This is equivalent to `subs="none"`.
+
+asciimath, latexmath::
+  By default no substitutions are performed, the contents are rendered
+  as <<X78,mathematical formulas>>.
+
+Quote Blocks
+~~~~~~~~~~~~
+'QuoteBlocks' are used for quoted passages of text. There are two
+styles: 'quote' and 'verse'. The style behavior is identical to
+<<X94,quote and verse paragraphs>> except that blocks can contain
+multiple paragraphs and, in the case of the 'quote' style, other
+section elements.  The first positional attribute sets the style, if
+no attributes are specified the 'quote' style is used.  The optional
+'attribution' and 'citetitle' attributes (positional attributes 2 and
+3) specify the quote's author and source. For example:
+
+---------------------------------------------------------------------
+[quote, Sir Arthur Conan Doyle, The Adventures of Sherlock Holmes]
+____________________________________________________________________
+As he spoke there was the sharp sound of horses' hoofs and
+grating wheels against the curb, followed by a sharp pull at the
+bell. Holmes whistled.
+
+"A pair, by the sound," said he. "Yes," he continued, glancing
+out of the window. "A nice little brougham and a pair of
+beauties. A hundred and fifty guineas apiece. There's money in
+this case, Watson, if there is nothing else."
+____________________________________________________________________
+---------------------------------------------------------------------
+
+Which is rendered as:
+
+[quote, Sir Arthur Conan Doyle, The Adventures of Sherlock Holmes]
+____________________________________________________________________
+As he 
