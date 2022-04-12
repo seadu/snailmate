@@ -2087,4 +2087,217 @@ labitur dolorum an. Est ne magna primis adolescens.
   - Vivamus fringilla mi eu lacus.
   - Donec eget arcu bibendum nunc consequat lobortis.
 
+---------------------------------------------------------------------
+
+Which render as:
+
+[horizontal]
+*Lorem*:: Fusce euismod commodo velit.  Qui in magna commodo, est
+labitur dolorum an. Est ne magna primis adolescens.
+
+  Fusce euismod commodo velit.
+
+*Ipsum*:: Vivamus fringilla mi eu lacus.
+- Vivamus fringilla mi eu lacus.
+- Donec eget arcu bibendum nunc consequat lobortis.
+
+*Dolor*::
+  - Vivamus fringilla mi eu lacus.
+  - Donec eget arcu bibendum nunc consequat lobortis.
+
+[NOTE]
+=====================================================================
+- Current PDF toolchains do not make a good job of determining
+  the relative column widths for horizontal labeled lists.
+- Nested horizontal labeled lists will generate DocBook validation
+  errors because the 'DocBook XML V4.2' DTD does not permit nested
+  informal tables (although <<X13,DocBook XSL Stylesheets>> and
+  <<X31,dblatex>> process them correctly).
+- The label width can be set as a percentage of the total width by
+  setting the 'width' attribute e.g. `width="10%"`
+=====================================================================
+
+Question and Answer Lists
+~~~~~~~~~~~~~~~~~~~~~~~~~
+AsciiDoc comes pre-configured with a 'qanda' style labeled list for generating
+DocBook question and answer (Q&A) lists. Example:
+
+---------------------------------------------------------------------
+[qanda]
+Question one::
+        Answer one.
+Question two::
+        Answer two.
+---------------------------------------------------------------------
+
+Renders:
+
+[qanda]
+Question one::
+        Answer one.
+Question two::
+        Answer two.
+
+Glossary Lists
+~~~~~~~~~~~~~~
+AsciiDoc comes pre-configured with a 'glossary' style labeled list for
+generating DocBook glossary lists. Example:
+
+---------------------------------------------------------------------
+[glossary]
+A glossary term::
+    The corresponding definition.
+A second glossary term::
+    The corresponding definition.
+---------------------------------------------------------------------
+
+For working examples see the `article.txt` and `book.txt` documents in
+the AsciiDoc `./doc` distribution directory.
+
+NOTE: To generate valid DocBook output glossary lists must be located
+in a section that uses the 'glossary' <<X93,section markup template>>.
+
+Bibliography Lists
+~~~~~~~~~~~~~~~~~~
+AsciiDoc comes with a predefined 'bibliography' bulleted list style
+generating DocBook bibliography entries. Example:
+
+---------------------------------------------------------------------
+[bibliography]
+.Optional list title
+- [[[taoup]]] Eric Steven Raymond. 'The Art of UNIX
+  Programming'. Addison-Wesley. ISBN 0-13-142901-9.
+- [[[walsh-muellner]]] Norman Walsh & Leonard Muellner.
+  'DocBook - The Definitive Guide'. O'Reilly & Associates. 1999. 
+  ISBN 1-56592-580-7.
+---------------------------------------------------------------------
+
+The `[[[<reference>]]]` syntax is a bibliography entry anchor, it
+generates an anchor named `<reference>` and additionally displays
+`[<reference>]` at the anchor position. For example `[[[taoup]]]`
+generates an anchor named `taoup` that displays `[taoup]` at the
+anchor position. Cite the reference from elsewhere your document using
+`<<taoup>>`, this displays a hyperlink (`[taoup]`) to the
+corresponding bibliography entry anchor.
+
+For working examples see the `article.txt` and `book.txt` documents in
+the AsciiDoc `./doc` distribution directory.
+
+NOTE: To generate valid DocBook output bibliography lists must be
+located in a <<X93,bibliography section>>.
+
+[[X15]]
+List Item Continuation
+~~~~~~~~~~~~~~~~~~~~~~
+Another list or a literal paragraph immediately following a list item
+is implicitly appended to the list item; to append other block
+elements to a list item you need to explicitly join them to the list
+item with a 'list continuation' (a separator line containing a single
+plus character). Multiple block elements can be appended to a list
+item using list continuations (provided they are legal list item
+children in the backend markup).
+
+Here are some examples of list item continuations: list item one
+contains multiple continuations; list item two is continued with an
+<<X29,OpenBlock>> containing multiple elements:
+
+---------------------------------------------------------------------
+1. List item one.
++
+List item one continued with a second paragraph followed by an
+Indented block.
++
+.................
+$ ls *.sh
+$ mv *.sh ~/tmp
+.................
++
+List item continued with a third paragraph.
+
+2. List item two continued with an open block.
++
 --
+This paragraph is part of the preceding list item.
+
+a. This list is nested and does not require explicit item continuation.
++
+This paragraph is part of the preceding list item.
+
+b. List item b.
+
+This paragraph belongs to item two of the outer list.
+--
+---------------------------------------------------------------------
+
+Renders:
+
+1. List item one.
++
+List item one continued with a second paragraph followed by an
+Indented block.
++
+.................
+$ ls *.sh
+$ mv *.sh ~/tmp
+.................
++
+List item continued with a third paragraph.
+
+2. List item two continued with an open block.
++
+--
+This paragraph is part of the preceding list item.
+
+a. This list is nested and does not require explicit item continuation.
++
+This paragraph is part of the preceding list item.
+
+b. List item b.
+
+This paragraph belongs to item two of the outer list.
+--
+
+
+[[X92]]
+Footnotes
+---------
+The shipped AsciiDoc configuration includes three footnote inline
+macros:
+
+`footnote:[<text>]`::
+  Generates a footnote with text `<text>`.
+
+`footnoteref:[<id>,<text>]`::
+  Generates a footnote with a reference ID `<id>` and text `<text>`.
+
+`footnoteref:[<id>]`::
+  Generates a reference to the footnote with ID `<id>`.
+
+The footnote text can span multiple lines.
+
+The 'xhtml11' and 'html5' backends render footnotes dynamically using
+JavaScript; 'html4' outputs do not use JavaScript and leave the
+footnotes inline; 'docbook' footnotes are processed by the downstream
+DocBook toolchain.
+
+Example footnotes:
+
+  A footnote footnote:[An example footnote.];
+  a second footnote with a reference ID footnoteref:[note2,Second footnote.];
+  finally a reference to the second footnote footnoteref:[note2].
+
+Renders:
+
+A footnote footnote:[An example footnote.];
+a second footnote with a reference ID footnoteref:[note2,Second footnote.];
+finally a reference to the second footnote footnoteref:[note2].
+
+
+Indexes
+-------
+The shipped AsciiDoc configuration includes the inline macros for
+generating DocBook index entries.
+
+`indexterm:[<primary>,<secondary>,<tertiary>]`::
+`(((<primary>,<secondary>,<tertiary>)))`::
+    This inline macro generates an index term (the `<secon
