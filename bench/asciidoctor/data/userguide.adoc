@@ -1902,4 +1902,189 @@ case) or alpha (upper or lower case). Decimal and alpha numbers are
 terminated with a period, roman numbers are terminated with a closing
 parenthesis. The different terminators are necessary to ensure 'i',
 'v' and 'x' roman numbers are are distinguishable from 'x', 'v' and
-'x' alpha
+'x' alpha numbers. Examples:
+
+.....................................................................
+1.   Arabic (decimal) numbered list item.
+a.   Lower case alpha (letter) numbered list item.
+F.   Upper case alpha (letter) numbered list item.
+iii) Lower case roman numbered list item.
+IX)  Upper case roman numbered list item.
+.....................................................................
+
+.Implicit numbering
+List items begin one to five period characters, followed by some white
+space then the item text. Examples:
+
+.....................................................................
+. Arabic (decimal) numbered list item.
+.. Lower case alpha (letter) numbered list item.
+... Lower case roman numbered list item.
+.... Upper case alpha (letter) numbered list item.
+..... Upper case roman numbered list item.
+.....................................................................
+
+You can use the 'style' attribute (also the first positional
+attribute) to specify an alternative numbering style.  The numbered
+list style can be one of the following values: 'arabic', 'loweralpha',
+'upperalpha', 'lowerroman', 'upperroman'.
+
+Here are some examples of bulleted and numbered lists:
+
+---------------------------------------------------------------------
+- Praesent eget purus quis magna eleifend eleifend.
+  1. Fusce euismod commodo velit.
+    a. Fusce euismod commodo velit.
+    b. Vivamus fringilla mi eu lacus.
+    c. Donec eget arcu bibendum nunc consequat lobortis.
+  2. Vivamus fringilla mi eu lacus.
+    i)  Fusce euismod commodo velit.
+    ii) Vivamus fringilla mi eu lacus.
+  3. Donec eget arcu bibendum nunc consequat lobortis.
+  4. Nam fermentum mattis ante.
+- Lorem ipsum dolor sit amet, consectetuer adipiscing elit.
+  * Fusce euismod commodo velit.
+  ** Qui in magna commodo, est labitur dolorum an. Est ne magna primis
+     adolescens. Sit munere ponderum dignissim et. Minim luptatum et
+     vel.
+  ** Vivamus fringilla mi eu lacus.
+  * Donec eget arcu bibendum nunc consequat lobortis.
+- Nulla porttitor vulputate libero.
+  . Fusce euismod commodo velit.
+  . Vivamus fringilla mi eu lacus.
+[upperroman]
+    .. Fusce euismod commodo velit.
+    .. Vivamus fringilla mi eu lacus.
+  . Donec eget arcu bibendum nunc consequat lobortis.
+---------------------------------------------------------------------
+
+Which render as:
+
+- Praesent eget purus quis magna eleifend eleifend.
+  1. Fusce euismod commodo velit.
+    a. Fusce euismod commodo velit.
+    b. Vivamus fringilla mi eu lacus.
+    c. Donec eget arcu bibendum nunc consequat lobortis.
+  2. Vivamus fringilla mi eu lacus.
+    i)  Fusce euismod commodo velit.
+    ii) Vivamus fringilla mi eu lacus.
+  3. Donec eget arcu bibendum nunc consequat lobortis.
+  4. Nam fermentum mattis ante.
+- Lorem ipsum dolor sit amet, consectetuer adipiscing elit.
+  * Fusce euismod commodo velit.
+  ** Qui in magna commodo, est labitur dolorum an. Est ne magna primis
+     adolescens. Sit munere ponderum dignissim et. Minim luptatum et
+     vel.
+  ** Vivamus fringilla mi eu lacus.
+  * Donec eget arcu bibendum nunc consequat lobortis.
+- Nulla porttitor vulputate libero.
+  . Fusce euismod commodo velit.
+  . Vivamus fringilla mi eu lacus.
+[upperroman]
+    .. Fusce euismod commodo velit.
+    .. Vivamus fringilla mi eu lacus.
+  . Donec eget arcu bibendum nunc consequat lobortis.
+
+A predefined 'compact' option is available to bulleted and numbered
+lists -- this translates to the DocBook 'spacing="compact"' lists
+attribute which may or may not be processed by the DocBook toolchain.
+Example:
+
+  [options="compact"]
+  - Compact list item.
+  - Another compact list item.
+
+TIP: To apply the 'compact' option globally define a document-wide
+'compact-option' attribute, e.g. using the `-a compact-option`
+command-line option.
+
+You can set the list start number using the 'start' attribute (works
+for HTML outputs and DocBook outputs processed by DocBook XSL
+Stylesheets). Example:
+
+  [start=7]
+  . List item 7.
+  . List item 8.
+
+Labeled Lists
+~~~~~~~~~~~~~
+Labeled list items consist of one or more text labels followed by the
+text of the list item.
+
+An item label begins a line with an alphanumeric character hard
+against the left margin and ends with two, three or four colons or two
+semi-colons. A list item can have multiple labels, one per line.
+
+The list item text consists of one or more lines of text starting
+after the last label (either on the same line or a new line) and can
+be followed by nested List or ListParagraph elements. Item text can be
+optionally indented.
+
+Here are some examples:
+
+---------------------------------------------------------------------
+In::
+Lorem::
+  Fusce euismod commodo velit.
+
+  Fusce euismod commodo velit.
+
+Ipsum:: Vivamus fringilla mi eu lacus.
+  * Vivamus fringilla mi eu lacus.
+  * Donec eget arcu bibendum nunc consequat lobortis.
+Dolor::
+  Donec eget arcu bibendum nunc consequat lobortis.
+  Suspendisse;;
+    A massa id sem aliquam auctor.
+  Morbi;;
+    Pretium nulla vel lorem.
+  In;;
+    Dictum mauris in urna.
+    Vivamus::: Fringilla mi eu lacus.
+    Donec:::   Eget arcu bibendum nunc consequat lobortis.
+---------------------------------------------------------------------
+
+Which render as:
+
+In::
+Lorem::
+  Fusce euismod commodo velit.
+
+  Fusce euismod commodo velit.
+
+Ipsum:: Vivamus fringilla mi eu lacus.
+  * Vivamus fringilla mi eu lacus.
+  * Donec eget arcu bibendum nunc consequat lobortis.
+Dolor::
+  Donec eget arcu bibendum nunc consequat lobortis.
+  Suspendisse;;
+    A massa id sem aliquam auctor.
+  Morbi;;
+    Pretium nulla vel lorem.
+  In;;
+    Dictum mauris in urna.
+    Vivamus::: Fringilla mi eu lacus.
+    Donec:::   Eget arcu bibendum nunc consequat lobortis.
+
+Horizontal labeled list style
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+The 'horizontal' labeled list style (also the first positional
+attribute) places the list text side-by-side with the label instead of
+under the label. Here is an example:
+
+---------------------------------------------------------------------
+[horizontal]
+*Lorem*:: Fusce euismod commodo velit.  Qui in magna commodo, est
+labitur dolorum an. Est ne magna primis adolescens.
+
+  Fusce euismod commodo velit.
+
+*Ipsum*:: Vivamus fringilla mi eu lacus.
+- Vivamus fringilla mi eu lacus.
+- Donec eget arcu bibendum nunc consequat lobortis.
+
+*Dolor*::
+  - Vivamus fringilla mi eu lacus.
+  - Donec eget arcu bibendum nunc consequat lobortis.
+
+--
