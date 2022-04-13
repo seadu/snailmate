@@ -2464,4 +2464,207 @@ macros).  Here are some examples:
 - `]` characters inside attribute lists must be escaped with a
   backslash.
 - Expansion of macro references can normally be escaped by prefixing a
-  backslash character (see the AsciiDoc '
+  backslash character (see the AsciiDoc 'FAQ' for examples of
+  exceptions to this rule).
+- Attribute references in block macros are expanded.
+- The substitutions performed prior to Inline macro macro expansion
+  are determined by the inline context.
+- Macros are processed in the order they appear in the configuration
+  file(s).
+- Calls to inline macros can be nested inside different inline macros
+  (an inline macro call cannot contain a nested call to itself).
+- In addition to `<name>`, `<target>` and `<attrlist>` the
+  `<passtext>` and `<subslist>` named groups are available to
+  <<X77,passthrough macros>>. A macro is a passthrough macro if the
+  definition includes a `<passtext>` named group.
+
+Inline Macros
+~~~~~~~~~~~~~
+Inline Macros occur in an inline element context. Predefined Inline
+macros include 'URLs', 'image' and 'link' macros.
+
+URLs
+^^^^
+'http', 'https', 'ftp', 'file', 'mailto' and 'callto' URLs are
+rendered using predefined inline macros.
+
+- If you don't need a custom link caption you can enter the 'http',
+  'https', 'ftp', 'file' URLs and email addresses without any special
+  macro syntax.
+- If the `<attrlist>` is empty the URL is displayed.
+
+Here are some examples:
+
+  http://www.docbook.org/[DocBook.org]
+  http://www.docbook.org/
+  mailto:joe.bloggs@foobar.com[email Joe Bloggs]
+  joe.bloggs@foobar.com
+
+Which are rendered:
+
+http://www.docbook.org/[DocBook.org]
+
+http://www.docbook.org/
+
+mailto:joe.bloggs@foobar.com[email Joe Bloggs]
+
+joe.bloggs@foobar.com
+
+If the `<target>` necessitates space characters use `%20`, for example
+`large%20image.png`.
+
+Internal Cross References
+^^^^^^^^^^^^^^^^^^^^^^^^^
+Two AsciiDoc inline macros are provided for creating hypertext links
+within an AsciiDoc document. You can use either the standard macro
+syntax or the (preferred) alternative.
+
+[[X30]]
+anchor
+++++++
+Used to specify hypertext link targets:
+
+  [[<id>,<xreflabel>]]
+  anchor:<id>[<xreflabel>]
+
+The `<id>` is a unique string that conforms to the output markup's
+anchor syntax. The optional `<xreflabel>` is the text to be displayed
+by captionless 'xref' macros that refer to this anchor. The optional
+`<xreflabel>` is only really useful when generating DocBook output.
+Example anchor:
+
+  [[X1]]
+
+You may have noticed that the syntax of this inline element is the
+same as that of the <<X41,BlockId block element>>, this is no
+coincidence since they are functionally equivalent.
+
+xref
+++++
+Creates a hypertext link to a document anchor.
+
+  <<<id>,<caption>>>
+  xref:<id>[<caption>]
+
+The `<id>` refers to an anchor ID. The optional `<caption>` is the
+link's displayed text. Example:
+
+  <<X21,attribute lists>>
+
+If `<caption>` is not specified then the displayed text is
+auto-generated:
+
+- The AsciiDoc 'xhtml11' and 'html5' backends display the `<id>`
+  enclosed in square brackets.
+- If DocBook is produced the DocBook toolchain is responsible for the
+  displayed text which will normally be the referenced figure, table
+  or section title number followed by the element's title text.
+
+Here is an example:
+
+---------------------------------------------------------------------
+[[tiger_image]]
+.Tyger tyger
+image::tiger.png[]
+
+This can be seen in <<tiger_image>>.
+---------------------------------------------------------------------
+
+Linking to Local Documents
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+Hypertext links to files on the local file system are specified using
+the 'link' inline macro.
+
+  link:<target>[<caption>]
+
+The 'link' macro generates relative URLs. The link macro `<target>` is
+the target file name (relative to the file system location of the
+referring document). The optional `<caption>` is the link's displayed
+text. If `<caption>` is not specified then `<target>` is displayed.
+Example:
+
+  link:downloads/foo.zip[download foo.zip]
+
+You can use the `<filename>#<id>` syntax to refer to an anchor within
+a target document but this usually only makes sense when targeting
+HTML documents.
+
+[[X9]]
+Images
+^^^^^^
+Inline images are inserted into the output document using the 'image'
+macro. The inline syntax is:
+
+  image:<target>[<attributes>]
+
+The contents of the image file `<target>` is displayed. To display the
+image its file format must be supported by the target backend
+application. HTML and DocBook applications normally support PNG or JPG
+files.
+
+`<target>` file name paths are relative to the location of the
+referring document.
+
+[[X55]]
+.Image macro attributes
+- The optional 'alt' attribute is also the first positional attribute,
+  it specifies alternative text which is displayed if the output
+  application is unable to display the image file (see also
+  http://htmlhelp.com/feature/art3.htm[Use of ALT texts in IMGs]). For
+  example:
+
+  image:images/logo.png[Company Logo]
+
+- The optional 'title' attribute provides a title for the image. The
+  <<X49,block image macro>> renders the title alongside the image.
+  The inline image macro displays the title as a popup ``tooltip'' in
+  visual browsers (AsciiDoc HTML outputs only).
+
+- The optional `width` and `height` attributes scale the image size
+  and can be used in any combination. The units are pixels.  The
+  following example scales the previous example to a height of 32
+  pixels:
+
+  image:images/logo.png["Company Logo",height=32]
+
+- The optional `link` attribute is used to link the image to an
+  external document. The following example links a screenshot
+  thumbnail to a full size version:
+
+  image:screen-thumbnail.png[height=32,link="screen.png"]
+
+- The optional `scaledwidth` attribute is only used in DocBook block
+  images (specifically for PDF documents). The following example
+  scales the images to 75% of the available print width:
+
+  image::images/logo.png[scaledwidth="75%",alt="Company Logo"]
+
+- The image `scale` attribute sets the DocBook `imagedata` element
+  `scale` attribute.
+
+- The optional `align` attribute aligns block macro images
+  horizontally.  Allowed values are `center`, `left` and `right`. For
+  example:
+
+  image::images/tiger.png["Tiger image",align="left"]
+
+- The optional `float` attribute floats the image `left` or `right` on
+  the page (works with HTML outputs only, has no effect on DocBook
+  outputs). `float` and `align` attributes are mutually exclusive.
+  Use the `unfloat::[]` block macro to stop floating.
+
+Comment Lines
+^^^^^^^^^^^^^
+See <<X25,comment block macro>>.
+
+Block Macros
+~~~~~~~~~~~~
+A Block macro reference must be contained in a single line separated
+either side by a blank line or a block delimiter.
+
+Block macros behave just like Inline macros, with the following
+differences:
+
+- They occur in a block context.
+- The default syntax is `<name>::<target>[<attrlist>]` (two
+  co
