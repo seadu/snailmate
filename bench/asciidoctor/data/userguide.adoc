@@ -2854,4 +2854,187 @@ Is equivalent to:
   or more of the attributes is defined, otherwise it's value is
   undefined.
 - Multiple '+' separated attribute names evaluate to defined if all
-  of the attributes is defined, otherwise it's v
+  of the attributes is defined, otherwise it's value is undefined.
+
+Document text between the `ifeval` and `endif` macros is included if
+the Python expression inside the square brackets is true. Example:
+
+  ifeval::[{rs458}==2]
+  :
+  endif::[]
+
+- Document attribute references are expanded before the expression is
+  evaluated.
+- If an attribute reference is undefined then the expression is
+  considered false.
+
+Take a look at the `*.conf` configuration files in the AsciiDoc
+distribution for examples of conditional inclusion macro usage.
+
+Executable system macros
+^^^^^^^^^^^^^^^^^^^^^^^^
+The 'eval', 'sys' and 'sys2' block macros exhibit the same behavior as
+their same named <<X24, system attribute references>>. The difference
+is that system macros occur in a block macro context whereas system
+attributes are confined to inline contexts where attribute
+substitution is enabled.
+
+The following example displays a long directory listing inside a
+literal block:
+
+  ------------------
+  sys::[ls -l *.txt]
+  ------------------
+
+NOTE: There are no block macro versions of the 'eval3' and 'sys3'
+system attributes.
+
+Template System Macro
+^^^^^^^^^^^^^^^^^^^^^
+The `template` block macro allows the inclusion of one configuration
+file template section within another.  The following example includes
+the `[admonitionblock]` section in the `[admonitionparagraph]`
+section:
+
+  [admonitionparagraph]
+  template::[admonitionblock]
+
+.Template macro behavior
+- The `template::[]` macro is useful for factoring configuration file
+  markup.
+- `template::[]` macros cannot be nested.
+- `template::[]` macro expansion is applied after all configuration
+  files have been read.
+
+
+[[X77]]
+Passthrough macros
+~~~~~~~~~~~~~~~~~~
+Passthrough macros are analogous to <<X76,passthrough blocks>> and are
+used to pass text directly to the output. The substitution performed
+on the text is determined by the macro definition but can be overridden
+by the `<subslist>`.  The usual syntax is
+`<name>:<subslist>[<passtext>]` (for inline macros) and
+`<name>::<subslist>[<passtext>]` (for block macros). Passthroughs, by
+definition, take precedence over all other text substitutions.
+
+pass::
+  Inline and block. Passes text unmodified (apart from explicitly
+  specified substitutions). Examples:
+
+  pass:[<q>To be or not to be</q>]
+  pass:attributes,quotes[<u>the '{author}'</u>]
+
+asciimath, latexmath::
+  Inline and block. Passes text unmodified.  Used for
+  <<X78,mathematical formulas>>.
+
+\+++::
+  Inline and block. The triple-plus passthrough is functionally
+  identical to the 'pass' macro but you don't have to escape `]`
+  characters and you can prefix with quoted attributes in the inline
+  version. Example:
+
+  Red [red]+++`sum_(i=1)\^n i=(n(n+1))/2`$+++ AsciiMathML formula
+
+$$::
+  Inline and block. The double-dollar passthrough is functionally
+  identical to the triple-plus passthrough with one exception: special
+  characters are escaped. Example:
+
+  $$`[[a,b],[c,d]]((n),(k))`$$
+
+[[X80]]`::
+  Text quoted with single backtick characters constitutes an 'inline
+  literal' passthrough. The enclosed text is rendered in a monospaced
+  font and is only subject to special character substitution.  This
+  makes sense since monospace text is usually intended to be rendered
+  literally and often contains characters that would otherwise have to
+  be escaped. If you need monospaced text containing inline
+  substitutions use a <<X81,plus character instead of a backtick>>.
+
+Macro Definitions
+~~~~~~~~~~~~~~~~~
+Each entry in the configuration `[macros]` section is a macro
+definition which can take one of the following forms:
+
+`<pattern>=<name>[<subslist]`:: Inline macro definition.
+`<pattern>=#<name>[<subslist]`:: Block macro definition.
+`<pattern>=+<name>[<subslist]`:: System macro definition.
+`<pattern>`:: Delete the existing macro with this `<pattern>`.
+
+`<pattern>` is a Python regular expression and `<name>` is the name of
+a markup template. If `<name>` is omitted then it is the value of the
+regular expression match group named 'name'.  The optional
+`[<subslist]` is a comma-separated list of substitution names enclosed
+in `[]` brackets, it sets the default substitutions for passthrough
+text, if omitted then no passthrough substitutions are performed.
+
+.Pattern named groups
+The following named groups can be used in macro `<pattern>` regular
+expressions and are available as markup template attributes:
+
+name::
+  The macro name.
+
+target::
+  The macro target.
+
+attrlist::
+  The macro attribute list.
+
+passtext::
+  Contents of this group are passed unmodified to the output subject
+  only to 'subslist' substitutions.
+
+subslist::
+  Processed as a comma-separated list of substitution names for
+  'passtext' substitution, overrides the the macro definition
+  'subslist'.
+
+.Here's what happens during macro substitution
+- Each contextually relevant macro 'pattern' from the `[macros]`
+  section is matched against the input source line.
+- If a match is found the text to be substituted is loaded from a
+  configuration markup template section named like
+  `<name>-inlinemacro` or `<name>-blockmacro` (depending on the macro
+  type).
+- Global and macro attribute list attributes are substituted in the
+  macro's markup template.
+- The substituted template replaces the macro reference in the output
+  document.
+
+
+[[X98]]
+HTML 5 audio and video block macros
+-----------------------------------
+The 'html5' backend 'audio' and 'video' block macros generate the HTML
+5 'audio' and 'video' elements respectively.  They follow the usual
+AsciiDoc block macro syntax `<name>::<target>[<attrlist>]` where:
+
+[horizontal]
+`<name>`:: 'audio' or 'video'.
+`<target>`:: The URL or file name of the video or audio file.
+`<attrlist>`:: A list of named attributes (see below).
+
+.Audio macro attributes
+[options="header",cols="1,5",frame="topbot"]
+|====================================================================
+|Name | Value
+|options
+|A comma separated list of one or more of the following items:
+'autoplay', 'loop' which correspond to the same-named HTML 5 'audio'
+element boolean attributes.  By default the player 'controls' are
+enabled, include the 'nocontrols' option value to hide them.
+|====================================================================
+
+.Video macro attributes
+[options="header",cols="1,5",frame="topbot"]
+|====================================================================
+|Name   | Value
+|height | The height of the player in pixels.
+|width  | The width of the player in pixels.
+|poster | The URL or file name of an image representing the video.
+|options
+|A comma separated list of one or more of the following items:
+'autoplay', 'loop' and 'nocontrols'. The 'autoplay' and 'loop' options
