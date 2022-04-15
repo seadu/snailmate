@@ -2667,4 +2667,191 @@ differences:
 
 - They occur in a block context.
 - The default syntax is `<name>::<target>[<attrlist>]` (two
-  co
+  colons, not one).
+- Markup template section names end in `-blockmacro` instead of
+  `-inlinemacro`.
+
+Block Identifier
+^^^^^^^^^^^^^^^^
+The Block Identifier macro sets the `id` attribute and has the same
+syntax as the <<X30,anchor inline macro>> since it performs
+essentially the same function -- block templates use the `id`
+attribute as a block element ID. For example:
+
+  [[X30]]
+
+This is equivalent to the `[id="X30"]` <<X79,AttributeList element>>).
+
+[[X49]]
+Images
+^^^^^^
+The 'image' block macro is used to display images in a block context.
+The syntax is:
+
+  image::<target>[<attributes>]
+
+The block `image` macro has the same <<X55,macro attributes>> as it's
+<<X9,inline image macro>> counterpart.
+
+WARNING: Unlike the inline `image` macro, the entire block `image` macro
+must be on a single line.
+
+Block images can be titled by preceding the 'image' macro with a
+'BlockTitle'.  DocBook toolchains normally number titled block images
+and optionally list them in an automatically generated 'List of
+Figures' backmatter section.
+
+This example:
+
+  .Main circuit board
+  image::images/layout.png[J14P main circuit board]
+
+is equivalent to:
+
+  image::images/layout.png["J14P main circuit board", title="Main circuit board"]
+
+A title prefix that can be inserted with the `caption` attribute
+(HTML backends). For example:
+
+  .Main circuit board
+  [caption="Figure 2: "]
+  image::images/layout.png[J14P main circuit board]
+
+[[X66]]
+.Embedding images in XHTML documents
+*********************************************************************
+If you define the `data-uri` attribute then images will be embedded in
+XHTML outputs using the
+http://en.wikipedia.org/wiki/Data:_URI_scheme[data URI scheme].  You
+can use the 'data-uri' attribute with the 'xhtml11' and 'html5'
+backends to produce single-file XHTML documents with embedded images
+and CSS, for example:
+
+  $ asciidoc -a data-uri mydocument.txt
+
+[NOTE]
+======
+- All current popular browsers support data URIs, although versions
+  of Internet Explorer prior to version 8 do not.
+- Some browsers limit the size of data URIs.
+======
+*********************************************************************
+
+[[X25]]
+Comment Lines
+^^^^^^^^^^^^^
+Single lines starting with two forward slashes hard up against the
+left margin are treated as comments. Comment lines do not appear in
+the output unless the 'showcomments' attribute is defined.  Comment
+lines have been implemented as both block and inline macros so a
+comment line can appear as a stand-alone block or within block elements
+that support inline macro expansion. Example comment line:
+
+  // This is a comment.
+
+If the 'showcomments' attribute is defined comment lines are written
+to the output:
+
+- In DocBook the comment lines are enclosed by the 'remark' element
+  (which may or may not be rendered by your toolchain).
+- The 'showcomments' attribute does not expose <<X26,Comment Blocks>>.
+  Comment Blocks are never passed to the output.
+
+System Macros
+~~~~~~~~~~~~~
+System macros are block macros that perform a predefined task and are
+hardwired into the asciidoc(1) program.
+
+- You can escape system macros with a leading backslash character
+  (as you can with other macros).
+- The syntax and tasks performed by system macros is built into
+  asciidoc(1) so they don't appear in configuration files.  You can
+  however customize the syntax by adding entries to a configuration
+  file `[macros]` section.
+
+[[X63]]
+Include Macros
+^^^^^^^^^^^^^^
+The `include` and `include1`  system macros to include the contents of
+a named file into the source document.
+
+The `include` macro includes a file as if it were part of the parent
+document -- tabs are expanded and system macros processed. The
+contents of `include1` files are not subject to tab expansion or
+system macro processing nor are attribute or lower priority
+substitutions performed. The `include1` macro's intended use is to
+include verbatim embedded CSS or scripts into configuration file
+headers.  Example:
+
+------------------------------------
+\include::chapter1.txt[tabsize=4]
+------------------------------------
+
+.Include macro behavior
+- If the included file name is specified with a relative path then the
+  path is relative to the location of the referring document.
+- Include macros can appear inside configuration files.
+- Files included from within 'DelimitedBlocks' are read to completion
+  to avoid false end-of-block underline termination.
+- Attribute references are expanded inside the include 'target'; if an
+  attribute is undefined then the included file is silently skipped.
+- The 'tabsize' macro attribute sets the number of space characters to
+  be used for tab expansion in the included file (not applicable to
+  `include1` macro).
+- The 'depth' macro attribute sets the maximum permitted number of
+  subsequent nested includes (not applicable to `include1` macro which
+  does not process nested includes). Setting 'depth' to '1' disables
+  nesting inside the included file. By default, nesting is limited to
+  a depth of ten.
+- If the he 'warnings' attribute is set to 'False' (or any other
+  Python literal that evaluates to boolean false) then no warning
+  message is printed if the included file does not exist. By default
+  'warnings' are enabled.
+- Internally the `include1` macro is translated to the `include1`
+  system attribute which means it must be evaluated in a region where
+  attribute substitution is enabled. To inhibit nested substitution in
+  included files it is preferable to use the `include` macro and set
+  the attribute `depth=1`.
+
+Conditional Inclusion Macros
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lines of text in the source document can be selectively included or
+excluded from processing based on the existence (or not) of a document
+attribute.
+
+Document text between the `ifdef` and `endif` macros is included if a
+document attribute is defined:
+
+  ifdef::<attribute>[]
+  :
+  endif::<attribute>[]
+
+Document text between the `ifndef` and `endif` macros is not included
+if a document attribute is defined:
+
+  ifndef::<attribute>[]
+  :
+  endif::<attribute>[]
+
+`<attribute>` is an attribute name which is optional in the trailing
+`endif` macro.
+
+If you only want to process a single line of text then the text can be
+put inside the square brackets and the `endif` macro omitted, for
+example:
+
+  ifdef::revnumber[Version number 42]
+
+Is equivalent to:
+
+  ifdef::revnumber[]
+  Version number 42
+  endif::revnumber[]
+
+'ifdef' and 'ifndef' macros also accept multiple attribute names:
+
+- Multiple ',' separated attribute names evaluate to defined if one
+  or more of the attributes is defined, otherwise it's value is
+  undefined.
+- Multiple '+' separated attribute names evaluate to defined if all
+  of the attributes is defined, otherwise it's v
