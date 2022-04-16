@@ -3243,3 +3243,162 @@ AsciiDoc 'psv' ('Prefix Separated Values') and 'dsv' ('Delimiter
 Separated Values') formats are cell oriented -- the table is treated
 as a sequence of cells -- there are no explicit row separators.
 
+- 'psv' prefixes each cell with a separator whereas 'dsv' delimits
+  cells with a separator.
+- 'psv' and 'dsv' separators are Python regular expressions.
+- The default 'psv' separator contains <<X84, cell specifier>> related
+  named regular expression groups.
+- The default 'dsv' separator is `:|\n` (a colon or a new line
+  character).
+- 'psv' and 'dsv' cell separators can be escaped by preceding them
+  with a backslash character.
+
+Here are four 'psv' cells (the second item spans two columns; the
+last contains an escaped separator):
+
+  |One 2+|Two and three |A \| separator character
+
+'csv'  is the quasi-standard row oriented 'Comma Separated Values
+(CSV)' format commonly used to import and export spreadsheet and
+database data.
+
+[[X69]]
+Table attributes
+~~~~~~~~~~~~~~~~
+Tables can be customized by the following attributes:
+
+format::
+'psv' (default), 'dsv' or 'csv' (See <<X68, Table Data Formats>>).
+
+separator::
+The cell separator. A Python regular expression ('psv' and 'dsv'
+formats) or a single character ('csv' format).
+
+frame::
+Defines the table border and can take the following values: 'topbot'
+(top and bottom), 'all' (all sides), 'none' and 'sides' (left and
+right sides). The default value is 'all'.
+
+grid::
+Defines which ruler lines are drawn between table rows and columns.
+The 'grid' attribute value can be any of the following values: 'none',
+'cols', 'rows' and 'all'. The default value is 'all'.
+
+align::
+Use the 'align' attribute to horizontally align the table on the
+page (works with HTML outputs only, has no effect on DocBook outputs).
+The following values are valid: 'left', 'right', and 'center'.
+
+float::
+Use the 'float' attribute to float the table 'left' or 'right' on the
+page (works with HTML outputs only, has no effect on DocBook outputs).
+Floating only makes sense in conjunction with a table 'width'
+attribute value of less than 100% (otherwise the table will take up
+all the available space).  'float' and 'align' attributes are mutually
+exclusive.  Use the `unfloat::[]` block macro to stop floating.
+
+halign::
+Use the 'halign' attribute to horizontally align all cells in a table.
+The following values are valid: 'left', 'right', and 'center'
+(defaults to 'left'). Overridden by <<X70,Column specifiers>>  and
+<<X84,Cell specifiers>>.
+
+valign::
+Use the 'valign' attribute to vertically align all cells in a table.
+The following values are valid: 'top', 'bottom', and 'middle'
+(defaults to 'top'). Overridden by <<X70,Column specifiers>>  and
+<<X84,Cell specifiers>>.
+
+options::
+The 'options' attribute can contain comma separated values, for
+example: 'header', 'footer'. By default header and footer rows are
+omitted.  See <<X74,attribute options>> for a complete list of
+available table options.
+
+cols::
+The 'cols' attribute is a comma separated list of <<X70,column
+specifiers>>. For example `cols="2<p,2*,4p,>"`.
+
+- If 'cols' is present it must specify all columns.
+- If the 'cols' attribute is not specified the number of columns is
+  calculated as the number of data items in the *first line* of the
+  table.
+- The degenerate form for the 'cols' attribute is an integer
+  specifying the number of columns e.g. `cols=4`.
+
+width::
+The 'width' attribute is expressed as a percentage value
+('"1%"'...'"99%"'). The width specifies the table width relative to
+the available width. HTML backends use this value to set the table
+width attribute. It's a bit more complicated with DocBook, see the
+<<X89,DocBook table widths>> sidebar.
+
+filter::
+The 'filter' attribute defines an external shell command that is
+invoked for each cell. The built-in 'asciidoc' table style is
+implemented using a filter.
+
+[[X89]]
+.DocBook table widths
+**********************************************************************
+The AsciiDoc docbook backend generates CALS tables. CALS tables do not
+support a table width attribute -- table width can only be controlled
+by specifying absolute column widths.
+
+Specifying absolute column widths is not media independent because
+different presentation media have different physical dimensions. To
+get round this limitation both
+http://www.sagehill.net/docbookxsl/Tables.html#TableWidth[DocBook XSL
+Stylesheets] and
+http://dblatex.sourceforge.net/doc/manual/ch03s05.html#sec-table-width[dblatex]
+have implemented table width processing instructions for setting the
+table width as a percentage of the available width. AsciiDoc emits
+these processing instructions if the 'width' attribute is set along
+with proportional column widths (the AsciiDoc docbook backend
+'pageunits' attribute defaults to '*').
+
+To generate DocBook tables with absolute column widths set the
+'pageunits' attribute to a CALS absolute unit such as 'pt' and set the
+'pagewidth' attribute to match the width of the presentation media.
+**********************************************************************
+
+[[X70]]
+Column Specifiers
+~~~~~~~~~~~~~~~~~
+Column specifiers define how columns are rendered and appear in the
+table <<X69,cols attribute>>.  A column specifier consists of an
+optional column multiplier followed by optional alignment, width and
+style values and is formatted like:
+
+  [<multiplier>*][<align>][<width>][<style>]
+
+- All components are optional. The multiplier must be first and the
+  style last. The order of `<align>` or `<width>` is not important.
+- Column `<width>` can be either an integer proportional value (1...)
+  or a percentage (1%...100%). The default value is 1. To ensure
+  portability across different backends, there is no provision for
+  absolute column widths (not to be confused with output column width
+  <<X72,markup attributes>> which are available in both percentage and
+  absolute units).
+- The '<align>' column alignment specifier is formatted like:
+
+  [<horizontal>][.<vertical>]
++
+Where `<horizontal>` and `<vertical>` are one of the following
+characters: `<`, `^` or `>` which represent 'left', 'center' and
+'right' horizontal alignment or 'top', 'middle' and 'bottom' vertical
+alignment respectively.
+
+- A `<multiplier>` can be used to specify repeated columns e.g.
+  `cols="4*<"` specifies four left-justified columns. The default
+  multiplier value is 1.
+- The `<style>` name specifies a <<X71,table style>> to used to markup
+  column cells (you can use the full style names if you wish but the
+  first letter is normally sufficient).
+- Column specific styles are not applied to header rows.
+
+[[X84]]
+Cell Specifiers
+~~~~~~~~~~~~~~~
+Cell specifiers allow individual cells in 'psv' formatted tables to be
+spanned, 
