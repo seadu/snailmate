@@ -3038,3 +3038,208 @@ enabled, include the 'nocontrols' option value to hide them.
 |options
 |A comma separated list of one or more of the following items:
 'autoplay', 'loop' and 'nocontrols'. The 'autoplay' and 'loop' options
+correspond to the same-named HTML 5 'video' element boolean
+attributes.  By default the player 'controls' are enabled, include the
+'nocontrols' option value to hide them.
+|====================================================================
+
+Examples:
+
+---------------------------------------------------------------------
+audio::images/example.ogg[]
+
+video::gizmo.ogv[width=200,options="nocontrols,autoplay"]
+
+.Example video
+video::gizmo.ogv[]
+
+video::http://www.808.dk/pics/video/gizmo.ogv[]
+---------------------------------------------------------------------
+
+If your needs are more complex put raw HTML 5 in a markup block, for
+example (from http://www.808.dk/?code-html-5-video):
+
+---------------------------------------------------------------------
+++++
+<video poster="pics/video/gizmo.jpg" id="video" style="cursor: pointer;" >
+  <source src="pics/video/gizmo.mp4" />
+  <source src="pics/video/gizmo.webm" type="video/webm" />
+  <source src="pics/video/gizmo.ogv" type="video/ogg" />
+  Video not playing? <a href="pics/video/gizmo.mp4">Download file</a> instead.
+</video>
+
+<script type="text/javascript">
+  var video = document.getElementById('video');
+  video.addEventListener('click',function(){
+    video.play();
+  },false);
+</script>
+++++
+---------------------------------------------------------------------
+
+
+Tables
+------
+The AsciiDoc table syntax looks and behaves like other delimited block
+types and supports standard <<X73,block configuration entries>>.
+Formatting is easy to read and, just as importantly, easy to enter.
+
+- Cells and columns can be formatted using built-in customizable styles.
+- Horizontal and vertical cell alignment can be set on columns and
+  cell.
+- Horizontal and vertical cell spanning is supported.
+
+.Use tables sparingly
+*********************************************************************
+When technical users first start creating documents, tables (complete
+with column spanning and table nesting) are often considered very
+important. The reality is that tables are seldom used, even in
+technical documentation.
+
+Try this exercise: thumb through your library of technical books,
+you'll be surprised just how seldom tables are actually used, even
+less seldom are tables containing block elements (such as paragraphs
+or lists) or spanned cells. This is no accident, like figures, tables
+are outside the normal document flow -- tables are for consulting not
+for reading.
+
+Tables are designed for, and should normally only be used for,
+displaying column oriented tabular data.
+*********************************************************************
+
+Example tables
+~~~~~~~~~~~~~~
+
+.Simple table
+[width="15%"]
+|=======
+|1 |2 |A
+|3 |4 |B
+|5 |6 |C
+|=======
+
+.AsciiDoc source
+---------------------------------------------------------------------
+[width="15%"]
+|=======
+|1 |2 |A
+|3 |4 |B
+|5 |6 |C
+|=======
+---------------------------------------------------------------------
+
+.Columns formatted with strong, monospaced and emphasis styles
+[width="50%",cols=">s,^m,e",frame="topbot",options="header,footer"]
+|==========================
+|      2+|Columns 2 and 3
+|1       |Item 1  |Item 1
+|2       |Item 2  |Item 2
+|3       |Item 3  |Item 3
+|4       |Item 4  |Item 4
+|footer 1|footer 2|footer 3
+|==========================
+
+.AsciiDoc source
+---------------------------------------------------------------------
+.An example table
+[width="50%",cols=">s,^m,e",frame="topbot",options="header,footer"]
+|==========================
+|      2+|Columns 2 and 3
+|1       |Item 1  |Item 1
+|2       |Item 2  |Item 2
+|3       |Item 3  |Item 3
+|4       |Item 4  |Item 4
+|footer 1|footer 2|footer 3
+|==========================
+---------------------------------------------------------------------
+
+.Horizontal and vertical source data
+[width="80%",cols="3,^2,^2,10",options="header"]
+|=========================================================
+|Date |Duration |Avg HR |Notes
+
+|22-Aug-08 |10:24 | 157 |
+Worked out MSHR (max sustainable heart rate) by going hard
+for this interval.
+
+|22-Aug-08 |23:03 | 152 |
+Back-to-back with previous interval.
+
+|24-Aug-08 |40:00 | 145 |
+Moderately hard interspersed with 3x 3min intervals (2min
+hard + 1min really hard taking the HR up to 160).
+
+|=========================================================
+
+Short cells can be entered horizontally, longer cells vertically.  The
+default behavior is to strip leading and trailing blank lines within a
+cell. These characteristics aid readability and data entry.
+
+.AsciiDoc source
+---------------------------------------------------------------------
+.Windtrainer workouts
+[width="80%",cols="3,^2,^2,10",options="header"]
+|=========================================================
+|Date |Duration |Avg HR |Notes
+
+|22-Aug-08 |10:24 | 157 |
+Worked out MSHR (max sustainable heart rate) by going hard
+for this interval.
+
+|22-Aug-08 |23:03 | 152 |
+Back-to-back with previous interval.
+
+|24-Aug-08 |40:00 | 145 |
+Moderately hard interspersed with 3x 3min intervals (2min
+hard + 1min really hard taking the HR up to 160).
+
+|=========================================================
+---------------------------------------------------------------------
+
+.A table with externally sourced CSV data
+[format="csv",cols="^1,4*2",options="header"]
+|===================================================
+ID,Customer Name,Contact Name,Customer Address,Phone
+include::customers.csv[]
+|===================================================
+
+.AsciiDoc source
+---------------------------------------------------------------------
+[format="csv",cols="^1,4*2",options="header"]
+|===================================================
+ID,Customer Name,Contact Name,Customer Address,Phone
+\include::customers.csv[]
+|===================================================
+---------------------------------------------------------------------
+
+
+.Cell spans, alignments and styles
+[cols="e,m,^,>s",width="25%"]
+|============================
+|1 >s|2 |3 |4
+^|5 2.2+^.^|6 .3+<.>m|7
+^|8
+|9 2+>|10
+|============================
+
+.AsciiDoc source
+---------------------------------------------------------------------
+[cols="e,m,^,>s",width="25%"]
+|============================
+|1 >s|2 |3 |4
+^|5 2.2+^.^|6 .3+<.>m|7
+^|8
+|9 2+>|10
+|============================
+---------------------------------------------------------------------
+
+[[X68]]
+Table input data formats
+~~~~~~~~~~~~~~~~~~~~~~~~
+AsciiDoc table data can be 'psv', 'dsv' or 'csv' formatted.  The
+default table format is 'psv'.
+
+AsciiDoc 'psv' ('Prefix Separated Values') and 'dsv' ('Delimiter
+Separated Values') formats are cell oriented -- the table is treated
+as a sequence of cells -- there are no explicit row separators.
+
