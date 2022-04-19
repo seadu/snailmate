@@ -3605,4 +3605,164 @@ To find out more about man pages view the `man(7)` manpage
 Document Header
 ~~~~~~~~~~~~~~~
 A manpage document Header is mandatory. The title line contains the
-man page name followed imme
+man page name followed immediately by the manual section number in
+brackets, for example 'ASCIIDOC(1)'. The title name should not contain
+white space and the manual section number is a single digit optionally
+followed by a single character.
+
+The NAME Section
+~~~~~~~~~~~~~~~~
+The first manpage section is mandatory, must be titled 'NAME' and must
+contain a single paragraph (usually a single line) consisting of a
+list of one or more comma separated command name(s) separated from the
+command purpose by a dash character. The dash must have at least one
+white space character on either side. For example:
+
+  printf, fprintf, sprintf - print formatted output
+
+The SYNOPSIS Section
+~~~~~~~~~~~~~~~~~~~~
+The second manpage section is mandatory and must be titled 'SYNOPSIS'.
+
+refmiscinfo attributes
+~~~~~~~~~~~~~~~~~~~~~~
+In addition to the automatically created man page <<X60,intrinsic
+attributes>> you can assign DocBook
+http://www.docbook.org/tdg5/en/html/refmiscinfo.html[refmiscinfo]
+element 'source', 'version' and 'manual' values using AsciiDoc
+`{mansource}`, `{manversion}` and `{manmanual}` attributes
+respectively. This example is from the AsciiDoc header of a man page
+source file:
+
+  :man source:   AsciiDoc
+  :man version:  {revnumber}
+  :man manual:   AsciiDoc Manual
+
+
+[[X78]]
+Mathematical Formulas
+---------------------
+The 'asciimath' and 'latexmath' <<X76,passthrough blocks>> along with
+the 'asciimath' and 'latexmath' <<X77,passthrough macros>> provide a
+(backend dependent) mechanism for rendering mathematical formulas. You
+can use the following math markups:
+
+LaTeX Math
+~~~~~~~~~~
+ftp://ftp.ams.org/pub/tex/doc/amsmath/short-math-guide.pdf[LaTeX
+math] can be included in documents that are processed by
+<<X31,dblatex(1)>>.  Example inline formula:
+
+  latexmath:[$C = \alpha + \beta Y^{\gamma} + \epsilon$]
+
+For more examples see the {website}[AsciiDoc website] or the
+distributed `doc/latexmath.txt` file.
+
+MathJax
+~~~~~~~
+http://www.mathjax.org/[MathJax] allows LaTeX Math style formulas to be included
+in XHTML documents generated via the AsciiDoc 'xhtml11' and 'html5' backends.
+This route overcomes several restrictions of the MathML-based approaches,
+notably, restricted support of MathML by many mainstream browsers. To enable
+'MathJax' support you must define the 'mathjax' attribute, for example using the
+`-a mathjax` command-line option. Equations are specified as explained above
+using the 'latexmath' passthrough blocks. By default, rendering of equations
+with 'MathJax' requires a working internet connection and will thus not work if
+you are offline (but it can be configured differently).
+
+LaTeXMathML
+~~~~~~~~~~~
+/////////////////////////////////////////////////////////////////////
+There is an http://math.etsu.edu/LaTeXMathML/[extended LaTeXMathML
+version] by Jeff Knisley, in addition to a JavaScript file it requires
+the inclusion of a CSS file.
+/////////////////////////////////////////////////////////////////////
+
+'LaTeXMathML' allows LaTeX Math style formulas to be included in XHTML
+documents generated using the AsciiDoc 'xhtml11' and 'html5' backends.
+AsciiDoc uses the
+http://www.maths.nottingham.ac.uk/personal/drw/lm.html[original
+LaTeXMathML] by Douglas Woodall.  'LaTeXMathML' is derived from
+ASCIIMathML and is for users who are more familiar with or prefer
+using LaTeX math formulas (it recognizes a subset of LaTeX Math, the
+differences are documented on the 'LaTeXMathML' web page).  To enable
+LaTeXMathML support you must define the 'latexmath' attribute, for
+example using the `-a latexmath` command-line option.  Example inline
+formula:
+
+  latexmath:[$\sum_{n=1}^\infty \frac{1}{2^n}$]
+
+For more examples see the {website}[AsciiDoc website] or the
+distributed `doc/latexmathml.txt` file.
+
+NOTE: The 'latexmath' macro used to include 'LaTeX Math' in DocBook
+outputs is not the same as the 'latexmath' macro used to include
+'LaTeX MathML' in XHTML outputs.  'LaTeX Math' applies to DocBook
+outputs that are processed by <<X31,dblatex>> and is normally used to
+generate PDF files.  'LaTeXMathML' is very much a subset of 'LaTeX
+Math' and applies to XHTML documents. This remark does not
+apply to 'MathJax' which does not use any of the 'latexmath' macros
+(but only requires the 'latexmath' passthrough blocks for identification
+of the equations).
+
+ASCIIMathML
+~~~~~~~~~~~
+/////////////////////////////////////////////////////////////////////
+The older ASCIIMathML 1.47 version is used instead of version 2
+because:
+
+1. Version 2 doesn't work when embedded.
+2. Version 2 is much larger.
+/////////////////////////////////////////////////////////////////////
+
+http://www1.chapman.edu/~jipsen/mathml/asciimath.html[ASCIIMathML]
+formulas can be included in XHTML documents generated using the
+'xhtml11' and 'html5' backends. To enable ASCIIMathML support you must
+define the 'asciimath' attribute, for example using the `-a asciimath`
+command-line option.  Example inline formula:
+
+  asciimath:[`x/x={(1,if x!=0),(text{undefined},if x=0):}`]
+
+For more examples see the {website}[AsciiDoc website] or the
+distributed `doc/asciimathml.txt` file.
+
+MathML
+~~~~~~
+http://www.w3.org/Math/[MathML] is a low level XML markup for
+mathematics. AsciiDoc has no macros for MathML but users familiar with
+this markup could use passthrough macros and passthrough blocks to
+include MathML in output documents.
+
+
+[[X7]]
+Configuration Files
+-------------------
+AsciiDoc source file syntax and output file markup is largely
+controlled by a set of cascading, text based, configuration files.  At
+runtime The AsciiDoc default configuration files are combined with
+optional user and document specific configuration files.
+
+Configuration File Format
+~~~~~~~~~~~~~~~~~~~~~~~~~
+Configuration files contain named sections. Each section begins with a
+section name in square brackets []. The section body consists of the
+lines of text between adjacent section headings.
+
+- Section names consist of one or more alphanumeric, underscore or
+  dash characters and cannot begin or end with a dash.
+- Lines starting with a '#' character are treated as comments and
+  ignored.
+- If the section name is prefixed with a '+' character then the
+  section contents is appended to the contents of an already existing
+  same-named section.
+- Otherwise same-named sections and section entries override
+  previously loaded sections and section entries (this is sometimes
+  referred to as 'cascading').  Consequently, downstream configuration
+  files need only contain those sections and section entries that need
+  to be overridden.
+
+TIP: When creating custom configuration files you only need to include
+the sections and entries that differ from the default configuration.
+
+TIP: The best way to learn about configuration files is to read the
+def
