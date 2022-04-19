@@ -3765,4 +3765,189 @@ TIP: When creating custom configuration files you only need to include
 the sections and entries that differ from the default configuration.
 
 TIP: The best way to learn about configuration files is to read the
-def
+default configuration files in the AsciiDoc distribution in
+conjunction with asciidoc(1) output files. You can view configuration
+file load sequence by turning on the asciidoc(1) `-v` (`--verbose`)
+command-line option.
+
+AsciiDoc reserves the following section names for specific purposes:
+
+miscellaneous::
+        Configuration options that don't belong anywhere else.
+attributes::
+        Attribute name/value entries.
+specialcharacters::
+        Special characters reserved by the backend markup.
+tags::
+        Backend markup tags.
+quotes::
+        Definitions for quoted inline character formatting.
+specialwords::
+        Lists of words and phrases singled out for special markup.
+replacements, replacements2, replacements3::
+        Find and replace substitution definitions.
+specialsections::
+        Used to single out special section names for specific markup.
+macros::
+        Macro syntax definitions.
+titles::
+        Heading, section and block title definitions.
+paradef-*::
+        Paragraph element definitions.
+blockdef-*::
+        DelimitedBlock element definitions.
+listdef-*::
+        List element definitions.
+listtags-*::
+        List element tag definitions.
+tabledef-*::
+        Table element definitions.
+tabletags-*::
+        Table element tag definitions.
+
+Each line of text in these sections is a 'section entry'. Section
+entries share the following syntax:
+
+name=value::
+        The entry value is set to value.
+name=::
+        The entry value is set to a zero length string.
+name!::
+        The entry is undefined (deleted from the configuration). This
+        syntax only applies to 'attributes' and 'miscellaneous'
+        sections.
+
+.Section entry behavior
+- All equals characters inside the `name` must be escaped with a
+  backslash character.
+- `name` and `value` are stripped of leading and trailing white space.
+- Attribute names, tag entry names and markup template section names
+  consist of one or more alphanumeric, underscore or dash characters.
+  Names should not begin or end with a dash.
+- A blank configuration file section (one without any entries) deletes
+  any preceding section with the same name (applies to non-markup
+  template sections).
+
+
+Miscellaneous section
+~~~~~~~~~~~~~~~~~~~~~
+The optional `[miscellaneous]` section specifies the following
+`name=value` options:
+
+newline::
+        Output file line termination characters. Can include any
+        valid Python string escape sequences. The default value is
+        `\r\n` (carriage return, line feed). Should not be quoted or
+        contain explicit spaces (use `\x20` instead). For example:
+
+        $ asciidoc -a 'newline=\n' -b docbook mydoc.txt
+
+outfilesuffix::
+        The default extension for the output file, for example
+        `outfilesuffix=.html`. Defaults to backend name.
+tabsize::
+        The number of spaces to expand tab characters, for example
+        `tabsize=4`. Defaults to 8. A 'tabsize' of zero suppresses tab
+        expansion (useful when piping included files through block
+        filters). Included files can override this option using the
+        'tabsize' attribute.
+pagewidth, pageunits::
+        These global table related options are documented in the
+        <<X4,Table Configuration File Definitions>> sub-section.
+
+NOTE: `[miscellaneous]` configuration file entries can be set using
+the asciidoc(1) `-a` (`--attribute`) command-line option.
+
+Titles section
+~~~~~~~~~~~~~~
+sectiontitle::
+        Two line section title pattern. The entry value is a Python
+        regular expression containing the named group 'title'.
+
+underlines::
+        A comma separated list of document and section title underline
+        character pairs starting with the section level 0 and ending
+        with section level 4 underline. The default setting is:
+
+        underlines="==","--","~~","^^","++"
+
+sect0...sect4::
+        One line section title patterns. The entry value is a Python
+        regular expression containing the named group 'title'.
+
+blocktitle::
+        <<X42,BlockTitle element>> pattern.  The entry value is a
+        Python regular expression containing the named group 'title'.
+
+subs::
+        A comma separated list of substitutions that are performed on
+        the document header and section titles. Defaults to 'normal'
+        substitution.
+
+Tags section
+~~~~~~~~~~~~
+The `[tags]` section contains backend tag definitions (one per
+line). Tags are used to translate AsciiDoc elements to backend
+markup.
+
+An AsciiDoc tag definition is formatted like
+`<tagname>=<starttag>|<endtag>`. For example:
+
+  emphasis=<em>|</em>
+
+In this example asciidoc(1) replaces the | character with the
+emphasized text from the AsciiDoc input file and writes the result to
+the output file.
+
+Use the `{brvbar}` attribute reference if you need to include a | pipe
+character inside tag text.
+
+Attributes section
+~~~~~~~~~~~~~~~~~~
+The optional `[attributes]` section contains predefined attributes.
+
+If the attribute value requires leading or trailing spaces then the
+text text should be enclosed in quotation mark (") characters.
+
+To delete a attribute insert a `name!` entry in a downstream
+configuration file or use the asciidoc(1) `--attribute name!`
+command-line option (an attribute name suffixed with a `!` character
+deletes the attribute)
+
+Special Characters section
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+The `[specialcharacters]` section specifies how to escape characters
+reserved by the backend markup. Each translation is specified on a
+single line formatted like:
+
+  <special_character>=<translated_characters>
+
+Special characters are normally confined to those that resolve
+markup ambiguity (in the case of HTML and XML markups the ampersand,
+less than and greater than characters).  The following example causes
+all occurrences of the `<` character to be replaced by `&lt;`.
+
+  <=&lt;
+
+Quoted Text section
+~~~~~~~~~~~~~~~~~~~
+Quoting is used primarily for text formatting.  The `[quotes]` section
+defines AsciiDoc quoting characters and their corresponding backend
+markup tags.  Each section entry value is the name of a of a `[tags]`
+section entry. The entry name is the character (or characters) that
+quote the text.  The following examples are taken from AsciiDoc
+configuration files:
+
+  [quotes]
+  _=emphasis
+
+  [tags]
+  emphasis=<em>|</em>
+
+You can specify the left and right quote strings separately by
+separating them with a | character, for example:
+
+  ``|''=quoted
+
+Omitting the tag will disable quoting, for example, if you don't want
+superscripts or subscripts put the following in a custom configurati
