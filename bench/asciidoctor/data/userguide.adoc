@@ -4111,4 +4111,193 @@ This first pass makes locally set attributes available in the global
 `asciidoc.conf` file.
 
 - `asciidoc.conf` from locations 1, 2, 3.
-- 'attributes', 'titles' and 'specialcharacters' sections fro
+- 'attributes', 'titles' and 'specialcharacters' sections from the
+  `asciidoc.conf` in location 4.
+- The document header is parsed at this point and we can assume the
+  'backend' and 'doctype' have now been defined.
+- Backend plugin `<backend>.conf` and `<backend>-<doctype>.conf` files
+  from locations 6.  If a backend plugin is not found then try
+  locations 1, 2 and 3 for `<backend>.conf` and
+  `<backend>-<doctype>.conf` backend configuration files.
+- Filter conf files from locations 7.
+- `lang-<lang>.conf` from locations 1, 2, 3.
+- `asciidoc.conf` from location 4.
+- `<backend>.conf` and `<backend>-<doctype>.conf` from location 4.
+- Filter conf files from location 4.
+- `<docfile>.conf` and `<docfile>-<backend>.conf` from location 4.
+- Configuration files from location 5.
+
+Where:
+
+- `<backend>` and `<doctype>` are values specified by the asciidoc(1)
+  `-b` (`--backend`) and `-d` (`--doctype`) command-line options.
+- `<infile>` is the path name of the AsciiDoc input file without the
+  file name extension.
+- `<lang>` is a two letter country code set by the the AsciiDoc 'lang'
+  attribute.
+
+[NOTE]
+=====================================================================
+The backend and language global configuration files are loaded *after*
+the header has been parsed.  This means that you can set most
+attributes in the document header. Here's an example header:
+
+  Life's Mysteries
+  ================
+  :author: Hu Nose
+  :doctype: book
+  :toc:
+  :icons:
+  :data-uri:
+  :lang: en
+  :encoding: iso-8859-1
+
+Attributes set in the document header take precedence over
+configuration file attributes.
+
+=====================================================================
+
+TIP: Use the asciidoc(1) `-v` (`--verbose`) command-line option to see
+which configuration files are loaded and the order in which they are
+loaded.
+
+
+Document Attributes
+-------------------
+A document attribute is comprised of a 'name' and a textual 'value'
+and is used for textual substitution in AsciiDoc documents and
+configuration files. An attribute reference (an attribute name
+enclosed in braces) is replaced by the corresponding attribute
+value. Attribute names are case insensitive and can only contain
+alphanumeric, dash and underscore characters.
+
+There are four sources of document attributes (from highest to lowest
+precedence):
+
+- Command-line attributes.
+- AttributeEntry, AttributeList, Macro and BlockId elements.
+- Configuration file `[attributes]` sections.
+- Intrinsic attributes.
+
+Within each of these divisions the last processed entry takes
+precedence.
+
+NOTE: If an attribute is not defined then the line containing the
+attribute reference is dropped. This property is used extensively in
+AsciiDoc configuration files to facilitate conditional markup
+generation.
+
+
+[[X18]]
+Attribute Entries
+-----------------
+The `AttributeEntry` block element allows document attributes to be
+assigned within an AsciiDoc document. Attribute entries are added to
+the global document attributes dictionary. The attribute name/value
+syntax is a single line like:
+
+  :<name>: <value>
+
+For example:
+
+  :Author Initials: JB
+
+This will set an attribute reference `{authorinitials}` to the value
+'JB' in the current document.
+
+To delete (undefine) an attribute use the following syntax:
+
+  :<name>!:
+
+.AttributeEntry behavior
+- The attribute entry line begins with colon -- no white space allowed
+  in left margin.
+- AsciiDoc converts the `<name>` to a legal attribute name (lower
+  case, alphanumeric, dash and underscore characters only -- all other
+  characters deleted). This allows more human friendly text to be
+  used.
+- Leading and trailing white space is stripped from the `<value>`.
+- Lines ending in a space followed by a plus character are continued
+  to the next line, for example:
+
+  :description: AsciiDoc is a text document format for writing notes, +
+                documentation, articles, books, slideshows, web pages +
+                and man pages.
+
+- If the `<value>` is blank then the corresponding attribute value is
+  set to an empty string.
+- Attribute references contained in the entry `<value>` will be
+  expanded.
+- By default AttributeEntry values are substituted for
+  `specialcharacters` and `attributes` (see above), if you want to
+  change or disable AttributeEntry substitution use the <<X77,pass:[]
+  inline macro>> syntax.
+- Attribute entries in the document Header are available for header
+  markup template substitution.
+- Attribute elements override configuration file and intrinsic
+  attributes but do not override command-line attributes.
+
+Here are some more attribute entry examples:
+
+---------------------------------------------------------------------
+AsciiDoc User Manual
+====================
+:author:    Stuart Rackham
+:email:     srackham@gmail.com
+:revdate:   April 23, 2004
+:revnumber: 5.1.1
+---------------------------------------------------------------------
+
+Which creates these attributes:
+
+  {author}, {firstname}, {lastname}, {authorinitials}, {email},
+  {revdate}, {revnumber}
+
+The previous example is equivalent to this <<X95,document header>>:
+
+---------------------------------------------------------------------
+AsciiDoc User Manual
+====================
+Stuart Rackham <srackham@gmail.com>
+5.1.1, April 23, 2004
+---------------------------------------------------------------------
+
+Setting configuration entries
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+A variant of the Attribute Entry syntax allows configuration file
+section entries and markup template sections to be set from within an
+AsciiDoc document:
+
+  :<section_name>.[<entry_name>]: <entry_value>
+
+Where `<section_name>` is the configuration section name,
+`<entry_name>` is the name of the entry and `<entry_value>` is the
+optional entry value. This example sets the default labeled list
+style to 'horizontal':
+
+  :listdef-labeled.style: horizontal
+
+It is exactly equivalent to a configuration file containing:
+
+  [listdef-labeled]
+  style=horizontal
+
+- If the `<entry_name>` is omitted then the entire section is
+  substituted with the `<entry_value>`. This feature should only be
+  used to set markup template sections. The following example sets the
+  'xref2' inline macro markup template:
+
+  :xref2-inlinemacro.: <a href="#{1}">{2?{2}}</a>
+
+- No substitution is performed on configuration file attribute entries
+  and they cannot be undefined.
+- This feature can only be used in attribute entries -- configuration
+  attributes cannot be set using the asciidoc(1) command `--attribute`
+  option.
+
+[[X62]]
+.Attribute entries promote clarity and eliminate repetition
+*********************************************************************
+URLs and file names in AsciiDoc macros are often quite long -- they
+break paragraph flow and readability suffers.  The problem is
+compounded by re
