@@ -3950,4 +3950,165 @@ separating them with a | character, for example:
   ``|''=quoted
 
 Omitting the tag will disable quoting, for example, if you don't want
-superscripts or subscripts put the following in a custom configurati
+superscripts or subscripts put the following in a custom configuration
+file or edit the global `asciidoc.conf` configuration file:
+
+  [quotes]
+  ^=
+  ~=
+
+<<X52,Unconstrained quotes>> are differentiated from constrained
+quotes by prefixing the tag name with a hash character, for example:
+
+  __=#emphasis
+
+.Quoted text behavior
+- Quote characters must be non-alphanumeric.
+- To minimize quoting ambiguity try not to use the same quote
+  characters in different quote types.
+
+Special Words section
+~~~~~~~~~~~~~~~~~~~~~
+The `[specialwords]` section is used to single out words and phrases
+that you want to consistently format in some way throughout your
+document without having to repeatedly specify the markup. The name of
+each entry corresponds to a markup template section and the entry
+value consists of a list of words and phrases to be marked up. For
+example:
+
+  [specialwords]
+  strongwords=NOTE IMPORTANT
+
+  [strongwords]
+  <strong>{words}</strong>
+
+The examples specifies that any occurrence of `NOTE` or `IMPORTANT`
+should appear in a bold font.
+
+Words and word phrases are treated as Python regular expressions: for
+example, the word `^NOTE` would only match `NOTE` if appeared at
+the start of a line.
+
+AsciiDoc comes with three built-in Special Word types:
+'emphasizedwords', 'monospacedwords' and 'strongwords', each has a
+corresponding (backend specific) markup template section. Edit the
+configuration files to customize existing Special Words and to add new
+ones.
+
+.Special word behavior
+- Word list entries must be separated by space characters.
+- Word list entries with embedded spaces should be enclosed in quotation (")
+  characters.
+- A `[specialwords]` section entry of the form
+  +name=word1{nbsp}[word2...]+ adds words to existing `name` entries.
+- A `[specialwords]` section entry of the form `name` undefines
+  (deletes) all existing `name` words.
+- Since word list entries are processed as Python regular expressions
+  you need to be careful to escape regular expression special
+  characters.
+- By default Special Words are substituted before Inline Macros, this
+  may lead to undesirable consequences. For example the special word
+  `foobar` would be expanded inside the macro call
+  `http://www.foobar.com[]`.  A possible solution is to emphasize
+  whole words only by defining the word using regular expression
+  characters, for example `\bfoobar\b`.
+- If the first matched character of a special word is a backslash then
+  the remaining characters are output without markup i.e. the
+  backslash can be used to escape special word markup.  For example
+  the special word `\\?\b[Tt]en\b` will mark up the words `Ten` and
+  `ten` only if they are not preceded by a backslash.
+
+[[X10]]
+Replacements section
+~~~~~~~~~~~~~~~~~~~~
+`[replacements]`, `[replacements2]` and `[replacements3]`
+configuration file entries specify find and replace text and are
+formatted like:
+
+  <find_pattern>=<replacement_text>
+
+The find text can be a Python regular expression; the replace text can
+contain Python regular expression group references.
+
+Use Replacement shortcuts for often used macro references, for
+example (the second replacement allows us to backslash escape the
+macro name):
+
+  NEW!=image:./images/smallnew.png[New!]
+  \\NEW!=NEW!
+
+The only difference between the three replacement types is how they
+are applied. By default 'replacements' and 'replacements2' are applied
+in <<X102,normal>> substitution contexts whereas 'replacements3' needs
+to be configured explicitly and should only be used in backend
+configuration files.
+
+.Replacement behavior
+- The built-in replacements can be escaped with a backslash.
+- If the find or replace text has leading or trailing spaces then the
+  text should be enclosed in quotation (") characters.
+- Since the find text is processed as a regular expression you need to
+  be careful to escape regular expression special characters.
+- Replacements are performed in the same order they appear in the
+  configuration file replacements section.
+
+Markup Template Sections
+~~~~~~~~~~~~~~~~~~~~~~~~
+Markup template sections supply backend markup for translating
+AsciiDoc elements.  Since the text is normally backend dependent
+you'll find these sections in the backend specific configuration
+files. Template sections differ from other sections in that they
+contain a single block of text instead of per line 'name=value'
+entries. A markup template section body can contain:
+
+- Attribute references
+- System macro calls.
+- A document content placeholder
+
+The document content placeholder is a single | character and is
+replaced by text from the source element.  Use the `{brvbar}`
+attribute reference if you need a literal | character in the template.
+
+[[X27]]
+Configuration file names, precedence and locations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Configuration files have a `.conf` file name extension; they are
+loaded from the following locations:
+
+1. The directory containing the asciidoc executable.
+2. If there is no `asciidoc.conf` file in the directory containing the
+   asciidoc executable then load from the global configuration
+   directory (normally `/etc/asciidoc` or `/usr/local/etc/asciidoc`)
+   i.e. the global configuration files directory is skipped if
+   AsciiDoc configuration files are installed in the same directory as
+   the asciidoc executable. This allows both a system wide copy and
+   multiple local copies of AsciiDoc to coexist on the same host PC.
+3. The user's `$HOME/.asciidoc` directory (if it exists).
+4. The directory containing the AsciiDoc source file.
+5. Explicit configuration files specified using:
+   - The `conf-files` attribute (one or more file names separated by a
+     `|` character). These files are loaded in the order they are
+     specified and prior to files specified using the `--conf-file`
+     command-line option.
+   - The asciidoc(1) `--conf-file`) command-line option.  The
+     `--conf-file` option can be specified multiple times, in which
+     case configuration files will be processed in the same order they
+     appear on the command-line.
+6. <<X100,Backend plugin>> configuration files are loaded from
+   subdirectories named like `backends/<backend>` in locations 1, 2
+   and 3.
+7. <<X59,Filter>> configuration files are loaded from subdirectories
+   named like `filters/<filter>` in locations 1, 2 and 3.
+
+Configuration files from the above locations are loaded in the
+following order:
+
+- The `[attributes]` section only from:
+  * `asciidoc.conf` in location 3
+  * Files from location 5.
++
+This first pass makes locally set attributes available in the global
+`asciidoc.conf` file.
+
+- `asciidoc.conf` from locations 1, 2, 3.
+- 'attributes', 'titles' and 'specialcharacters' sections fro
