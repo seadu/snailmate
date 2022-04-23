@@ -4300,4 +4300,156 @@ It is exactly equivalent to a configuration file containing:
 *********************************************************************
 URLs and file names in AsciiDoc macros are often quite long -- they
 break paragraph flow and readability suffers.  The problem is
-compounded by re
+compounded by redundancy if the same name is used repeatedly.
+Attribute entries can be used to make your documents easier to read
+and write, here are some examples:
+
+  :1:         http://freshmeat.net/projects/asciidoc/
+  :homepage:  http://asciidoc.org[AsciiDoc home page]
+  :new:       image:./images/smallnew.png[]
+  :footnote1: footnote:[A meaningless latin term]
+
+  Using previously defined attributes: See the {1}[Freshmeat summary]
+  or the {homepage} for something new {new}. Lorem ispum {footnote1}.
+
+.Note
+- The attribute entry definition must precede it's usage.
+- You are not limited to URLs or file names, entire macro calls or
+  arbitrary lines of text can be abbreviated.
+- Shared attributes entries could be grouped into a separate file and
+  <<X63,included>> in multiple documents.
+*********************************************************************
+
+
+[[X21]]
+Attribute Lists
+---------------
+- An attribute list is a comma separated list of attribute values.
+- The entire list is enclosed in square brackets.
+- Attribute lists are used to pass parameters to macros, blocks (using
+  the <<X79,AttributeList element>>) and inline quotes.
+
+The list consists of zero or more positional attribute values followed
+by zero or more named attribute values.  Here are three examples: a
+single unquoted positional attribute; three unquoted positional
+attribute values; one positional attribute followed by two named
+attributes; the unquoted attribute value in the final example contains
+comma (`&#44;`) and double-quote (`&#34;`) character entities:
+
+  [Hello]
+  [quote, Bertrand Russell, The World of Mathematics (1956)]
+  ["22 times", backcolor="#0e0e0e", options="noborders,wide"]
+  [A footnote&#44; &#34;with an image&#34; image:smallnew.png[]]
+
+.Attribute list behavior
+- If one or more attribute values contains a comma the all string
+  values must be quoted (enclosed in double quotation mark
+  characters).
+- If the list contains any named or quoted attributes then all string
+  attribute values must be quoted.
+- To include a double quotation mark (") character in a quoted
+  attribute value the the quotation mark must be escaped with a
+  backslash.
+- List attributes take precedence over existing attributes.
+- List attributes can only be referenced in configuration file markup
+  templates and tags, they are not available elsewhere in the
+  document.
+- Setting a named attribute to `None` undefines the attribute.
+- Positional attributes are referred to as `{1}`,`{2}`,`{3}`,...
+- Attribute `{0}` refers to the entire list (excluding the enclosing
+  square brackets).
+- Named attribute names cannot contain dash characters.
+
+[[X75]]
+Options attribute
+~~~~~~~~~~~~~~~~~
+If the attribute list contains an attribute named `options` it is
+processed as a comma separated list of option names:
+
+- Each name generates an attribute named like `<option>-option` (where
+  `<option>` is the option name) with an empty string value.  For
+  example `[options="opt1,opt2,opt3"]` is equivalent to setting the
+  following three attributes
+  `[opt1-option="",opt2-option="",opt2-option=""]`.
+- If you define a an option attribute globally (for example with an
+  <<X18,attribute entry>>) then it will apply to all elements in the
+  document.
+- AsciiDoc implements a number of predefined options which are listed
+  in the <<X74,Attribute Options appendix>>.
+
+Macro Attribute lists
+~~~~~~~~~~~~~~~~~~~~~
+Macros calls are suffixed with an attribute list. The list may be
+empty but it cannot be omitted. List entries are used to pass
+attribute values to macro markup templates.
+
+
+Attribute References
+--------------------
+An attribute reference is an attribute name (possibly followed by an
+additional parameters) enclosed in curly braces.  When an attribute
+reference is encountered it is evaluated and replaced by its
+corresponding text value.  If the attribute is undefined the line
+containing the attribute is dropped.
+
+There are three types of attribute reference: 'Simple', 'Conditional'
+and 'System'.
+
+.Attribute reference evaluation
+- You can suppress attribute reference expansion by placing a
+  backslash character immediately in front of the opening brace
+  character.
+- By default attribute references are not expanded in
+  'LiteralParagraphs', 'ListingBlocks' or 'LiteralBlocks'.
+- Attribute substitution proceeds line by line in reverse line order.
+- Attribute reference evaluation is performed in the following order:
+  'Simple' then 'Conditional' and finally 'System'.
+
+Simple Attributes References
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Simple attribute references take the form `{<name>}`. If the
+attribute name is defined its text value is substituted otherwise the
+line containing the reference is dropped from the output.
+
+Conditional Attribute References
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Additional parameters are used in conjunction with attribute names to
+calculate a substitution value. Conditional attribute references take
+the following forms:
+
+`{<names>=<value>}`::
+        `<value>` is substituted if the attribute `<names>` is
+        undefined otherwise its value is substituted. `<value>` can
+        contain simple attribute references.
+
+`{<names>?<value>}`::
+        `<value>` is substituted if the attribute `<names>` is defined
+        otherwise an empty string is substituted.  `<value>` can
+        contain simple attribute references.
+
+`{<names>!<value>}`::
+        `<value>` is substituted if the attribute `<names>` is
+        undefined otherwise an empty string is substituted.  `<value>`
+        can contain simple attribute references.
+
+`{<names>#<value>}`::
+        `<value>` is substituted if the attribute `<names>` is defined
+        otherwise the undefined attribute entry causes the containing
+        line to be dropped.  `<value>` can contain simple attribute
+        references.
+
+`{<names>%<value>}`::
+        `<value>` is substituted if the attribute `<names>` is not
+        defined otherwise the containing line is dropped.  `<value>`
+        can contain simple attribute references.
+
+`{<names>@<regexp>:<value1>[:<value2>]}`::
+        `<value1>` is substituted if the value of attribute `<names>`
+        matches the regular expression `<regexp>` otherwise `<value2>`
+        is substituted. If attribute `<names>` is not defined the
+        containing line is dropped. If `<value2>` is omitted an empty
+        string is assumed. The values and the regular expression can
+        contain simple attribute references.  To embed colons in the
+        values or the regular expression escape them with backslashes.
+
+`{<names>$<regexp>:<value1>[:<value2>
