@@ -4452,4 +4452,165 @@ the following forms:
         contain simple attribute references.  To embed colons in the
         values or the regular expression escape them with backslashes.
 
-`{<names>$<regexp>:<value1>[:<value2>
+`{<names>$<regexp>:<value1>[:<value2>]}`::
+        Same behavior as the previous ternary attribute except for
+        the following cases:
+
+        `{<names>$<regexp>:<value>}`;;
+                Substitutes `<value>` if `<names>` matches `<regexp>`
+                otherwise the result is undefined and the containing
+                line is dropped.
+
+        `{<names>$<regexp>::<value>}`;;
+                Substitutes `<value>` if `<names>` does not match
+                `<regexp>` otherwise the result is undefined and the
+                containing line is dropped.
+
+The attribute `<names>` parameter normally consists of a single
+attribute name but it can be any one of the following:
+
+- A single attribute name which evaluates to the attributes value.
+- Multiple ',' separated attribute names which evaluates to an empty
+  string if one or more of the attributes is defined, otherwise it's
+  value is undefined.
+- Multiple '+' separated attribute names which evaluates to an empty
+  string if all of the attributes are defined, otherwise it's value is
+  undefined.
+
+Conditional attributes with single attribute names are evaluated first
+so they can be used inside the multi-attribute conditional `<value>`.
+
+Conditional attribute examples
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Conditional attributes are mainly used in AsciiDoc configuration
+files -- see the distribution `.conf` files for examples.
+
+Attribute equality test::
+  If `{backend}` is 'docbook45' or 'xhtml11' the example evaluates to
+  ``DocBook 4.5 or XHTML 1.1 backend'' otherwise it evaluates to
+  ``some other backend'':
+
+  {backend@docbook45|xhtml11:DocBook 4.5 or XHTML 1.1 backend:some other backend}
+
+Attribute value map::
+  This example maps the `frame` attribute values [`topbot`, `all`,
+  `none`, `sides`] to [`hsides`, `border`, `void`, `vsides`]:
+
+  {frame@topbot:hsides}{frame@all:border}{frame@none:void}{frame@sides:vsides}
+
+
+[[X24]]
+System Attribute References
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+System attribute references generate the attribute text value by
+executing a predefined action that is parametrized by one or more
+arguments. The syntax is `{<action>:<arguments>}`.
+
+`{counter:<attrname>[:<seed>]}`::
+        Increments the document attribute (if the attribute is
+        undefined it is set to `1`). Returns the new attribute value.
+
+        - Counters generate global (document wide) attributes.
+        - The optional `<seed>` specifies the counter's initial value;
+          it can be a number or a single letter; defaults to '1'.
+        - `<seed>` can contain simple and conditional attribute
+          references.
+        - The 'counter' system attribute will not be executed if the
+          containing line is dropped by the prior evaluation of an
+          undefined attribute.
+
+`{counter2:<attrname>[:<seed>]}`::
+        Same as `counter` except the it always returns a blank string.
+
+`{eval:<expression>}`::
+        Substitutes the result of the Python `<expression>`.
+
+        - If `<expression>` evaluates to `None` or `False` the
+          reference is deemed undefined and the line containing the
+          reference is dropped from the output.
+        - If the expression evaluates to `True` the attribute
+          evaluates to an empty string.
+        - `<expression>` can contain simple and conditional attribute
+          references.
+        - The 'eval' system attribute can be nested inside other
+          system attributes.
+
+`{eval3:<command>}`::
+        Passthrough version of `{eval:<expression>}` -- the generated
+        output is written directly to the output without any further
+        substitutions.
+
+`{include:<filename>}`::
+        Substitutes contents of the file named `<filename>`.
+
+        - The included file is read at the time of attribute
+          substitution.
+        - If the file does not exist a warning is emitted and the line
+          containing the reference is dropped from the output file.
+        - Tabs are expanded based on the current 'tabsize' attribute
+          value.
+
+`{set:<attrname>[!][:<value>]}`::
+        Sets or unsets document attribute. Normally only used in
+        configuration file markup templates (use
+        <<X18,AttributeEntries>> in AsciiDoc documents).
+
+        - If the attribute name is followed by an exclamation mark
+          the attribute becomes undefined.
+        - If `<value>` is omitted the attribute is set to a blank
+          string.
+        - `<value>` can contain simple and conditional attribute
+          references.
+        - Returns a blank string unless the attribute is undefined in
+          which case the return value is undefined and the enclosing
+          line will be dropped.
+
+`{set2:<attrname>[!][:<value>]}`::
+        Same as `set` except that the attribute scope is local to the
+        template.
+
+`{sys:<command>}`::
+        Substitutes the stdout generated by the execution of the shell
+        `<command>`.
+
+`{sys2:<command>}`::
+        Substitutes the stdout and stderr generated by the execution
+        of the shell `<command>`.
+
+`{sys3:<command>}`::
+        Passthrough version of `{sys:<command>}` -- the generated
+        output is written directly to the output without any further
+        substitutions.
+
+`{template:<template>}`::
+        Substitutes the contents of the configuration file section
+        named `<template>`. Attribute references contained in the
+        template are substituted.
+
+.System reference behavior
+- System attribute arguments can contain non-system attribute
+  references.
+- Closing brace characters inside system attribute arguments must be
+  escaped with a backslash.
+
+[[X60]]
+Intrinsic Attributes
+--------------------
+Intrinsic attributes are simple attributes that are created
+automatically from: AsciiDoc document header parameters; asciidoc(1)
+command-line arguments; attributes defined in the default
+configuration files; the execution context.  Here's the list of
+predefined intrinsic attributes:
+
+  {amp}                 ampersand (&) character entity
+  {asciidoc-args}       used to pass inherited arguments to asciidoc filters
+  {asciidoc-confdir}    the asciidoc(1) global configuration directory
+  {asciidoc-dir}        the asciidoc(1) application directory
+  {asciidoc-file}       the full path name of the asciidoc(1) script
+  {asciidoc-version}    the version of asciidoc(1)
+  {author}              author's full name
+  {authored}            empty string '' if {author} or {email} defined,
+  {authorinitials}      author initials (from document header)
+  {backend-<backend>}   empty string ''
+  {<backend>-<doctype>} empty string ''
+  {backend}             document backend specified by `-b` o
