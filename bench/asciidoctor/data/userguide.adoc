@@ -4923,4 +4923,178 @@ DelimitedBlock processing proceeds as follows:
    written to the output file.
 
 TIP: Attribute expansion is performed on the block filter command
-before
+before it is executed, this is useful for passing arguments to the
+filter.
+
+Lists
+~~~~~
+List behavior and syntax is determined by `[listdef-*]` configuration
+file sections. The user can change existing list behavior and add new
+list types by editing configuration files.
+
+List specific block definition notes:
+
+type::
+  This is either 'bulleted','numbered','labeled' or 'callout'.
+
+delimiter::
+  A Python regular expression that matches the first line of a
+  list element entry. This expression can contain the named groups
+  'text' (bulleted groups), 'index' and 'text' (numbered lists),
+  'label' and 'text' (labeled lists).
+
+tags::
+  The `<name>` of the `[listtags-<name>]` configuration file section
+  containing list markup tag definitions.  The tag entries ('list',
+  'entry', 'label', 'term', 'text') map the AsciiDoc list structure to
+  backend markup; see the 'listtags' sections in the AsciiDoc
+  distributed backend `.conf` configuration files for examples.
+
+Tables
+~~~~~~
+Table behavior and syntax is determined by `[tabledef-*]` and
+`[tabletags-*]` configuration file sections. The user can change
+existing table behavior and add new table types by editing
+configuration files.  The following `[tabledef-*]` section entries
+generate table output markup elements:
+
+colspec::
+  The table 'colspec' tag definition.
+
+headrow, footrow, bodyrow::
+  Table header, footer and body row tag definitions. 'headrow' and
+  'footrow' table definition entries default to 'bodyrow' if
+  they are undefined.
+
+headdata, footdata, bodydata::
+  Table header, footer and body data tag definitions. 'headdata' and
+  'footdata' table definition entries default to 'bodydata' if they
+  are undefined.
+
+paragraph::
+  If the 'paragraph' tag is specified then blank lines in the cell
+  data are treated as paragraph delimiters and marked up using this
+  tag.
+
+[[X4]]
+Table behavior is also influenced by the following `[miscellaneous]`
+configuration file entries:
+
+pagewidth::
+  This integer value is the printable width of the output media. See
+  <<X69,table attributes>>.
+
+pageunits::
+  The units of width in output markup width attribute values.
+
+.Table definition behavior
+- The output markup generation is specifically designed to work with
+  the HTML and CALS (DocBook) table models, but should be adaptable to
+  most XML table schema.
+- Table definitions can be ``mixed in'' from multiple cascading
+  configuration files.
+- New table definitions inherit the default table and table tags
+  definitions (`[tabledef-default]` and `[tabletags-default]`) so you
+  only need to override those conf file entries that require
+  modification.
+
+
+[[X59]]
+Filters
+-------
+AsciiDoc filters allow external commands to process AsciiDoc
+'Paragraphs', 'DelimitedBlocks' and 'Table' content. Filters are
+primarily an extension mechanism for generating specialized outputs.
+Filters are implemented using external commands which are specified in
+configuration file definitions.
+
+There's nothing special about the filters, they're just standard UNIX
+filters: they read text from the standard input, process it, and write
+to the standard output.
+
+The asciidoc(1) command `--filter` option can be used to install and
+remove filters. The same option is used to unconditionally load a
+filter.
+
+Attribute substitution is performed on the filter command prior to
+execution -- attributes can be used to pass parameters from the
+AsciiDoc source document to the filter.
+
+WARNING: Filters sometimes included executable code. Before installing
+a filter you should verify that it is from a trusted source.
+
+Filter Search Paths
+~~~~~~~~~~~~~~~~~~~
+If the filter command does not specify a directory path then
+asciidoc(1) recursively searches for the executable filter command:
+
+- First it looks in the user's `$HOME/.asciidoc/filters` directory.
+- Next the global filters directory (usually `/etc/asciidoc/filters`
+  or `/usr/local/etc/asciidoc`) directory is searched.
+- Then it looks in the asciidoc(1) `./filters` directory.
+- Finally it relies on the executing shell to search the environment
+  search path (`$PATH`).
+
+Standard practice is to install each filter in it's own sub-directory
+with the same name as the filter's style definition. For example the
+music filter's style name is 'music' so it's configuration and filter
+files are stored in the `filters/music` directory.
+
+Filter Configuration Files
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+Filters are normally accompanied by a configuration file containing a
+Paragraph or DelimitedBlock definition along with corresponding markup
+templates.
+
+While it is possible to create new 'Paragraph' or 'DelimitedBlock'
+definitions the preferred way to implement a filter is to add a
+<<X23,style>> to the existing Paragraph and ListingBlock definitions
+(all filters shipped with AsciiDoc use this technique). The filter is
+applied to the paragraph or delimited block by preceding it with an
+attribute list: the first positional attribute is the style name,
+remaining attributes are normally filter specific parameters.
+
+asciidoc(1) auto-loads all `.conf` files found in the filter search
+paths unless the container directory also contains a file named
+`__noautoload__` (see previous section). The `__noautoload__` feature
+is used for filters that will be loaded manually using the `--filter`
+option.
+
+[[X56]]
+Example Filter
+~~~~~~~~~~~~~~
+AsciiDoc comes with a toy filter for highlighting source code keywords
+and comments.  See also the `./filters/code/code-filter-readme.txt`
+file.
+
+NOTE: The purpose of this toy filter is to demonstrate how to write a
+filter -- it's much to simplistic to be passed off as a code syntax
+highlighter.  If you want a full featured multi-language highlighter
+use the {website}source-highlight-filter.html[source code highlighter
+filter].
+
+Built-in filters
+~~~~~~~~~~~~~~~~
+The AsciiDoc distribution includes 'source', 'music', 'latex' and
+'graphviz' filters, details are on the
+{website}index.html#_filters[AsciiDoc website].
+
+[cols="1e,5",frame="topbot",options="header"]
+.Built-in filters list
+|====================================================================
+|Filter name |Description
+
+|music
+|A {website}music-filter.html[music filter] is included in the
+distribution `./filters/` directory. It translates music in
+http://lilypond.org/[LilyPond] or http://abcnotation.org.uk/[ABC]
+notation to standard classical notation.
+
+|source
+|A {website}source-highlight-filter.html[source code highlight filter]
+is included in the distribution `./filters/` directory.
+
+|latex
+|The {website}latex-filter.html[AsciiDoc LaTeX filter] translates
+LaTeX source to an image that is automatically inserted into the
+AsciiDo
