@@ -4751,4 +4751,176 @@ delimiter::
   the last line.
 
 template::
- 
+  The name of the configuration file markup template section that will
+  envelope the block contents. The pipe ('|') character is substituted
+  for the block contents. List elements use a set of (list specific)
+  tag parameters instead of a single template. The template name can
+  contain attribute references allowing dynamic template selection a
+  the time of template substitution.
+
+options::
+  A comma delimited list of element specific option names. In addition
+  to being used internally, options are available during markup tag
+  and template substitution as attributes with an empty string value
+  named like `<option>-option` (where `<option>` is the option name).
+  See <<X74,attribute options>> for a complete list of available
+  options.
+
+subs, presubs, postsubs::
+  * 'presubs' and 'postsubs' are lists of comma separated substitutions that are
+    performed on the block contents. 'presubs' is applied first,
+    'postsubs' (if specified) second.
+
+  * 'subs' is an alias for 'presubs'.
+
+  * If a 'filter' is allowed (Paragraphs, DelimitedBlocks and Tables)
+    and has been specified then 'presubs' and 'postsubs' substitutions
+    are performed before and after the filter is run respectively.
+
+  * Allowed values: 'specialcharacters', 'quotes', 'specialwords',
+    'replacements', 'macros', 'attributes', 'callouts'.
+
+  * [[X102]]The following composite values are also allowed:
+
+    'none';;
+        No substitutions.
+    'normal';;
+        The following substitutions in the following order:
+        'specialcharacters', 'quotes', 'attributes', 'specialwords',
+        'replacements', 'macros', 'replacements2'.
+    'verbatim';;
+        The following substitutions in the following order:
+        'specialcharacters' and 'callouts'.
+
+  * 'normal' and 'verbatim' substitutions can be redefined by with
+    `subsnormal` and `subsverbatim` entries in a configuration file
+    `[miscellaneous]` section.
+
+  * The substitutions are processed in the order in which they are
+    listed and can appear more than once.
+
+filter::
+  This optional entry specifies an executable shell command for
+  processing block content (Paragraphs, DelimitedBlocks and Tables).
+  The filter command can contain attribute references.
+
+posattrs::
+  Optional comma separated list of positional attribute names. This
+  list maps positional attributes (in the block's <<X21,attribute
+  list>>) to named block attributes. The following example, from the
+  QuoteBlock definition, maps the first and section positional
+  attributes:
+
+  posattrs=attribution,citetitle
+
+style::
+  This optional parameter specifies the default style name.
+
+
+<stylename>-style::
+  Optional style definition (see <<X23,Styles>> below).
+
+The following block parameters behave like document attributes and can
+be set in block attribute lists and style definitions: 'template',
+'options', 'subs', 'presubs', 'postsubs', 'filter'.
+
+[[X23]]
+Styles
+~~~~~~
+A style is a set of block parameter bundled as a single named
+parameter. The following example defines a style named 'verbatim':
+
+  verbatim-style=template="literalblock",subs="verbatim"
+
+If a block's <<X21,attribute list>> contains a 'style' attribute then
+the corresponding style parameters are be merged into the default
+block definition parameters.
+
+- All style parameter names must be suffixed with `-style` and the
+  style parameter value is in the form of a list of <<X21,named
+  attributes>>.
+- The 'template' style parameter is mandatory, other parameters can be
+  omitted in which case they inherit their values from the default
+  block definition parameters.
+- Multi-item style parameters ('subs','presubs','postsubs','posattrs')
+  must be specified using Python tuple syntax (rather than a simple
+  list of values as they in separate entries) e.g.
+  `postsubs=("callouts",)` not `postsubs="callouts"`.
+
+Paragraphs
+~~~~~~~~~~
+Paragraph translation is controlled by `[paradef-*]` configuration
+file section entries. Users can define new types of paragraphs and
+modify the behavior of existing types by editing AsciiDoc
+configuration files.
+
+Here is the shipped Default paragraph definition:
+
+--------------------------------------------------------------------
+[paradef-default]
+delimiter=(?P<text>\S.*)
+template=paragraph
+--------------------------------------------------------------------
+
+The normal paragraph definition has a couple of special properties:
+
+1. It must exist and be defined in a configuration file section named
+   `[paradef-default]`.
+2. Irrespective of its position in the configuration files default
+   paragraph document matches are attempted only after trying all
+   other paragraph types.
+
+Paragraph specific block parameter notes:
+
+delimiter::
+  This regular expression must contain the named group 'text' which
+  matches the text on the first line.  Paragraphs are terminated by a
+  blank line, the end of file, or the start of a DelimitedBlock.
+
+options::
+  The 'listelement' option specifies that paragraphs of this type will
+  automatically be considered part of immediately preceding list
+  items.  The 'skip' option causes the paragraph to be treated as a
+  comment (see <<X26,CommentBlocks>>).
+
+.Paragraph processing proceeds as follows:
+1. The paragraph text is aligned to the left margin.
+2. Optional 'presubs' inline substitutions are performed on the
+   paragraph text.
+3. If a filter command is specified it is executed and the paragraph
+   text piped to its standard input; the filter output replaces the
+   paragraph text.
+4. Optional 'postsubs' inline substitutions are performed on the
+   paragraph text.
+5. The paragraph text is enveloped by the paragraph's markup template
+   and written to the output file.
+
+Delimited Blocks
+~~~~~~~~~~~~~~~~
+DelimitedBlock 'options' values are:
+
+sectionbody::
+    The block contents are processed as a SectionBody.
+
+skip::
+    The block is treated as a comment (see <<X26,CommentBlocks>>).
+    Preceding <<X21,attribute lists>> and <<X42,block titles>> are not
+    consumed.
+
+'presubs', 'postsubs' and 'filter' entries are ignored when
+'sectionbody' or 'skip' options are set.
+
+DelimitedBlock processing proceeds as follows:
+
+1. Optional 'presubs' substitutions are performed on the block
+   contents.
+2. If a filter is specified it is executed and the block's contents
+   piped to its standard input. The filter output replaces the block
+   contents.
+3. Optional 'postsubs' substitutions are performed on the block
+   contents.
+4. The block contents is enveloped by the block's markup template and
+   written to the output file.
+
+TIP: Attribute expansion is performed on the block filter command
+before
