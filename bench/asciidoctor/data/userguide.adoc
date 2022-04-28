@@ -5097,4 +5097,189 @@ is included in the distribution `./filters/` directory.
 |latex
 |The {website}latex-filter.html[AsciiDoc LaTeX filter] translates
 LaTeX source to an image that is automatically inserted into the
-AsciiDo
+AsciiDoc output documents.
+
+|graphviz
+|Gouichi Iisaka has written a http://www.graphviz.org/[Graphviz]
+filter for AsciiDoc.  Graphviz generates diagrams from a textual
+specification. Gouichi Iisaka's Graphviz filter is included in the
+AsciiDoc distribution. Here are some
+{website}asciidoc-graphviz-sample.html[AsciiDoc Graphviz examples].
+
+|====================================================================
+
+[[X58]]
+Filter plugins
+~~~~~~~~~~~~~~
+Filter <<X101,plugins>> are a mechanism for distributing AsciiDoc
+filters.  A filter plugin is a Zip file containing the files that
+constitute a filter.  The asciidoc(1) `--filter` option is used to
+load and manage filer <<X101,plugins>>.
+
+- Filter plugins <<X27,take precedence>> over built-in filters with
+  the same name.
+- By default filter plugins are installed in
+  `$HOME/.asciidoc/filters/<filter>` where `<filter>` is the filter
+  name.
+
+
+[[X101]]
+Plugins
+-------
+The AsciiDoc plugin architecture is an extension mechanism that allows
+additional <<X100,backends>>, <<X58,filters>> and <<X99,themes>> to be
+added to AsciiDoc.
+
+- A plugin is a Zip file containing an AsciiDoc backend, filter or
+  theme (configuration files, stylesheets, scripts, images).
+- The asciidoc(1) `--backend`, `--filter` and `--theme` command-line
+  options are used to load and manage plugins. Each of these options
+  responds to the plugin management 'install', 'list', 'remove' and
+  'build' commands.
+- The plugin management command names are reserved and cannot be used
+  for filter, backend or theme names.
+- The plugin Zip file name always begins with the backend, filter or
+  theme name.
+
+Plugin commands and conventions are documented in the asciidoc(1) man
+page.  You can find lists of plugins on the
+{website}plugins.html[AsciiDoc website].
+
+
+[[X36]]
+Help Commands
+-------------
+The asciidoc(1) command has a `--help` option which prints help topics
+to stdout. The default topic summarizes asciidoc(1) usage:
+
+  $ asciidoc --help
+
+To print a help topic specify the topic name as a command argument.
+Help topic names can be shortened so long as they are not ambiguous.
+Examples:
+
+  $ asciidoc --help manpage
+  $ asciidoc -h m              # Short version of previous example.
+  $ asciidoc --help syntax
+  $ asciidoc -h s              # Short version of previous example.
+
+Customizing Help
+~~~~~~~~~~~~~~~~
+To change, delete or add your own help topics edit a help
+configuration file.  The help file name `help-<lang>.conf` is based on
+the setting of the `lang` attribute, it defaults to `help.conf`
+(English).  The <<X27,help file location>> will depend on whether you
+want the topics to apply to all users or just the current user.
+
+The help topic files have the same named section format as other
+<<X7,configuration files>>. The `help.conf` files are stored in the
+same locations and loaded in the same order as other configuration
+files.
+
+When the `--help` command-line option is specified AsciiDoc loads the
+appropriate help files and then prints the contents of the section
+whose name matches the help topic name.  If a topic name is not
+specified `default` is used. You don't need to specify the whole help
+topic name on the command-line, just enough letters to ensure it's not
+ambiguous. If a matching help file section is not found a list of
+available topics is printed.
+
+
+Tips and Tricks
+---------------
+
+Know Your Editor
+~~~~~~~~~~~~~~~~
+Writing AsciiDoc documents will be a whole lot more pleasant if you
+know your favorite text editor. Learn how to indent and reformat text
+blocks, paragraphs, lists and sentences. <<X20,Tips for 'vim' users>>
+follow.
+
+[[X20]]
+Vim Commands for Formatting AsciiDoc
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Text Wrap Paragraphs
+^^^^^^^^^^^^^^^^^^^^
+Use the vim `:gq` command to reformat paragraphs. Setting the
+'textwidth' sets the right text wrap margin; for example:
+
+  :set textwidth=70
+
+To reformat a paragraph:
+
+1. Position the cursor at the start of the paragraph.
+2. Type `gq}`.
+
+Execute `:help gq` command to read about the vim gq command.
+
+[TIP]
+=====================================================================
+- Assign the `gq}` command to the Q key with the `nnoremap Q gq}`
+  command or put it in your `~/.vimrc` file to so it's always
+  available (see the <<X61, Example `~/.vimrc` file>>).
+- Put `set` commands in your `~/.vimrc` file so you don't have to
+  enter them manually.
+- The Vim website (http://www.vim.org) has a wealth of resources,
+  including scripts for automated spell checking and ASCII Art
+  drawing.
+=====================================================================
+
+Format Lists
+^^^^^^^^^^^^
+The `gq` command can also be used to format bulleted, numbered and
+callout lists. First you need to set the `comments`, `formatoptions`
+and `formatlistpat` (see the <<X61, Example `~/.vimrc` file>>).
+
+Now you can format simple lists that use dash, asterisk, period and
+plus bullets along with numbered ordered lists:
+
+1. Position the cursor at the start of the list.
+2. Type `gq}`.
+
+Indent Paragraphs
+^^^^^^^^^^^^^^^^^
+Indent whole paragraphs by indenting the fist line with the desired
+indent and then executing the `gq}` command.
+
+[[X61]]
+Example `~/.vimrc` File
+^^^^^^^^^^^^^^^^^^^^^^^
+---------------------------------------------------------------------
+" Use bold bright fonts.
+set background=dark
+
+" Show tabs and trailing characters.
+"set listchars=tab:»·,trail:·,eol:¬
+set listchars=tab:»·,trail:·
+set list
+
+" Reformat paragraphs and list.
+nnoremap <Leader>r gq}
+
+" Delete trailing white space and Dos-returns and to expand tabs to spaces.
+nnoremap <Leader>t :set et<CR>:retab!<CR>:%s/[\r \t]\+$//<CR>
+
+autocmd BufRead,BufNewFile *.txt,*.asciidoc,README,TODO,CHANGELOG,NOTES,ABOUT
+        \ setlocal autoindent expandtab tabstop=8 softtabstop=2 shiftwidth=2 filetype=asciidoc
+        \ textwidth=70 wrap formatoptions=tcqn
+        \ formatlistpat=^\\s*\\d\\+\\.\\s\\+\\\\|^\\s*<\\d\\+>\\s\\+\\\\|^\\s*[a-zA-Z.]\\.\\s\\+\\\\|^\\s*[ivxIVX]\\+\\.\\s\\+
+        \ comments=s1:/*,ex:*/,://,b:#,:%,:XCOMM,fb:-,fb:*,fb:+,fb:.,fb:>
+---------------------------------------------------------------------
+
+Troubleshooting
+~~~~~~~~~~~~~~~
+AsciiDoc diagnostic features are detailed in the <<X82,Diagnostics
+appendix>>.
+
+Gotchas
+~~~~~~~
+Incorrect character encoding::
+    If you get an error message like `'UTF-8' codec can't decode ...`
+    then you source file contains invalid UTF-8 characters -- set the
+    AsciiDoc <<X54,encoding attribute>> for the correct character set
+    (typically ISO-8859-1 (Latin-1) for European languages).
+
+Invalid output::
+    AsciiDoc attempts to validate the input AsciiDoc source but makes
+    no attempt to validate the output markup, it leaves that to
+    external tools suc
