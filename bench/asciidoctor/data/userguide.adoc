@@ -5282,4 +5282,188 @@ Incorrect character encoding::
 Invalid output::
     AsciiDoc attempts to validate the input AsciiDoc source but makes
     no attempt to validate the output markup, it leaves that to
-    external tools suc
+    external tools such as `xmllint(1)` (integrated into `a2x(1)`).
+    Backend validation cannot be hardcoded into AsciiDoc because
+    backends are dynamically configured. The following example
+    generates valid HTML but invalid DocBook (the DocBook `literal`
+    element cannot contain an `emphasis` element):
+
+    +monospaced text with an _emphasized_ word+
+
+Misinterpreted text formatting::
+    You can suppress markup expansion by placing a backslash character
+    immediately in front of the element. The following example
+    suppresses inline monospaced formatting:
+
+    \+1 for C++.
+
+Overlapping text formatting::
+    Overlapping text formatting will generate illegal overlapping
+    markup tags which will result in downstream XML parsing errors.
+    Here's an example:
+
+    Some *strong markup _that overlaps* emphasized markup_.
+
+Ambiguous underlines::
+    A DelimitedBlock can immediately follow a paragraph without an
+    intervening blank line, but be careful, a single line paragraph
+    underline may be misinterpreted as a section title underline
+    resulting in a ``closing block delimiter expected'' error.
+
+Ambiguous ordered list items::
+    Lines beginning with numbers at the end of sentences will be
+    interpreted as ordered list items.  The following example
+    (incorrectly) begins a new list with item number 1999:
+
+    He was last sighted in
+    1999. Since then things have moved on.
++
+The 'list item out of sequence' warning makes it unlikely that this
+problem will go unnoticed.
+
+Special characters in attribute values::
+    Special character substitution precedes attribute substitution so
+    if attribute values contain special characters you may, depending
+    on the substitution context, need to escape the special characters
+    yourself. For example:
+
+    $ asciidoc -a 'orgname=Bill &amp; Ben Inc.' mydoc.txt
+
+Attribute lists::
+    If any named attribute entries are present then all string
+    attribute values must be quoted.  For example:
+
+    ["Desktop screenshot",width=32]
+
+[[X90]]
+Combining separate documents
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+You have a number of stand-alone AsciiDoc documents that you want to
+process as a single document. Simply processing them with a series of
+`include` macros won't work because the documents contain (level 0)
+document titles.  The solution is to create a top level wrapper
+document and use the `leveloffset` attribute to push them all down one
+level. For example:
+
+[listing]
+.....................................................................
+Combined Document Title
+=======================
+
+// Push titles down one level.
+:leveloffset: 1
+
+\include::document1.txt[]
+
+// Return to normal title levels.
+:leveloffset: 0
+
+A Top Level Section
+-------------------
+Lorum ipsum.
+
+// Push titles down one level.
+:leveloffset: 1
+
+\include::document2.txt[]
+
+\include::document3.txt[]
+.....................................................................
+
+The document titles in the included documents will now be processed as
+level 1 section titles, level 1 sections as level 2 sections and so
+on.
+
+- Put a blank line between the `include` macro lines to ensure the
+  title of the included document is not seen as part of the last
+  paragraph of the previous document.
+- You won't want non-title document header lines (for example, Author
+  and Revision lines) in the included files -- conditionally exclude
+  them if they are necessary for stand-alone processing.
+
+Processing document sections separately
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+You have divided your AsciiDoc document into separate files (one per
+top level section) which are combined and processed with the following
+top level document:
+
+---------------------------------------------------------------------
+Combined Document Title
+=======================
+Joe Bloggs
+v1.0, 12-Aug-03
+
+\include::section1.txt[]
+
+\include::section2.txt[]
+
+\include::section3.txt[]
+---------------------------------------------------------------------
+
+You also want to process the section files as separate documents.
+This is easy because asciidoc(1) will quite happily process
+`section1.txt`, `section2.txt` and `section3.txt` separately -- the
+resulting output documents contain the section but have no document
+title.
+
+Processing document snippets
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Use the `-s` (`--no-header-footer`) command-line option to suppress
+header and footer output, this is useful if the processed output is to
+be included in another file. For example:
+
+  $ asciidoc -sb docbook section1.txt
+
+asciidoc(1) can be used as a filter, so you can pipe chunks of text
+through it. For example:
+
+  $ echo 'Hello *World!*' | asciidoc -s -
+  <div class="paragraph"><p>Hello <strong>World!</strong></p></div>
+
+Badges in HTML page footers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+See the `[footer]` section in the AsciiDoc distribution `xhtml11.conf`
+configuration file.
+
+Pretty printing AsciiDoc output
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+If the indentation and layout of the asciidoc(1) output is not to your
+liking you can:
+
+1. Change the indentation and layout of configuration file markup
+   template sections. The `{empty}` attribute is useful for outputting
+   trailing blank lines in markup templates.
+
+2. Use Dave Raggett's http://tidy.sourceforge.net/[HTML Tidy] program
+   to tidy asciidoc(1) output. Example:
+
+   $ asciidoc -b docbook -o - mydoc.txt | tidy -indent -xml >mydoc.xml
+
+3. Use the `xmllint(1)` format option. Example:
+
+   $ xmllint --format mydoc.xml
+
+Supporting minor DocBook DTD variations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The conditional inclusion of DocBook SGML markup at the end of the
+distribution `docbook45.conf` file illustrates how to support minor
+DTD variations. The included sections override corresponding entries
+from preceding sections.
+
+Creating stand-alone HTML documents
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+If you've ever tried to send someone an HTML document that includes
+stylesheets and images you'll know that it's not as straight-forward
+as exchanging a single file.  AsciiDoc has options to create
+stand-alone documents containing embedded images, stylesheets and
+scripts.  The following AsciiDoc command creates a single file
+containing <<X66,embedded images>>, CSS stylesheets, and JavaScript
+(for table of contents and footnotes):
+
+  $ asciidoc -a data-uri -a icons -a toc -a max-width=55em article.txt
+
+You can view the HTML file here: {website}article-standalone.html[]
+
+Shipping stand-alone AsciiDoc source
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Reproducing presentati
