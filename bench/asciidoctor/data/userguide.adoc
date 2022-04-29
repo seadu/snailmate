@@ -5466,4 +5466,185 @@ You can view the HTML file here: {website}article-standalone.html[]
 
 Shipping stand-alone AsciiDoc source
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Reproducing presentati
+Reproducing presentation documents from someone else's source has one
+major problem: unless your configuration files are the same as the
+creator's you won't get the same output.
+
+The solution is to create a single backend specific configuration file
+using the asciidoc(1) `-c` (`--dump-conf`) command-line option. You
+then ship this file along with the AsciiDoc source document plus the
+`asciidoc.py` script. The only end user requirement is that they have
+Python installed (and that they consider you a trusted source). This
+example creates a composite HTML configuration file for `mydoc.txt`:
+
+  $ asciidoc -cb xhtml11 mydoc.txt > mydoc-xhtml11.conf
+
+Ship `mydoc.txt`, `mydoc-html.conf`, and `asciidoc.py`. With
+these three files (and a Python interpreter) the recipient can
+regenerate the HMTL output:
+
+  $ ./asciidoc.py -eb xhtml11 mydoc.txt
+
+The `-e` (`--no-conf`) option excludes the use of implicit
+configuration files, ensuring that only entries from the
+`mydoc-html.conf` configuration are used.
+
+Inserting blank space
+~~~~~~~~~~~~~~~~~~~~~
+Adjust your style sheets to add the correct separation between block
+elements. Inserting blank paragraphs containing a single non-breaking
+space character `{nbsp}` works but is an ad hoc solution compared
+to using style sheets.
+
+Closing open sections
+~~~~~~~~~~~~~~~~~~~~~
+You can close off section tags up to level `N` by calling the
+`eval::[Section.setlevel(N)]` system macro. This is useful if you
+want to include a section composed of raw markup. The following
+example includes a DocBook glossary division at the top section level
+(level 0):
+
+---------------------------------------------------------------------
+\ifdef::basebackend-docbook[]
+
+\eval::[Section.setlevel(0)]
+
++++++++++++++++++++++++++++++++
+<glossary>
+  <title>Glossary</title>
+  <glossdiv>
+  ...
+  </glossdiv>
+</glossary>
++++++++++++++++++++++++++++++++
+\endif::basebackend-docbook[]
+---------------------------------------------------------------------
+
+Validating output files
+~~~~~~~~~~~~~~~~~~~~~~~
+Use `xmllint(1)` to check the AsciiDoc generated markup is both well
+formed and valid. Here are some examples:
+
+  $ xmllint --nonet --noout --valid docbook-file.xml
+  $ xmllint --nonet --noout --valid xhtml11-file.html
+  $ xmllint --nonet --noout --valid --html html4-file.html
+
+The `--valid` option checks the file is valid against the document
+type's DTD, if the DTD is not installed in your system's catalog then
+it will be fetched from its Internet location. If you omit the
+`--valid` option the document will only be checked that it is well
+formed.
+
+The online http://validator.w3.org/#validate_by_uri+with_options[W3C
+Markup Validation Service] is the defacto standard when it comes to
+validating HTML (it validates all HTML standards including HTML5).
+
+
+:numbered!:
+
+[glossary]
+Glossary
+--------
+[glossary]
+[[X8]] Block element::
+    An AsciiDoc block element is a document entity composed of one or
+    more whole lines of text.
+
+[[X34]] Inline element::
+    AsciiDoc inline elements occur within block element textual
+    content, they perform formatting and substitution tasks.
+
+Formal element::
+    An AsciiDoc block element that has a BlockTitle. Formal elements
+    are normally listed in front or back matter, for example lists of
+    tables, examples and figures.
+
+Verbatim element::
+    The word verbatim indicates that white space and line breaks in
+    the source document are to be preserved in the output document.
+
+
+[appendix]
+Migration Notes
+---------------
+[[X53]]
+Version 7 to version 8
+~~~~~~~~~~~~~~~~~~~~~~
+- A new set of quotes has been introduced which may match inline text
+  in existing documents -- if they do you'll need to escape the
+  matched text with backslashes.
+- The index entry inline macro syntax has changed -- if your documents
+  include indexes you may need to edit them.
+- Replaced a2x(1) `--no-icons` and `--no-copy` options with their
+  negated equivalents: `--icons` and `--copy` respectively. The
+  default behavior has also changed -- the use of icons and copying of
+  icon and CSS files must be specified explicitly with the `--icons`
+  and `--copy` options.
+
+The rationale for the changes can be found in the AsciiDoc
+`CHANGELOG`.
+
+NOTE: If you want to disable unconstrained quotes, the new alternative
+constrained quotes syntax and the new index entry syntax then you can
+define the attribute `asciidoc7compatible` (for example by using the
+`-a asciidoc7compatible` command-line option).
+
+[[X38]]
+[appendix]
+Packager Notes
+--------------
+Read the `README` and `INSTALL` files (in the distribution root
+directory) for install prerequisites and procedures.  The distribution
+`Makefile.in` (used by `configure` to generate the `Makefile`) is the
+canonical installation procedure.
+
+
+[[X39]]
+[appendix]
+AsciiDoc Safe Mode
+-------------------
+AsciiDoc 'safe mode' skips potentially dangerous scripted sections in
+AsciiDoc source files by inhibiting the execution of arbitrary code or
+the inclusion of arbitrary files.
+
+The safe mode is disabled by default, it can be enabled with the
+asciidoc(1) `--safe` command-line option.
+
+.Safe mode constraints
+- `eval`, `sys` and `sys2` executable attributes and block macros are
+  not executed.
+- `include::<filename>[]` and `include1::<filename>[]` block macro
+  files must reside inside the parent file's directory.
+- `{include:<filename>}` executable attribute files must reside
+  inside the source document directory.
+- Passthrough Blocks are dropped.
+
+[WARNING]
+=====================================================================
+The safe mode is not designed to protect against unsafe AsciiDoc
+configuration files. Be especially careful when:
+
+1. Implementing filters.
+2. Implementing elements that don't escape special characters.
+3. Accepting configuration files from untrusted sources.
+=====================================================================
+
+
+[appendix]
+Using AsciiDoc with non-English Languages
+-----------------------------------------
+AsciiDoc can process UTF-8 character sets but there are some things
+you need to be aware of:
+
+- If you are generating output documents using a DocBook toolchain
+  then you should set the AsciiDoc `lang` attribute to the appropriate
+  language (it defaults to `en` (English)). This will ensure things
+  like table of contents, figure and table captions and admonition
+  captions are output in the specified language.  For example:
+
+  $ a2x -a lang=es doc/article.txt
+
+- If you are outputting HTML directly from asciidoc(1) you'll
+  need to set the various `*_caption` attributes to match your target
+  language (see the list of captions and titles in the `[attributes]`
+  section of the distribution `lang-*.conf` files). The easiest wa
