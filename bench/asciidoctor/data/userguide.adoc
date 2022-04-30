@@ -5854,4 +5854,162 @@ Embed images using the <<X66,data: uri scheme>>.
 
 |css-signature |html5, xhtml11 |
 Set a 'CSS signature' for the document (sets the 'id' attribute of the
-HTML 'body' element). CSS signatures p
+HTML 'body' element). CSS signatures provide a mechanism that allows
+users to personalize the document appearance. The term 'CSS signature'
+was http://archivist.incutio.com/viewlist/css-discuss/13291[coined by
+Eric Meyer].
+
+
+|disable-javascript |xhtml11, html5 |
+If the `disable-javascript` attribute is defined the `asciidoc.js`
+JavaScript is not embedded or linked to the output document.  By
+default AsciiDoc automatically embeds or links the `asciidoc.js`
+JavaScript to the output document. The script dynamically generates
+<<X91,table of contents>> and <<X92,footnotes>>.
+
+|[[X97]] docinfo, docinfo1, docinfo2 |All backends |
+These three attributes control which <<X87,document information
+files>> will be included in the the header of the output file:
+
+docinfo:: Include `<filename>-docinfo.<ext>`
+docinfo1:: Include `docinfo.<ext>`
+docinfo2:: Include `docinfo.<ext>` and `<filename>-docinfo.<ext>`
+
+Where `<filename>` is the file name (sans extension) of the AsciiDoc
+input file and `<ext>` is `.html` for HTML outputs or `.xml` for
+DocBook outputs. If the input file is the standard input then the
+output file name is used. The following example will include the
+`mydoc-docinfo.xml` docinfo file in the DocBook `mydoc.xml` output
+file:
+
+  $ asciidoc -a docinfo -b docbook mydoc.txt
+
+This next example will include `docinfo.html` and `mydoc-docinfo.html`
+docinfo files in the HTML output file:
+
+  $ asciidoc -a docinfo2 -b html4 mydoc.txt
+
+
+|[[X54]]encoding |html4, html5, xhtml11, docbook |
+Set the input and output document character set encoding. For example
+the `--attribute encoding=ISO-8859-1` command-line option will set the
+character set encoding to `ISO-8859-1`.
+
+- The default encoding is UTF-8.
+- This attribute specifies the character set in the output document.
+- The encoding name must correspond to a Python codec name or alias.
+- The 'encoding' attribute can be set using an AttributeEntry inside
+  the document header. For example:
+
+  :encoding: ISO-8859-1
+
+|hr |html4 |
+Defines the 'html4' inter-section horizontal ruler element. By default
+'html4' top level sections are separated by a horizontal ruler
+element, undefine this attribute or set it to an empty string if you
+do not want them. The default 'html4' backend value for the 'hr'
+attribute is `<hr>`.
+
+|[[X45]]icons |xhtml11, html5 |
+Link admonition paragraph and admonition block icon images and badge
+images. By default 'icons' is undefined and text is used in place of
+icon images.
+
+|[[X44]]iconsdir |html4, html5, xhtml11, docbook |
+The name of the directory containing linked admonition icons,
+navigation icons and the `callouts` sub-directory (the `callouts`
+sub-directory contains <<X105,callout>> number images). 'iconsdir'
+defaults to `./images/icons`.  If admonition icons are embedded using
+the <<X66,data-uri>> scheme then the 'iconsdir' attribute defaults to
+the location of the icons installed in the AsciiDoc configuration
+directory.
+
+|imagesdir |html4, html5, xhtml11, docbook |
+If this attribute is defined it is prepended to the target image file
+name paths in inline and block image macros.
+
+|keywords, description, title |html4, html5, xhtml11 |
+The 'keywords' and 'description' attributes set the correspondingly
+named HTML meta tag contents; the 'title' attribute sets the HTML
+title tag contents.  Their principle use is for SEO (Search Engine
+Optimisation).  All three are optional, but if they are used they must
+appear in the document header (or on the command-line). If 'title' is
+not specified the AsciiDoc document title is used.
+
+|linkcss |html5, xhtml11 |
+Link CSS stylesheets and JavaScripts. By default 'linkcss' is
+undefined in which case stylesheets and scripts are automatically
+embedded in the output document.
+
+|[[X103]]max-width |html5, xhtml11 |
+Set the document maximum display width (sets the 'body' element CSS
+'max-width' property).
+
+|numbered |html4, html5, xhtml11, docbook (XSL Stylesheets) |
+Adds section numbers to section titles. The 'docbook' backend ignores
+'numbered' attribute entries after the document header.
+
+|plaintext | All backends |
+If this global attribute is defined all inline substitutions are
+suppressed and block indents are retained.  This option is useful when
+dealing with large amounts of imported plain text.
+
+|quirks |xhtml11 |
+Include the `xhtml11-quirks.conf` configuration file and
+`xhtml11-quirks.css` <<X35,stylesheet>> to work around IE6 browser
+incompatibilities. This feature is deprecated and its use is
+discouraged -- documents are still viewable in IE6 without it.
+
+|revremark |docbook |
+A short summary of changes in this document revision. Must be defined
+prior to the first document section. The document also needs to be
+dated to output this attribute.
+
+|scriptsdir |html5, xhtml11 |
+The name of the directory containing linked JavaScripts.
+See <<X35,HTML stylesheets and JavaScript locations>>.
+
+|sgml |docbook45 |
+The `--backend=docbook45` command-line option produces DocBook 4.5
+XML.  You can produce the older DocBook SGML format using the
+`--attribute sgml` command-line option.
+
+|stylesdir |html5, xhtml11 |
+The name of the directory containing linked or embedded
+<<X35,stylesheets>>.
+See <<X35,HTML stylesheets and JavaScript locations>>.
+
+|stylesheet |html5, xhtml11 |
+The file name of an optional additional CSS <<X35,stylesheet>>.
+
+|theme |html5, xhtml11 |
+Use alternative stylesheet (see <<X35,Stylesheets>>).
+
+|[[X91]]toc |html5, xhtml11, docbook (XSL Stylesheets) |
+Adds a table of contents to the start of an article or book document.
+The `toc` attribute can be specified using the `--attribute toc`
+command-line option or a `:toc:` attribute entry in the document
+header. The 'toc' attribute is defined by default when the 'docbook'
+backend is used. To disable table of contents generation undefine the
+'toc' attribute by putting a `:toc!:` attribute entry in the document
+header or from the command-line with an `--attribute toc!` option.
+
+*xhtml11 and html5 backends*
+
+- JavaScript needs to be enabled in your browser.
+- The following example generates a numbered table of contents using a
+  JavaScript embedded in the `mydoc.html` output document:
+
+  $ asciidoc -a toc -a numbered mydoc.txt
+
+|toc2 |html5, xhtml11 |
+Adds a scrollable table of contents in the left hand margin of an
+article or book document. Use the 'max-width' attribute to change the
+content width. In all other respects behaves the same as the 'toc'
+attribute.
+
+|toc-placement |html5, xhtml11 |
+When set to 'auto' (the default value) asciidoc(1) will place the
+table of contents in the document header. When 'toc-placement' is set
+to 'manual' the TOC can be positioned anywhere in the document by
+placing the `toc::[]` block macro at t
