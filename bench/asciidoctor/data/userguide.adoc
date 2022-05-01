@@ -6012,4 +6012,35 @@ attribute.
 When set to 'auto' (the default value) asciidoc(1) will place the
 table of contents in the document header. When 'toc-placement' is set
 to 'manual' the TOC can be positioned anywhere in the document by
-placing the `toc::[]` block macro at t
+placing the `toc::[]` block macro at the point you want the TOC to
+appear.
+
+NOTE: If you use 'toc-placement' then you also have to define the
+<<X91,toc>> attribute.
+
+|toc-title |html5, xhtml11 |
+Sets the table of contents title (defaults to 'Table of Contents').
+
+|toclevels |html5, xhtml11 |
+Sets the number of title levels (1..4) reported in the table of
+contents (see the 'toc' attribute above). Defaults to 2 and must be
+used with the 'toc' attribute. Example usage:
+
+  $ asciidoc -a toc -a toclevels=3 doc/asciidoc.txt
+
+|====================================================================
+
+
+[appendix]
+License
+-------
+AsciiDoc is free software; you can redistribute it and/or modify it
+under the terms of the 'GNU General Public License version 2' (GPLv2)
+as published by the Free Software Foundation.
+
+AsciiDoc is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License version 2 for more details.
+
+Copyright (C) 2002-2011 Stuart Rackham.
