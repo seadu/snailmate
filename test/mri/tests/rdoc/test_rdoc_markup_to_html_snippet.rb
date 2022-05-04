@@ -549,4 +549,161 @@ This is some text, it *will* be cut off after 100 characters
     actual = @to.convert rdoc
 
     assert_equal expected, actual
-    assert_equal
+    assert_equal 113, @to.characters
+  end
+
+  def test_convert_limit_verbatim_2
+    rdoc = <<-RDOC
+Extracts the class, selector and method name parts from +name+ like
+Foo::Bar#baz.
+
+NOTE: Given Foo::Bar, Bar is considered a class even though it may be a
+      method
+    RDOC
+
+    expected = <<-EXPECTED
+<p>Extracts the class, selector and method name parts from <code>name</code> like Foo::Bar#baz.
+<p>NOTE: Given Foo::Bar, #{@ellipsis}
+    EXPECTED
+
+    actual = @to.convert rdoc
+
+    assert_equal expected, actual
+    assert_equal 101, @to.characters
+  end
+
+  def test_convert_limit_verbatim_multiline
+    rdoc = <<-RDOC
+Look for directives in a normal comment block:
+
+  # :stopdoc:
+  # Don't display comment from this point forward
+
+This routine modifies its +comment+ parameter.
+    RDOC
+
+    inner = CGI.escapeHTML "# Don't display comment from this point forward"
+    expected = <<-EXPECTED
+<p>Look for directives in a normal comment block:
+
+<pre class=\"ruby\"><span class=\"ruby-comment\"># :stopdoc:</span>
+<span class=\"ruby-comment\">#{inner}</span>
+</pre>
+    EXPECTED
+
+    actual = @to.convert rdoc
+
+    assert_equal expected, actual
+    assert_equal 105, @to.characters
+  end
+
+  def test_convert_limit_over
+    @to = RDoc::Markup::ToHtmlSnippet.new @options, 4
+    rdoc = "* text\n" * 2
+
+    expected = "<p>text\n"
+    expected = expected.chomp
+    expected << " #{@ellipsis}\n"
+
+    actual = @to.convert rdoc
+
+    assert_equal 4, @to.characters
+    assert_equal expected, actual
+  end
+
+  def test_convert_string
+    assert_equal '&lt;&gt;', @to.convert_string('<>')
+  end
+
+  def test_convert_RDOCLINK_label_label
+    result = @to.convert 'rdoc-label:label-One'
+
+    assert_equal "<p>One\n", result
+    assert_equal 3, @to.characters
+  end
+
+  def test_convert_RDOCLINK_label_foottext
+    result = @to.convert 'rdoc-label:foottext-1'
+
+    assert_equal "<p>1\n", result
+    assert_equal 1, @to.characters
+  end
+
+  def test_convert_RDOCLINK_label_footmark
+    result = @to.convert 'rdoc-label:footmark-1'
+
+    assert_equal "<p>1\n", result
+    assert_equal 1, @to.characters
+  end
+
+  def test_convert_RDOCLINK_ref
+    result = @to.convert 'rdoc-ref:C'
+
+    assert_equal "<p>C\n", result
+    assert_equal 1, @to.characters
+  end
+
+  def test_convert_TIDYLINK_rdoc_label
+    result = @to.convert '{foo}[rdoc-label:foottext-1]'
+
+    assert_equal "<p>foo\n", result
+    assert_equal 3, @to.characters
+  end
+
+  def test_handle_regexp_HYPERLINK_link
+    target = RDoc::Markup::RegexpHandling.new 0, 'link:README.txt'
+
+    link = @to.handle_regexp_HYPERLINK target
+
+    assert_equal 'README.txt', link
+  end
+
+  def test_list_verbatim_2
+    str = "* one\n    verb1\n    verb2\n* two\n"
+
+    expected = <<-EXPECTED
+<p>one
+
+<pre class=\"ruby\"><span class=\"ruby-identifier\">verb1</span>
+<span class=\"ruby-identifier\">verb2</span>
+</pre>
+<p>two
+
+    EXPECTED
+
+    assert_equal expected, @m.convert(str, @to)
+    assert_equal 17, @to.characters
+  end
+
+  def test_on_tags
+    on = RDoc::Markup::AttrChanger.new 2, 0
+
+    @to.on_tags [], on
+
+    assert_equal 2, @to.mask
+  end
+
+  def test_off_tags
+    on  = RDoc::Markup::AttrChanger.new 2, 0
+    off = RDoc::Markup::AttrChanger.new 0, 2
+
+    @to.on_tags  [], on
+    @to.off_tags [], off
+
+    assert_equal 0, @to.mask
+  end
+
+  def test_to_html
+    assert_equal "<p><code>--</code>\n", util_format("<tt>--</tt>")
+    assert_equal 2, @to.characters
+  end
+
+  def util_format text
+    paragraph = RDoc::Markup::Paragraph.new text
+
+    @to.start_accepting
+    @to.accept_paragraph paragraph
+    @to.end_accepting
+  end
+
+end
