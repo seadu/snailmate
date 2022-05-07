@@ -1,0 +1,8 @@
+slow:Net::FTP#login when passed no arguments sends the USER command with 'anonymous' as name to the server
+slow:Net::FTP#login when passed no arguments sends 'anonymous@' as a password when required
+slow:Net::FTP#login when passed no arguments raises a Net::FTPReplyError when the server requests an account
+slow:Net::FTP#login when passed name sends the USER command with the passed name to the server
+slow:Net::FTP#login when passed name raises a Net::FTPReplyError when the server requests a password, but none was given
+slow:Net::FTP#login when passed name raises a Net::FTPReplyError when the server requests an account, but none was given
+slow:Net::FTP#login when passed name, password sends the USER command with the passed name to the server
+slow:Net::FTP#login when passed name, password sen

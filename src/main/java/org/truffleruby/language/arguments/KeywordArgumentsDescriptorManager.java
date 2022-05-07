@@ -21,4 +21,43 @@ public class KeywordArgumentsDescriptorManager {
 
     private final WeakValueCache<Key, KeywordArgumentsDescriptor> CANONICAL_KEYWORD_DESCRIPTORS = new WeakValueCache<>();
 
-    public
+    public KeywordArgumentsDescriptorManager() {
+        CANONICAL_KEYWORD_DESCRIPTORS.put(new Key(StringUtils.EMPTY_STRING_ARRAY), EMPTY);
+    }
+
+    public KeywordArgumentsDescriptor getArgumentsDescriptor(String[] keywords) {
+        final Key key = new Key(keywords);
+        final KeywordArgumentsDescriptor descriptor = new KeywordArgumentsDescriptor(keywords);
+        return CANONICAL_KEYWORD_DESCRIPTORS.addInCacheIfAbsent(key, descriptor);
+    }
+
+    public static class Key {
+
+        private final String[] keywords;
+
+        public Key(String[] keywords) {
+            this.keywords = keywords;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (other == this) {
+                return true;
+            }
+
+            if (other == null || other.getClass() != getClass()) {
+                return false;
+            }
+
+            final Key otherKey = (Key) other;
+            return Arrays.equals(keywords, otherKey.keywords);
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.hashCode(keywords);
+        }
+
+    }
+
+}
