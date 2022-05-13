@@ -520,4 +520,518 @@ class TestIO < Test::Unit::TestCase
       }
 
       assert_raise(Errno::ENOENT) {
-        IO.
+        IO.copy_stream(src, "nodir/bar")
+      }
+    }
+  end
+
+  def test_copy_stream_pipe
+    with_srccontent {|src, content|
+      pipe(proc do |w|
+        ret = IO.copy_stream(src, w)
+        assert_equal(content.bytesize, ret)
+        w.close
+      end, proc do |r|
+        assert_equal(content, r.read)
+      end)
+    }
+  end
+
+  def test_copy_stream_write_pipe
+    with_srccontent {|src, content|
+      with_pipe {|r, w|
+        w.close
+        assert_raise(IOError) { IO.copy_stream(src, w) }
+      }
+    }
+  end
+
+  def with_pipecontent
+    mkcdtmpdir {
+      yield "abc"
+    }
+  end
+
+  def test_copy_stream_pipe_to_file
+    with_pipecontent {|pipe_content|
+      dst = "dst"
+      with_read_pipe(pipe_content) {|r|
+        ret = IO.copy_stream(r, dst)
+        assert_equal(pipe_content.bytesize, ret)
+        assert_equal(pipe_content, File.read(dst))
+      }
+    }
+  end
+
+  def test_copy_stream_read_pipe
+    with_pipecontent {|pipe_content|
+      with_read_pipe(pipe_content) {|r1|
+        assert_equal("a", r1.getc)
+        pipe(proc do |w2|
+          w2.sync = false
+          w2 << "def"
+          ret = IO.copy_stream(r1, w2)
+          assert_equal(2, ret)
+          w2.close
+        end, proc do |r2|
+          assert_equal("defbc", r2.read)
+        end)
+      }
+
+      with_read_pipe(pipe_content) {|r1|
+        assert_equal("a", r1.getc)
+        pipe(proc do |w2|
+          w2.sync = false
+          w2 << "def"
+          ret = IO.copy_stream(r1, w2, 1)
+          assert_equal(1, ret)
+          w2.close
+        end, proc do |r2|
+          assert_equal("defb", r2.read)
+        end)
+      }
+
+      with_read_pipe(pipe_content) {|r1|
+        assert_equal("a", r1.getc)
+        pipe(proc do |w2|
+          ret = IO.copy_stream(r1, w2)
+          assert_equal(2, ret)
+          w2.close
+        end, proc do |r2|
+          assert_equal("bc", r2.read)
+        end)
+      }
+
+      with_read_pipe(pipe_content) {|r1|
+        assert_equal("a", r1.getc)
+        pipe(proc do |w2|
+          ret = IO.copy_stream(r1, w2, 1)
+          assert_equal(1, ret)
+          w2.close
+        end, proc do |r2|
+          assert_equal("b", r2.read)
+        end)
+      }
+
+      with_read_pipe(pipe_content) {|r1|
+        assert_equal("a", r1.getc)
+        pipe(proc do |w2|
+          ret = IO.copy_stream(r1, w2, 0)
+          assert_equal(0, ret)
+          w2.close
+        end, proc do |r2|
+          assert_equal("", r2.read)
+        end)
+      }
+
+      pipe(proc do |w1|
+        w1 << "abc"
+        w1 << "def"
+        w1.close
+      end, proc do |r1|
+        assert_equal("a", r1.getc)
+        pipe(proc do |w2|
+          ret = IO.copy_stream(r1, w2)
+          assert_equal(5, ret)
+          w2.close
+        end, proc do |r2|
+          assert_equal("bcdef", r2.read)
+        end)
+      end)
+    }
+  end
+
+  def test_copy_stream_file_to_pipe
+    with_srccontent {|src, content|
+      pipe(proc do |w|
+        ret = IO.copy_stream(src, w, 1, 1)
+        assert_equal(1, ret)
+        w.close
+      end, proc do |r|
+        assert_equal(content[1,1], r.read)
+      end)
+    }
+  end
+
+  if have_nonblock?
+    def test_copy_stream_no_busy_wait
+      skip "MJIT has busy wait on GC. This sometimes fails with --jit." if defined?(RubyVM::MJIT) && RubyVM::MJIT.enabled?
+      skip "multiple threads already active" if Thread.list.size > 1
+
+      msg = 'r58534 [ruby-core:80969] [Backport #13533]'
+      IO.pipe do |r,w|
+        r.nonblock = true
+        assert_cpu_usage_low(msg, stop: ->{w.close}) do
+          IO.copy_stream(r, IO::NULL)
+        end
+      end
+    end
+
+    def test_copy_stream_pipe_nonblock
+      mkcdtmpdir {
+        with_read_pipe("abc") {|r1|
+          assert_equal("a", r1.getc)
+          with_pipe {|r2, w2|
+            begin
+              w2.nonblock = true
+            rescue Errno::EBADF
+              skip "nonblocking IO for pipe is not implemented"
+            end
+            s = w2.syswrite("a" * 100000)
+            t = Thread.new { sleep 0.1; r2.read }
+            ret = IO.copy_stream(r1, w2)
+            w2.close
+            assert_equal(2, ret)
+            assert_equal("a" * s + "bc", t.value)
+          }
+        }
+      }
+    end
+  end
+
+  def with_bigcontent
+    yield "abc" * 123456
+  end
+
+  def with_bigsrc
+    mkcdtmpdir {
+      with_bigcontent {|bigcontent|
+        bigsrc = "bigsrc"
+        File.open("bigsrc", "w") {|f| f << bigcontent }
+        yield bigsrc, bigcontent
+      }
+    }
+  end
+
+  def test_copy_stream_bigcontent
+    with_bigsrc {|bigsrc, bigcontent|
+      ret = IO.copy_stream(bigsrc, "bigdst")
+      assert_equal(bigcontent.bytesize, ret)
+      assert_equal(bigcontent, File.read("bigdst"))
+    }
+  end
+
+  def test_copy_stream_bigcontent_chop
+    with_bigsrc {|bigsrc, bigcontent|
+      ret = IO.copy_stream(bigsrc, "bigdst", nil, 100)
+      assert_equal(bigcontent.bytesize-100, ret)
+      assert_equal(bigcontent[100..-1], File.read("bigdst"))
+    }
+  end
+
+  def test_copy_stream_bigcontent_mid
+    with_bigsrc {|bigsrc, bigcontent|
+      ret = IO.copy_stream(bigsrc, "bigdst", 30000, 100)
+      assert_equal(30000, ret)
+      assert_equal(bigcontent[100, 30000], File.read("bigdst"))
+    }
+  end
+
+  def test_copy_stream_bigcontent_fpos
+    with_bigsrc {|bigsrc, bigcontent|
+      File.open(bigsrc) {|f|
+        begin
+          assert_equal(0, f.pos)
+          ret = IO.copy_stream(f, "bigdst", nil, 10)
+          assert_equal(bigcontent.bytesize-10, ret)
+          assert_equal(bigcontent[10..-1], File.read("bigdst"))
+          assert_equal(0, f.pos)
+          ret = IO.copy_stream(f, "bigdst", 40, 30)
+          assert_equal(40, ret)
+          assert_equal(bigcontent[30, 40], File.read("bigdst"))
+          assert_equal(0, f.pos)
+        rescue NotImplementedError
+          #skip "pread(2) is not implemented."
+        end
+      }
+    }
+  end
+
+  def test_copy_stream_closed_pipe
+    with_srccontent {|src,|
+      with_pipe {|r, w|
+        w.close
+        assert_raise(IOError) { IO.copy_stream(src, w) }
+      }
+    }
+  end
+
+  def with_megacontent
+    yield "abc" * 1234567
+  end
+
+  def with_megasrc
+    mkcdtmpdir {
+      with_megacontent {|megacontent|
+        megasrc = "megasrc"
+        File.open(megasrc, "w") {|f| f << megacontent }
+        yield megasrc, megacontent
+      }
+    }
+  end
+
+  if have_nonblock?
+    def test_copy_stream_megacontent_nonblock
+      with_megacontent {|megacontent|
+        with_pipe {|r1, w1|
+          with_pipe {|r2, w2|
+            begin
+              r1.nonblock = true
+              w2.nonblock = true
+            rescue Errno::EBADF
+              skip "nonblocking IO for pipe is not implemented"
+            end
+            t1 = Thread.new { w1 << megacontent; w1.close }
+            t2 = Thread.new { r2.read }
+            t3 = Thread.new {
+              ret = IO.copy_stream(r1, w2)
+              assert_equal(megacontent.bytesize, ret)
+              w2.close
+            }
+            _, t2_value, _ = assert_join_threads([t1, t2, t3])
+            assert_equal(megacontent, t2_value)
+          }
+        }
+      }
+    end
+  end
+
+  def test_copy_stream_megacontent_pipe_to_file
+    with_megasrc {|megasrc, megacontent|
+      with_pipe {|r1, w1|
+        with_pipe {|r2, w2|
+          t1 = Thread.new { w1 << megacontent; w1.close }
+          t2 = Thread.new { r2.read }
+          t3 = Thread.new {
+            ret = IO.copy_stream(r1, w2)
+            assert_equal(megacontent.bytesize, ret)
+            w2.close
+          }
+          _, t2_value, _ = assert_join_threads([t1, t2, t3])
+          assert_equal(megacontent, t2_value)
+        }
+      }
+    }
+  end
+
+  def test_copy_stream_megacontent_file_to_pipe
+    with_megasrc {|megasrc, megacontent|
+      with_pipe {|r, w|
+        t1 = Thread.new { r.read }
+        t2 = Thread.new {
+          ret = IO.copy_stream(megasrc, w)
+          assert_equal(megacontent.bytesize, ret)
+          w.close
+        }
+        t1_value, _ = assert_join_threads([t1, t2])
+        assert_equal(megacontent, t1_value)
+      }
+    }
+  end
+
+  def test_copy_stream_rbuf
+    mkcdtmpdir {
+      begin
+        pipe(proc do |w|
+          File.open("foo", "w") {|f| f << "abcd" }
+          File.open("foo") {|f|
+            f.read(1)
+            assert_equal(3, IO.copy_stream(f, w, 10, 1))
+          }
+          w.close
+        end, proc do |r|
+          assert_equal("bcd", r.read)
+        end)
+      rescue NotImplementedError
+        skip "pread(2) is not implemtented."
+      end
+    }
+  end
+
+  def with_socketpair
+    s1, s2 = UNIXSocket.pair
+    begin
+      yield s1, s2
+    ensure
+      s1.close unless s1.closed?
+      s2.close unless s2.closed?
+    end
+  end
+
+  def test_copy_stream_socket1
+    with_srccontent("foobar") {|src, content|
+      with_socketpair {|s1, s2|
+        ret = IO.copy_stream(src, s1)
+        assert_equal(content.bytesize, ret)
+        s1.close
+        assert_equal(content, s2.read)
+      }
+    }
+  end if defined? UNIXSocket
+
+  def test_copy_stream_socket2
+    with_bigsrc {|bigsrc, bigcontent|
+      with_socketpair {|s1, s2|
+        t1 = Thread.new { s2.read }
+        t2 = Thread.new {
+          ret = IO.copy_stream(bigsrc, s1)
+          assert_equal(bigcontent.bytesize, ret)
+          s1.close
+        }
+        result, _ = assert_join_threads([t1, t2])
+        assert_equal(bigcontent, result)
+      }
+    }
+  end if defined? UNIXSocket
+
+  def test_copy_stream_socket3
+    with_bigsrc {|bigsrc, bigcontent|
+      with_socketpair {|s1, s2|
+        t1 = Thread.new { s2.read }
+        t2 = Thread.new {
+          ret = IO.copy_stream(bigsrc, s1, 10000)
+          assert_equal(10000, ret)
+          s1.close
+        }
+        result, _ = assert_join_threads([t1, t2])
+        assert_equal(bigcontent[0,10000], result)
+      }
+    }
+  end if defined? UNIXSocket
+
+  def test_copy_stream_socket4
+    with_bigsrc {|bigsrc, bigcontent|
+      File.open(bigsrc) {|f|
+        assert_equal(0, f.pos)
+        with_socketpair {|s1, s2|
+          t1 = Thread.new { s2.read }
+          t2 = Thread.new {
+            ret = IO.copy_stream(f, s1, nil, 100)
+            assert_equal(bigcontent.bytesize-100, ret)
+            assert_equal(0, f.pos)
+            s1.close
+          }
+          result, _ = assert_join_threads([t1, t2])
+          assert_equal(bigcontent[100..-1], result)
+        }
+      }
+    }
+  end if defined? UNIXSocket
+
+  def test_copy_stream_socket5
+    with_bigsrc {|bigsrc, bigcontent|
+      File.open(bigsrc) {|f|
+        assert_equal(bigcontent[0,100], f.read(100))
+        assert_equal(100, f.pos)
+        with_socketpair {|s1, s2|
+          t1 = Thread.new { s2.read }
+          t2 = Thread.new {
+            ret = IO.copy_stream(f, s1)
+            assert_equal(bigcontent.bytesize-100, ret)
+            assert_equal(bigcontent.length, f.pos)
+            s1.close
+          }
+          result, _ = assert_join_threads([t1, t2])
+          assert_equal(bigcontent[100..-1], result)
+        }
+      }
+    }
+  end if defined? UNIXSocket
+
+  def test_copy_stream_socket6
+    mkcdtmpdir {
+      megacontent = "abc" * 1234567
+      File.open("megasrc", "w") {|f| f << megacontent }
+
+      with_socketpair {|s1, s2|
+        begin
+          s1.nonblock = true
+        rescue Errno::EBADF
+          skip "nonblocking IO for pipe is not implemented"
+        end
+        t1 = Thread.new { s2.read }
+        t2 = Thread.new {
+          ret = IO.copy_stream("megasrc", s1)
+          assert_equal(megacontent.bytesize, ret)
+          s1.close
+        }
+        result, _ = assert_join_threads([t1, t2])
+        assert_equal(megacontent, result)
+      }
+    }
+  end if defined? UNIXSocket
+
+  def test_copy_stream_socket7
+    GC.start
+    mkcdtmpdir {
+      megacontent = "abc" * 1234567
+      File.open("megasrc", "w") {|f| f << megacontent }
+
+      with_socketpair {|s1, s2|
+        begin
+          s1.nonblock = true
+        rescue Errno::EBADF
+          skip "nonblocking IO for pipe is not implemented"
+        end
+        trapping_usr2 do |rd|
+          nr = 30
+          begin
+            pid = fork do
+              s1.close
+              IO.select([s2])
+              Process.kill(:USR2, Process.ppid)
+              buf = String.new(capacity: 16384)
+              nil while s2.read(16384, buf)
+            end
+            s2.close
+            nr.times do
+              assert_equal megacontent.bytesize, IO.copy_stream("megasrc", s1)
+            end
+            assert_equal(1, rd.read(4).unpack1('L'))
+          ensure
+            s1.close
+            _, status = Process.waitpid2(pid) if pid
+          end
+          assert_predicate(status, :success?)
+        end
+      }
+    }
+  end if defined? UNIXSocket and IO.method_defined?("nonblock=")
+
+  def test_copy_stream_strio
+    src = StringIO.new("abcd")
+    dst = StringIO.new
+    ret = IO.copy_stream(src, dst)
+    assert_equal(4, ret)
+    assert_equal("abcd", dst.string)
+    assert_equal(4, src.pos)
+  end
+
+  def test_copy_stream_strio_len
+    src = StringIO.new("abcd")
+    dst = StringIO.new
+    ret = IO.copy_stream(src, dst, 3)
+    assert_equal(3, ret)
+    assert_equal("abc", dst.string)
+    assert_equal(3, src.pos)
+  end
+
+  def test_copy_stream_strio_off
+    src = StringIO.new("abcd")
+    with_pipe {|r, w|
+      assert_raise(ArgumentError) {
+        IO.copy_stream(src, w, 3, 1)
+      }
+    }
+  end
+
+  def test_copy_stream_fname_to_strio
+    mkcdtmpdir {
+      File.open("foo", "w") {|f| f << "abcd" }
+      src = "foo"
+      dst = StringIO.new
+      ret = IO.copy_stream(src, dst, 3)
+      assert_equal(3, ret)
+      assert_equal("abc", dst.string)
+    }
+  end
