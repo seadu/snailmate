@@ -1035,3 +1035,277 @@ class TestIO < Test::Unit::TestCase
       assert_equal("abc", dst.string)
     }
   end
+
+  def test_copy_stream_strio_to_fname
+    mkcdtmpdir {
+      # StringIO to filename
+      src = StringIO.new("abcd")
+      ret = IO.copy_stream(src, "fooo", 3)
+      assert_equal(3, ret)
+      assert_equal("abc", File.read("fooo"))
+      assert_equal(3, src.pos)
+    }
+  end
+
+  def test_copy_stream_io_to_strio
+    mkcdtmpdir {
+      # IO to StringIO
+      File.open("bar", "w") {|f| f << "abcd" }
+      File.open("bar") {|src|
+        dst = StringIO.new
+        ret = IO.copy_stream(src, dst, 3)
+        assert_equal(3, ret)
+        assert_equal("abc", dst.string)
+        assert_equal(3, src.pos)
+      }
+    }
+  end
+
+  def test_copy_stream_strio_to_io
+    mkcdtmpdir {
+      # StringIO to IO
+      src = StringIO.new("abcd")
+      ret = File.open("baz", "w") {|dst|
+        IO.copy_stream(src, dst, 3)
+      }
+      assert_equal(3, ret)
+      assert_equal("abc", File.read("baz"))
+      assert_equal(3, src.pos)
+    }
+  end
+
+  def test_copy_stream_strio_to_tempfile
+    bug11015 = '[ruby-core:68676] [Bug #11015]'
+    # StringIO to Tempfile
+    src = StringIO.new("abcd")
+    dst = Tempfile.new("baz")
+    ret = IO.copy_stream(src, dst)
+    assert_equal(4, ret)
+    pos = dst.pos
+    dst.rewind
+    assert_equal("abcd", dst.read)
+    assert_equal(4, pos, bug11015)
+  ensure
+    dst.close!
+  end
+
+  def test_copy_stream_pathname_to_pathname
+    bug11199 = '[ruby-dev:49008] [Bug #11199]'
+    mkcdtmpdir {
+      File.open("src", "w") {|f| f << "ok" }
+      src = Pathname.new("src")
+      dst = Pathname.new("dst")
+      IO.copy_stream(src, dst)
+      assert_equal("ok", IO.read("dst"), bug11199)
+    }
+  end
+
+  def test_copy_stream_write_in_binmode
+    bug8767 = '[ruby-core:56518] [Bug #8767]'
+    mkcdtmpdir {
+      EnvUtil.with_default_internal(Encoding::UTF_8) do
+        # StringIO to object with to_path
+        bytes = "\xDE\xAD\xBE\xEF".force_encoding(Encoding::ASCII_8BIT)
+        src = StringIO.new(bytes)
+        dst = Object.new
+        def dst.to_path
+          "qux"
+        end
+        assert_nothing_raised(bug8767) {
+          IO.copy_stream(src, dst)
+        }
+        assert_equal(bytes, File.binread("qux"), bug8767)
+        assert_equal(4, src.pos, bug8767)
+      end
+    }
+  end
+
+  def test_copy_stream_read_in_binmode
+    bug8767 = '[ruby-core:56518] [Bug #8767]'
+    mkcdtmpdir {
+      EnvUtil.with_default_internal(Encoding::UTF_8) do
+        # StringIO to object with to_path
+        bytes = "\xDE\xAD\xBE\xEF".force_encoding(Encoding::ASCII_8BIT)
+        File.binwrite("qux", bytes)
+        dst = StringIO.new
+        src = Object.new
+        def src.to_path
+          "qux"
+        end
+        assert_nothing_raised(bug8767) {
+          IO.copy_stream(src, dst)
+        }
+        assert_equal(bytes, dst.string.b, bug8767)
+        assert_equal(4, dst.pos, bug8767)
+      end
+    }
+  end
+
+  class Rot13IO
+    def initialize(io)
+      @io = io
+    end
+
+    def readpartial(*args)
+      ret = @io.readpartial(*args)
+      ret.tr!('a-zA-Z', 'n-za-mN-ZA-M')
+      ret
+    end
+
+    def write(str)
+      @io.write(str.tr('a-zA-Z', 'n-za-mN-ZA-M'))
+    end
+
+    def to_io
+      @io
+    end
+  end
+
+  def test_copy_stream_io_to_rot13
+    mkcdtmpdir {
+      File.open("bar", "w") {|f| f << "vex" }
+      File.open("bar") {|src|
+        File.open("baz", "w") {|dst0|
+          dst = Rot13IO.new(dst0)
+          ret = IO.copy_stream(src, dst, 3)
+          assert_equal(3, ret)
+        }
+        assert_equal("irk", File.read("baz"))
+      }
+    }
+  end
+
+  def test_copy_stream_rot13_to_io
+    mkcdtmpdir {
+      File.open("bar", "w") {|f| f << "flap" }
+      File.open("bar") {|src0|
+        src = Rot13IO.new(src0)
+        File.open("baz", "w") {|dst|
+          ret = IO.copy_stream(src, dst, 4)
+          assert_equal(4, ret)
+        }
+      }
+      assert_equal("sync", File.read("baz"))
+    }
+  end
+
+  def test_copy_stream_rot13_to_rot13
+    mkcdtmpdir {
+      File.open("bar", "w") {|f| f << "bin" }
+      File.open("bar") {|src0|
+        src = Rot13IO.new(src0)
+        File.open("baz", "w") {|dst0|
+          dst = Rot13IO.new(dst0)
+          ret = IO.copy_stream(src, dst, 3)
+          assert_equal(3, ret)
+        }
+      }
+      assert_equal("bin", File.read("baz"))
+    }
+  end
+
+  def test_copy_stream_strio_flush
+    with_pipe {|r, w|
+      w.sync = false
+      w.write "zz"
+      src = StringIO.new("abcd")
+      IO.copy_stream(src, w)
+      t1 = Thread.new {
+        w.close
+      }
+      t2 = Thread.new { r.read }
+      _, result = assert_join_threads([t1, t2])
+      assert_equal("zzabcd", result)
+    }
+  end
+
+  def test_copy_stream_strio_rbuf
+    pipe(proc do |w|
+      w << "abcd"
+      w.close
+    end, proc do |r|
+      assert_equal("a", r.read(1))
+      sio = StringIO.new
+      IO.copy_stream(r, sio)
+      assert_equal("bcd", sio.string)
+    end)
+  end
+
+  def test_copy_stream_src_wbuf
+    mkcdtmpdir {
+      pipe(proc do |w|
+        File.open("foe", "w+") {|f|
+          f.write "abcd\n"
+          f.rewind
+          f.write "xy"
+          IO.copy_stream(f, w)
+        }
+        assert_equal("xycd\n", File.read("foe"))
+        w.close
+      end, proc do |r|
+        assert_equal("cd\n", r.read)
+        r.close
+      end)
+    }
+  end
+
+  class Bug5237
+    attr_reader :count
+    def initialize
+      @count = 0
+    end
+
+    def read(bytes, buffer)
+      @count += 1
+      buffer.replace "this is a test"
+      nil
+    end
+  end
+
+  def test_copy_stream_broken_src_read_eof
+    src = Bug5237.new
+    dst = StringIO.new
+    assert_equal 0, src.count
+    th = Thread.new { IO.copy_stream(src, dst) }
+    flunk("timeout") unless th.join(10)
+    assert_equal 1, src.count
+  end
+
+  def test_copy_stream_dst_rbuf
+    mkcdtmpdir {
+      pipe(proc do |w|
+        w << "xyz"
+        w.close
+      end, proc do |r|
+        File.open("fom", "w+b") {|f|
+          f.write "abcd\n"
+          f.rewind
+          assert_equal("abc", f.read(3))
+          f.ungetc "c"
+          IO.copy_stream(r, f)
+        }
+        assert_equal("abxyz", File.read("fom"))
+      end)
+    }
+  end
+
+  def test_copy_stream_to_duplex_io
+    result = IO.pipe {|a,w|
+      th = Thread.start {w.puts "yes"; w.close}
+      IO.popen([EnvUtil.rubybin, '-pe$_="#$.:#$_"'], "r+") {|b|
+        IO.copy_stream(a, b)
+        b.close_write
+        assert_join_threads([th])
+        b.read
+      }
+    }
+    assert_equal("1:yes\n", result)
+  end
+
+  def ruby(*args)
+    args = ['-e', '$>.write($<.read)'] if args.empty?
+    ruby = EnvUtil.rubybin
+    opts = {}
+    if defined?(Process::RLIMIT_NPROC)
+      lim = Process.getrlimit(Process::RLIMIT_NPROC)[1]
+      opts[:rlimit_nproc] = [li
