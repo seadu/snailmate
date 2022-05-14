@@ -1610,4 +1610,284 @@ class TestIO < Test::Unit::TestCase
     with_pipe {|r, w|
       begin
         r.read_nonblock 4096
-      rescue 
+      rescue Errno::EWOULDBLOCK
+        assert_kind_of(IO::WaitReadable, $!)
+      end
+    }
+
+    with_pipe {|r, w|
+      begin
+        r.read_nonblock 4096, ""
+      rescue Errno::EWOULDBLOCK
+        assert_kind_of(IO::WaitReadable, $!)
+      end
+    }
+  end if have_nonblock?
+
+  def test_read_nonblock_invalid_exception
+    with_pipe {|r, w|
+      assert_raise(ArgumentError) {r.read_nonblock(4096, exception: 1)}
+    }
+  end if have_nonblock?
+
+  def test_read_nonblock_no_exceptions
+    skip '[ruby-core:90895] MJIT worker may leave fd open in a forked child' if defined?(RubyVM::MJIT) && RubyVM::MJIT.enabled? # TODO: consider acquiring GVL from MJIT worker.
+    with_pipe {|r, w|
+      assert_equal :wait_readable, r.read_nonblock(4096, exception: false)
+      w.puts "HI!"
+      assert_equal "HI!\n", r.read_nonblock(4096, exception: false)
+      w.close
+      assert_equal nil, r.read_nonblock(4096, exception: false)
+    }
+  end if have_nonblock?
+
+  def test_read_nonblock_with_buffer_no_exceptions
+    with_pipe {|r, w|
+      assert_equal :wait_readable, r.read_nonblock(4096, "", exception: false)
+      w.puts "HI!"
+      buf = "buf"
+      value = r.read_nonblock(4096, buf, exception: false)
+      assert_equal value, "HI!\n"
+      assert_same(buf, value)
+      w.close
+      assert_equal nil, r.read_nonblock(4096, "", exception: false)
+    }
+  end if have_nonblock?
+
+  def test_write_nonblock_error
+    with_pipe {|r, w|
+      begin
+        loop {
+          w.write_nonblock "a"*100000
+        }
+      rescue Errno::EWOULDBLOCK
+        assert_kind_of(IO::WaitWritable, $!)
+      end
+    }
+  end if have_nonblock?
+
+  def test_write_nonblock_invalid_exception
+    with_pipe {|r, w|
+      assert_raise(ArgumentError) {w.write_nonblock(4096, exception: 1)}
+    }
+  end if have_nonblock?
+
+  def test_write_nonblock_no_exceptions
+    with_pipe {|r, w|
+      loop {
+        ret = w.write_nonblock("a"*100000, exception: false)
+        if ret.is_a?(Symbol)
+          assert_equal :wait_writable, ret
+          break
+        end
+      }
+    }
+  end if have_nonblock?
+
+  def test_gets
+    pipe(proc do |w|
+      w.write "foobarbaz"
+      w.close
+    end, proc do |r|
+      assert_equal("", r.gets(0))
+      assert_equal("foobarbaz", r.gets(9))
+    end)
+  end
+
+  def test_close_read
+    ruby do |f|
+      f.close_read
+      f.write "foobarbaz"
+      assert_raise(IOError) { f.read }
+      assert_nothing_raised(IOError) {f.close_read}
+      assert_nothing_raised(IOError) {f.close}
+      assert_nothing_raised(IOError) {f.close_read}
+    end
+  end
+
+  def test_close_read_pipe
+    with_pipe do |r, w|
+      r.close_read
+      assert_raise(Errno::EPIPE) { w.write "foobarbaz" }
+      assert_nothing_raised(IOError) {r.close_read}
+      assert_nothing_raised(IOError) {r.close}
+      assert_nothing_raised(IOError) {r.close_read}
+    end
+  end
+
+  def test_write_epipe_nosync
+    assert_separately([], <<-"end;")
+      r, w = IO.pipe
+      r.close
+      w.sync = false
+      assert_raise(Errno::EPIPE) {
+        loop { w.write "a" }
+      }
+    end;
+  end
+
+  def test_close_read_non_readable
+    with_pipe do |r, w|
+      assert_raise(IOError) do
+        w.close_read
+      end
+    end
+  end
+
+  def test_close_write
+    ruby do |f|
+      f.write "foobarbaz"
+      f.close_write
+      assert_equal("foobarbaz", f.read)
+      assert_nothing_raised(IOError) {f.close_write}
+      assert_nothing_raised(IOError) {f.close}
+      assert_nothing_raised(IOError) {f.close_write}
+    end
+  end
+
+  def test_close_write_non_readable
+    with_pipe do |r, w|
+      assert_raise(IOError) do
+        r.close_write
+      end
+    end
+  end
+
+  def test_close_read_write_separately
+    bug = '[ruby-list:49598]'
+    (1..10).each do |i|
+      assert_nothing_raised(IOError, "#{bug} trying ##{i}") do
+        IO.popen(EnvUtil.rubybin, "r+") {|f|
+          th = Thread.new {f.close_write}
+          f.close_read
+          th.join
+        }
+      end
+    end
+  end
+
+  def test_pid
+    IO.pipe {|r, w|
+      assert_equal(nil, r.pid)
+      assert_equal(nil, w.pid)
+    }
+
+    begin
+      pipe = IO.popen(EnvUtil.rubybin, "r+")
+      pid1 = pipe.pid
+      pipe.puts "p $$"
+      pipe.close_write
+      pid2 = pipe.read.chomp.to_i
+      assert_equal(pid2, pid1)
+      assert_equal(pid2, pipe.pid)
+    ensure
+      pipe.close
+    end
+    assert_raise(IOError) { pipe.pid }
+  end
+
+  def test_pid_after_close_read
+    pid1 = pid2 = nil
+    IO.popen("exit ;", "r+") do |io|
+      pid1 = io.pid
+      io.close_read
+      pid2 = io.pid
+    end
+    assert_not_nil(pid1)
+    assert_equal(pid1, pid2)
+  end
+
+  def make_tempfile
+    t = Tempfile.new("test_io")
+    t.binmode
+    t.puts "foo"
+    t.puts "bar"
+    t.puts "baz"
+    t.close
+    if block_given?
+      begin
+        yield t
+      ensure
+        t.close(true)
+      end
+    else
+      t
+    end
+  end
+
+  def test_set_lineno
+    make_tempfile {|t|
+      assert_separately(["-", t.path], <<-SRC)
+        open(ARGV[0]) do |f|
+          assert_equal(0, $.)
+          f.gets; assert_equal(1, $.)
+          f.gets; assert_equal(2, $.)
+          f.lineno = 1000; assert_equal(2, $.)
+          f.gets; assert_equal(1001, $.)
+          f.gets; assert_equal(1001, $.)
+          f.rewind; assert_equal(1001, $.)
+          f.gets; assert_equal(1, $.)
+          f.gets; assert_equal(2, $.)
+          f.gets; assert_equal(3, $.)
+          f.gets; assert_equal(3, $.)
+        end
+      SRC
+    }
+  end
+
+  def test_set_lineno_gets
+    pipe(proc do |w|
+      w.puts "foo"
+      w.puts "bar"
+      w.puts "baz"
+      w.close
+    end, proc do |r|
+      r.gets; assert_equal(1, $.)
+      r.gets; assert_equal(2, $.)
+      r.lineno = 1000; assert_equal(2, $.)
+      r.gets; assert_equal(1001, $.)
+      r.gets; assert_equal(1001, $.)
+    end)
+  end
+
+  def test_set_lineno_readline
+    pipe(proc do |w|
+      w.puts "foo"
+      w.puts "bar"
+      w.puts "baz"
+      w.close
+    end, proc do |r|
+      r.readline; assert_equal(1, $.)
+      r.readline; assert_equal(2, $.)
+      r.lineno = 1000; assert_equal(2, $.)
+      r.readline; assert_equal(1001, $.)
+      assert_raise(EOFError) { r.readline }
+    end)
+  end
+
+  def test_each_char
+    pipe(proc do |w|
+      w.puts "foo"
+      w.puts "bar"
+      w.puts "baz"
+      w.close
+    end, proc do |r|
+      a = []
+      r.each_char {|c| a << c }
+      assert_equal(%w(f o o) + ["\n"] + %w(b a r) + ["\n"] + %w(b a z) + ["\n"], a)
+    end)
+  end
+
+  def test_each_line
+    pipe(proc do |w|
+      w.puts "foo"
+      w.puts "bar"
+      w.puts "baz"
+      w.close
+    end, proc do |r|
+      e = nil
+      assert_warn('') {
+        e = r.each_line
+      }
+      assert_equal("foo\n", e.next)
+   
