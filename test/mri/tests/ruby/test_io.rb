@@ -1308,4 +1308,306 @@ class TestIO < Test::Unit::TestCase
     opts = {}
     if defined?(Process::RLIMIT_NPROC)
       lim = Process.getrlimit(Process::RLIMIT_NPROC)[1]
-      opts[:rlimit_nproc] = [li
+      opts[:rlimit_nproc] = [lim, 2048].min
+    end
+    f = IO.popen([ruby] + args, 'r+', opts)
+    pid = f.pid
+    yield(f)
+  ensure
+    f.close unless !f || f.closed?
+    begin
+      Process.wait(pid)
+    rescue Errno::ECHILD, Errno::ESRCH
+    end
+  end
+
+  def test_try_convert
+    assert_equal(STDOUT, IO.try_convert(STDOUT))
+    assert_equal(nil, IO.try_convert("STDOUT"))
+  end
+
+  def test_ungetc2
+    f = false
+    pipe(proc do |w|
+      Thread.pass until f
+      w.write("1" * 10000)
+      w.close
+    end, proc do |r|
+      r.ungetc("0" * 10000)
+      f = true
+      assert_equal("0" * 10000 + "1" * 10000, r.read)
+    end)
+  end
+
+  def test_write_with_multiple_arguments
+    pipe(proc do |w|
+      w.write("foo", "bar")
+      w.close
+    end, proc do |r|
+      assert_equal("foobar", r.read)
+    end)
+  end
+
+  def test_write_with_multiple_arguments_and_buffer
+    mkcdtmpdir do
+      line = "x"*9+"\n"
+      file = "test.out"
+      open(file, "wb") do |w|
+        w.write(line)
+        assert_equal(11, w.write(line, "\n"))
+      end
+      open(file, "rb") do |r|
+        assert_equal([line, line, "\n"], r.readlines)
+      end
+
+      line = "x"*99+"\n"
+      open(file, "wb") do |w|
+        w.write(line*81)        # 8100 bytes
+        assert_equal(100, w.write("a"*99, "\n"))
+      end
+      open(file, "rb") do |r|
+        81.times {assert_equal(line, r.gets)}
+        assert_equal("a"*99+"\n", r.gets)
+      end
+    end
+  end
+
+  def test_write_with_many_arguments
+    [1023, 1024].each do |n|
+      pipe(proc do |w|
+        w.write(*(["a"] * n))
+        w.close
+      end, proc do |r|
+        assert_equal("a" * n, r.read)
+      end)
+    end
+  end
+
+  def test_write_with_multiple_nonstring_arguments
+    assert_in_out_err([], "STDOUT.write(:foo, :bar)", ["foobar"])
+  end
+
+  def test_write_buffered_with_multiple_arguments
+    out, err, (_, status) = EnvUtil.invoke_ruby(["-e", "sleep 0.1;puts 'foo'"], "", true, true) do |_, o, e, i|
+      [o.read, e.read, Process.waitpid2(i)]
+    end
+    assert_predicate(status, :success?)
+    assert_equal("foo\n", out)
+    assert_empty(err)
+  end
+
+  def test_write_no_args
+    IO.pipe do |r, w|
+      assert_equal 0, w.write, '[ruby-core:86285] [Bug #14338]'
+      assert_equal :wait_readable, r.read_nonblock(1, exception: false)
+    end
+  end
+
+  def test_write_non_writable
+    with_pipe do |r, w|
+      assert_raise(IOError) do
+        r.write "foobarbaz"
+      end
+    end
+  end
+
+  def test_dup
+    ruby do |f|
+      begin
+        f2 = f.dup
+        f.puts "foo"
+        f2.puts "bar"
+        f.close_write
+        f2.close_write
+        assert_equal("foo\nbar\n", f.read)
+        assert_equal("", f2.read)
+      ensure
+        f2.close
+      end
+    end
+  end
+
+  def test_dup_many
+    opts = {}
+    opts[:rlimit_nofile] = 1024 if defined?(Process::RLIMIT_NOFILE)
+    assert_separately([], <<-'End', **opts)
+      a = []
+      assert_raise(Errno::EMFILE, Errno::ENFILE, Errno::ENOMEM) do
+        loop {a << IO.pipe}
+      end
+      assert_raise(Errno::EMFILE, Errno::ENFILE, Errno::ENOMEM) do
+        loop {a << [a[-1][0].dup, a[-1][1].dup]}
+      end
+    End
+  end
+
+  def test_inspect
+    with_pipe do |r, w|
+      assert_match(/^#<IO:fd \d+>$/, r.inspect)
+      r.freeze
+      assert_match(/^#<IO:fd \d+>$/, r.inspect)
+    end
+  end
+
+  def test_readpartial
+    pipe(proc do |w|
+      w.write "foobarbaz"
+      w.close
+    end, proc do |r|
+      assert_raise(ArgumentError) { r.readpartial(-1) }
+      assert_equal("fooba", r.readpartial(5))
+      r.readpartial(5, s = "")
+      assert_equal("rbaz", s)
+    end)
+  end
+
+  def test_readpartial_lock
+    with_pipe do |r, w|
+      s = ""
+      t = Thread.new { r.readpartial(5, s) }
+      Thread.pass until t.stop?
+      assert_raise(RuntimeError) { s.clear }
+      w.write "foobarbaz"
+      w.close
+      assert_equal("fooba", t.value)
+    end
+  end
+
+  def test_readpartial_pos
+    mkcdtmpdir {
+      open("foo", "w") {|f| f << "abc" }
+      open("foo") {|f|
+        f.seek(0)
+        assert_equal("ab", f.readpartial(2))
+        assert_equal(2, f.pos)
+      }
+    }
+  end
+
+  def test_readpartial_with_not_empty_buffer
+    pipe(proc do |w|
+      w.write "foob"
+      w.close
+    end, proc do |r|
+      r.readpartial(5, s = "01234567")
+      assert_equal("foob", s)
+    end)
+  end
+
+  def test_readpartial_zero_size
+    File.open(IO::NULL) do |r|
+      assert_empty(r.readpartial(0, s = "01234567"))
+      assert_empty(s)
+    end
+  end
+
+  def test_readpartial_buffer_error
+    with_pipe do |r, w|
+      s = ""
+      t = Thread.new { r.readpartial(5, s) }
+      Thread.pass until t.stop?
+      t.kill
+      t.value
+      assert_equal("", s)
+    end
+  end if /cygwin/ !~ RUBY_PLATFORM
+
+  def test_read
+    pipe(proc do |w|
+      w.write "foobarbaz"
+      w.close
+    end, proc do |r|
+      assert_raise(ArgumentError) { r.read(-1) }
+      assert_equal("fooba", r.read(5))
+      r.read(nil, s = "")
+      assert_equal("rbaz", s)
+    end)
+  end
+
+  def test_read_lock
+    with_pipe do |r, w|
+      s = ""
+      t = Thread.new { r.read(5, s) }
+      Thread.pass until t.stop?
+      assert_raise(RuntimeError) { s.clear }
+      w.write "foobarbaz"
+      w.close
+      assert_equal("fooba", t.value)
+    end
+  end
+
+  def test_read_with_not_empty_buffer
+    pipe(proc do |w|
+      w.write "foob"
+      w.close
+    end, proc do |r|
+      r.read(nil, s = "01234567")
+      assert_equal("foob", s)
+    end)
+  end
+
+  def test_read_zero_size
+    File.open(IO::NULL) do |r|
+      assert_empty(r.read(0, s = "01234567"))
+      assert_empty(s)
+    end
+  end
+
+  def test_read_buffer_error
+    with_pipe do |r, w|
+      s = ""
+      t = Thread.new { r.read(5, s) }
+      Thread.pass until t.stop?
+      t.kill
+      t.value
+      assert_equal("", s)
+    end
+    with_pipe do |r, w|
+      s = "xxx"
+      t = Thread.new {r.read(2, s)}
+      Thread.pass until t.stop?
+      t.kill
+      t.value
+      assert_equal("xxx", s)
+    end
+  end if /cygwin/ !~ RUBY_PLATFORM
+
+  def test_write_nonblock
+    pipe(proc do |w|
+      w.write_nonblock(1)
+      w.close
+    end, proc do |r|
+      assert_equal("1", r.read)
+    end)
+  end
+
+  def test_read_nonblock_with_not_empty_buffer
+    with_pipe {|r, w|
+      w.write "foob"
+      w.close
+      r.read_nonblock(5, s = "01234567")
+      assert_equal("foob", s)
+    }
+  end
+
+  def test_read_nonblock_zero_size
+    File.open(IO::NULL) do |r|
+      assert_empty(r.read_nonblock(0, s = "01234567"))
+      assert_empty(s)
+    end
+  end
+
+  def test_write_nonblock_simple_no_exceptions
+    pipe(proc do |w|
+      w.write_nonblock('1', exception: false)
+      w.close
+    end, proc do |r|
+      assert_equal("1", r.read)
+    end)
+  end
+
+  def test_read_nonblock_error
+    with_pipe {|r, w|
+      begin
+        r.read_nonblock 4096
+      rescue 
