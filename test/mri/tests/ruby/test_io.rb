@@ -2135,4 +2135,287 @@ class TestIO < Test::Unit::TestCase
           f.seek(100*1024, :SET)
           f.print("zot\n")
           f.seek(50*1024, :DATA)
-       
+          assert_operator(f.pos, :>=, 50*1024)
+          assert_match(/\A\0*zot\n\z/, f.read)
+        }
+      end
+
+      if defined?(IO::SEEK_HOLE)
+        open(t.path) { |f|
+          break unless can_seek_data(f)
+          assert_equal("foo\n", f.gets)
+          f.seek(0, :HOLE)
+          assert_operator(f.pos, :>, 20)
+          f.seek(100*1024, :HOLE)
+          assert_equal("", f.read)
+        }
+      end
+    }
+  end
+
+  def test_sysseek
+    make_tempfile {|t|
+      open(t.path) do |f|
+        f.sysseek(-4, IO::SEEK_END)
+        assert_equal("baz\n", f.read)
+      end
+
+      open(t.path) do |f|
+        a = [f.getc, f.getc, f.getc]
+        a.reverse_each {|c| f.ungetc c }
+        assert_raise(IOError) { f.sysseek(1) }
+      end
+    }
+  end
+
+  def test_syswrite
+    make_tempfile {|t|
+      open(t.path, "w") do |f|
+        o = Object.new
+        def o.to_s; "FOO\n"; end
+        f.syswrite(o)
+      end
+      assert_equal("FOO\n", File.read(t.path))
+    }
+  end
+
+  def test_sysread
+    make_tempfile {|t|
+      open(t.path) do |f|
+        a = [f.getc, f.getc, f.getc]
+        a.reverse_each {|c| f.ungetc c }
+        assert_raise(IOError) { f.sysread(1) }
+      end
+    }
+  end
+
+  def test_sysread_with_not_empty_buffer
+    pipe(proc do |w|
+      w.write "foob"
+      w.close
+    end, proc do |r|
+      r.sysread( 5, s = "01234567" )
+      assert_equal( "foob", s )
+    end)
+  end
+
+  def test_flag
+    make_tempfile {|t|
+      assert_raise(ArgumentError) do
+        open(t.path, "z") { }
+      end
+
+      assert_raise(ArgumentError) do
+        open(t.path, "rr") { }
+      end
+
+      assert_raise(ArgumentError) do
+        open(t.path, "rbt") { }
+      end
+    }
+  end
+
+  def test_sysopen
+    make_tempfile {|t|
+      fd = IO.sysopen(t.path)
+      assert_kind_of(Integer, fd)
+      f = IO.for_fd(fd)
+      assert_equal("foo\nbar\nbaz\n", f.read)
+      f.close
+
+      fd = IO.sysopen(t.path, "w", 0666)
+      assert_kind_of(Integer, fd)
+      if defined?(Fcntl::F_GETFL)
+        f = IO.for_fd(fd)
+      else
+        f = IO.for_fd(fd, 0666)
+      end
+      f.write("FOO\n")
+      f.close
+
+      fd = IO.sysopen(t.path, "r")
+      assert_kind_of(Integer, fd)
+      f = IO.for_fd(fd)
+      assert_equal("FOO\n", f.read)
+      f.close
+    }
+  end
+
+  def try_fdopen(fd, autoclose = true, level = 50)
+    if level > 0
+      begin
+        1.times {return try_fdopen(fd, autoclose, level - 1)}
+      ensure
+        GC.start
+      end
+    else
+      WeakRef.new(IO.for_fd(fd, autoclose: autoclose))
+    end
+  end
+
+  def test_autoclose
+    feature2250 = '[ruby-core:26222]'
+    pre = 'ft2250'
+
+    Dir.mktmpdir {|d|
+      t = open("#{d}/#{pre}", "w")
+      f = IO.for_fd(t.fileno)
+      assert_equal(true, f.autoclose?)
+      f.autoclose = false
+      assert_equal(false, f.autoclose?)
+      f.close
+      assert_nothing_raised(Errno::EBADF, feature2250) {t.close}
+
+      t = open("#{d}/#{pre}", "w")
+      f = IO.for_fd(t.fileno, autoclose: false)
+      assert_equal(false, f.autoclose?)
+      f.autoclose = true
+      assert_equal(true, f.autoclose?)
+      f.close
+      assert_raise(Errno::EBADF, feature2250) {t.close}
+    }
+  end
+
+  def test_autoclose_true_closed_by_finalizer
+    # http://ci.rvm.jp/results/trunk-mjit@silicon-docker/1465760
+    # http://ci.rvm.jp/results/trunk-mjit@silicon-docker/1469765
+    skip 'this randomly fails with MJIT' if defined?(RubyVM::MJIT) && RubyVM::MJIT.enabled?
+
+    feature2250 = '[ruby-core:26222]'
+    pre = 'ft2250'
+    t = Tempfile.new(pre)
+    w = try_fdopen(t.fileno)
+    begin
+      w.close
+      begin
+        t.close
+      rescue Errno::EBADF
+      end
+      skip "expect IO object was GC'ed but not recycled yet"
+    rescue WeakRef::RefError
+      assert_raise(Errno::EBADF, feature2250) {t.close}
+    end
+  ensure
+    t&.close!
+  end
+
+  def test_autoclose_false_closed_by_finalizer
+    feature2250 = '[ruby-core:26222]'
+    pre = 'ft2250'
+    t = Tempfile.new(pre)
+    w = try_fdopen(t.fileno, false)
+    begin
+      w.close
+      t.close
+      skip "expect IO object was GC'ed but not recycled yet"
+    rescue WeakRef::RefError
+      assert_nothing_raised(Errno::EBADF, feature2250) {t.close}
+    end
+  ensure
+    t.close!
+  end
+
+  def test_open_redirect
+    o = Object.new
+    def o.to_open; self; end
+    assert_equal(o, open(o))
+    o2 = nil
+    open(o) do |f|
+      o2 = f
+    end
+    assert_equal(o, o2)
+  end
+
+  def test_open_redirect_keyword
+    o = Object.new
+    def o.to_open(**kw); kw; end
+    assert_equal({:a=>1}, open(o, a: 1))
+
+    assert_raise(ArgumentError) { open(o, {a: 1}) }
+
+    class << o
+      remove_method(:to_open)
+    end
+    def o.to_open(kw); kw; end
+    assert_equal({:a=>1}, open(o, a: 1))
+    assert_equal({:a=>1}, open(o, {a: 1}))
+  end
+
+  def test_open_pipe
+    open("|" + EnvUtil.rubybin, "r+") do |f|
+      f.puts "puts 'foo'"
+      f.close_write
+      assert_equal("foo\n", f.read)
+    end
+  end
+
+  def test_read_command
+    assert_equal("foo\n", IO.read("|echo foo"))
+    assert_raise(Errno::ENOENT, Errno::EINVAL) do
+      File.read("|#{EnvUtil.rubybin} -e puts")
+    end
+    assert_raise(Errno::ENOENT, Errno::EINVAL) do
+      File.binread("|#{EnvUtil.rubybin} -e puts")
+    end
+    assert_raise(Errno::ENOENT, Errno::EINVAL) do
+      Class.new(IO).read("|#{EnvUtil.rubybin} -e puts")
+    end
+    assert_raise(Errno::ENOENT, Errno::EINVAL) do
+      Class.new(IO).binread("|#{EnvUtil.rubybin} -e puts")
+    end
+    assert_raise(Errno::ESPIPE) do
+      IO.read("|echo foo", 1, 1)
+    end
+  end
+
+  def test_reopen
+    make_tempfile {|t|
+      open(__FILE__) do |f|
+        f.gets
+        assert_nothing_raised {
+          f.reopen(t.path)
+          assert_equal("foo\n", f.gets)
+        }
+      end
+
+      open(__FILE__) do |f|
+        f.gets
+        f2 = open(t.path)
+        begin
+          f2.gets
+          assert_nothing_raised {
+            f.reopen(f2)
+            assert_equal("bar\n", f.gets, '[ruby-core:24240]')
+          }
+        ensure
+          f2.close
+        end
+      end
+
+      open(__FILE__) do |f|
+        f2 = open(t.path)
+        begin
+          f.reopen(f2)
+          assert_equal("foo\n", f.gets)
+          assert_equal("bar\n", f.gets)
+          f.reopen(f2)
+          assert_equal("baz\n", f.gets, '[ruby-dev:39479]')
+        ensure
+          f2.close
+        end
+      end
+    }
+  end
+
+  def test_reopen_inherit
+    mkcdtmpdir {
+      system(EnvUtil.rubybin, '-e', <<-"End")
+        f = open("out", "w")
+        STDOUT.reopen(f)
+        STDERR.reopen(f)
+        system(#{EnvUtil.rubybin.dump}, '-e', 'STDOUT.print "out"')
+        system(#{EnvUtil.rubybin.dump}, '-e', 'STDERR.print "err"')
+      End
+      assert_equal("outerr", File.read("out"))
+    }
+ 
