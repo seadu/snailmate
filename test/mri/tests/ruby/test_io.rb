@@ -1890,4 +1890,249 @@ class TestIO < Test::Unit::TestCase
         e = r.each_line
       }
       assert_equal("foo\n", e.next)
-   
+      assert_equal("bar\n", e.next)
+      assert_equal("baz\n", e.next)
+      assert_raise(StopIteration) { e.next }
+    end)
+  end
+
+  def test_each_byte2
+    pipe(proc do |w|
+      w.binmode
+      w.puts "foo"
+      w.puts "bar"
+      w.puts "baz"
+      w.close
+    end, proc do |r|
+      e = nil
+      assert_warn('') {
+        e = r.each_byte
+      }
+      (%w(f o o) + ["\n"] + %w(b a r) + ["\n"] + %w(b a z) + ["\n"]).each do |c|
+        assert_equal(c.ord, e.next)
+      end
+      assert_raise(StopIteration) { e.next }
+    end)
+  end
+
+  def test_each_char2
+    pipe(proc do |w|
+      w.puts "foo"
+      w.puts "bar"
+      w.puts "baz"
+      w.close
+    end, proc do |r|
+      e = nil
+      assert_warn('') {
+        e = r.each_char
+      }
+      (%w(f o o) + ["\n"] + %w(b a r) + ["\n"] + %w(b a z) + ["\n"]).each do |c|
+        assert_equal(c, e.next)
+      end
+      assert_raise(StopIteration) { e.next }
+    end)
+  end
+
+  def test_readbyte
+    pipe(proc do |w|
+      w.binmode
+      w.puts "foo"
+      w.puts "bar"
+      w.puts "baz"
+      w.close
+    end, proc do |r|
+      r.binmode
+      (%w(f o o) + ["\n"] + %w(b a r) + ["\n"] + %w(b a z) + ["\n"]).each do |c|
+        assert_equal(c.ord, r.readbyte)
+      end
+      assert_raise(EOFError) { r.readbyte }
+    end)
+  end
+
+  def test_readchar
+    pipe(proc do |w|
+      w.puts "foo"
+      w.puts "bar"
+      w.puts "baz"
+      w.close
+    end, proc do |r|
+      (%w(f o o) + ["\n"] + %w(b a r) + ["\n"] + %w(b a z) + ["\n"]).each do |c|
+        assert_equal(c, r.readchar)
+      end
+      assert_raise(EOFError) { r.readchar }
+    end)
+  end
+
+  def test_close_on_exec
+    ruby do |f|
+      assert_equal(true, f.close_on_exec?)
+      f.close_on_exec = false
+      assert_equal(false, f.close_on_exec?)
+      f.close_on_exec = true
+      assert_equal(true, f.close_on_exec?)
+      f.close_on_exec = false
+      assert_equal(false, f.close_on_exec?)
+    end
+
+    with_pipe do |r, w|
+      assert_equal(true, r.close_on_exec?)
+      r.close_on_exec = false
+      assert_equal(false, r.close_on_exec?)
+      r.close_on_exec = true
+      assert_equal(true, r.close_on_exec?)
+      r.close_on_exec = false
+      assert_equal(false, r.close_on_exec?)
+
+      assert_equal(true, w.close_on_exec?)
+      w.close_on_exec = false
+      assert_equal(false, w.close_on_exec?)
+      w.close_on_exec = true
+      assert_equal(true, w.close_on_exec?)
+      w.close_on_exec = false
+      assert_equal(false, w.close_on_exec?)
+    end
+  end if have_close_on_exec?
+
+  def test_pos
+    make_tempfile {|t|
+      open(t.path, IO::RDWR|IO::CREAT|IO::TRUNC, 0600) do |f|
+        f.write "Hello"
+        assert_equal(5, f.pos)
+      end
+      open(t.path, IO::RDWR|IO::CREAT|IO::TRUNC, 0600) do |f|
+        f.sync = true
+        f.read
+        f.write "Hello"
+        assert_equal(5, f.pos)
+      end
+    }
+  end
+
+  def test_pos_with_getc
+    _bug6179 = '[ruby-core:43497]'
+    make_tempfile {|t|
+      ["", "t", "b"].each do |mode|
+        open(t.path, "w#{mode}") do |f|
+          f.write "0123456789\n"
+        end
+
+        open(t.path, "r#{mode}") do |f|
+          assert_equal 0, f.pos, "mode=r#{mode}"
+          assert_equal '0', f.getc, "mode=r#{mode}"
+          assert_equal 1, f.pos, "mode=r#{mode}"
+          assert_equal '1', f.getc, "mode=r#{mode}"
+          assert_equal 2, f.pos, "mode=r#{mode}"
+          assert_equal '2', f.getc, "mode=r#{mode}"
+          assert_equal 3, f.pos, "mode=r#{mode}"
+          assert_equal '3', f.getc, "mode=r#{mode}"
+          assert_equal 4, f.pos, "mode=r#{mode}"
+          assert_equal '4', f.getc, "mode=r#{mode}"
+        end
+      end
+    }
+  end
+
+  def can_seek_data(f)
+    if /linux/ =~ RUBY_PLATFORM
+      # require "-test-/file"
+      # lseek(2)
+      case Bug::File::Fs.fsname(f.path)
+      when "btrfs"
+        return true if (Etc.uname[:release].split('.').map(&:to_i) <=> [3,1]) >= 0
+      when "ocfs"
+        return true if (Etc.uname[:release].split('.').map(&:to_i) <=> [3,2]) >= 0
+      when "xfs"
+        return true if (Etc.uname[:release].split('.').map(&:to_i) <=> [3,5]) >= 0
+      when "ext4"
+        return true if (Etc.uname[:release].split('.').map(&:to_i) <=> [3,8]) >= 0
+      when "tmpfs"
+        return true if (Etc.uname[:release].split('.').map(&:to_i) <=> [3,8]) >= 0
+      end
+    end
+    false
+  end
+
+  def test_seek
+    make_tempfile {|t|
+      open(t.path) { |f|
+        f.seek(9)
+        assert_equal("az\n", f.read)
+      }
+
+      open(t.path) { |f|
+        f.seek(9, IO::SEEK_SET)
+        assert_equal("az\n", f.read)
+      }
+
+      open(t.path) { |f|
+        f.seek(-4, IO::SEEK_END)
+        assert_equal("baz\n", f.read)
+      }
+
+      open(t.path) { |f|
+        assert_equal("foo\n", f.gets)
+        f.seek(2, IO::SEEK_CUR)
+        assert_equal("r\nbaz\n", f.read)
+      }
+
+      if defined?(IO::SEEK_DATA)
+        open(t.path) { |f|
+          break unless can_seek_data(f)
+          assert_equal("foo\n", f.gets)
+          f.seek(0, IO::SEEK_DATA)
+          assert_equal("foo\nbar\nbaz\n", f.read)
+        }
+        open(t.path, 'r+') { |f|
+          break unless can_seek_data(f)
+          f.seek(100*1024, IO::SEEK_SET)
+          f.print("zot\n")
+          f.seek(50*1024, IO::SEEK_DATA)
+          assert_operator(f.pos, :>=, 50*1024)
+          assert_match(/\A\0*zot\n\z/, f.read)
+        }
+      end
+
+      if defined?(IO::SEEK_HOLE)
+        open(t.path) { |f|
+          break unless can_seek_data(f)
+          assert_equal("foo\n", f.gets)
+          f.seek(0, IO::SEEK_HOLE)
+          assert_operator(f.pos, :>, 20)
+          f.seek(100*1024, IO::SEEK_HOLE)
+          assert_equal("", f.read)
+        }
+      end
+    }
+  end
+
+  def test_seek_symwhence
+    make_tempfile {|t|
+      open(t.path) { |f|
+        f.seek(9, :SET)
+        assert_equal("az\n", f.read)
+      }
+
+      open(t.path) { |f|
+        f.seek(-4, :END)
+        assert_equal("baz\n", f.read)
+      }
+
+      open(t.path) { |f|
+        assert_equal("foo\n", f.gets)
+        f.seek(2, :CUR)
+        assert_equal("r\nbaz\n", f.read)
+      }
+
+      if defined?(IO::SEEK_DATA)
+        open(t.path) { |f|
+          break unless can_seek_data(f)
+          assert_equal("foo\n", f.gets)
+          f.seek(0, :DATA)
+          assert_equal("foo\nbar\nbaz\n", f.read)
+        }
+        open(t.path, 'r+') { |f|
+          break unless can_seek_data(f)
+          f.seek(100*1024, :SET)
+          f.print("zot\n")
+          f.seek(50*1024, :DATA)
+       
