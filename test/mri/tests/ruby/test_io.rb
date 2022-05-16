@@ -2418,4 +2418,260 @@ class TestIO < Test::Unit::TestCase
       End
       assert_equal("outerr", File.read("out"))
     }
- 
+  end
+
+  def test_reopen_stdio
+    mkcdtmpdir {
+      fname = 'bug11319'
+      File.write(fname, 'hello')
+      system(EnvUtil.rubybin, '-e', "STDOUT.reopen('#{fname}', 'w+')")
+      assert_equal('', File.read(fname))
+    }
+  end
+
+  def test_reopen_mode
+    feature7067 = '[ruby-core:47694]'
+    make_tempfile {|t|
+      open(__FILE__) do |f|
+        assert_nothing_raised {
+          f.reopen(t.path, "r")
+          assert_equal("foo\n", f.gets)
+        }
+      end
+
+      open(__FILE__) do |f|
+        assert_nothing_raised(feature7067) {
+          f.reopen(t.path, File::RDONLY)
+          assert_equal("foo\n", f.gets)
+        }
+      end
+    }
+  end
+
+  def test_reopen_opt
+    feature7103 = '[ruby-core:47806]'
+    make_tempfile {|t|
+      open(__FILE__) do |f|
+        assert_nothing_raised(feature7103) {
+          f.reopen(t.path, "r", binmode: true)
+        }
+        assert_equal("foo\n", f.gets)
+      end
+
+      open(__FILE__) do |f|
+        assert_nothing_raised(feature7103) {
+          f.reopen(t.path, autoclose: false)
+        }
+        assert_equal("foo\n", f.gets)
+      end
+    }
+  end
+
+  def make_tempfile_for_encoding
+    t = make_tempfile
+    open(t.path, "rb+:utf-8") {|f| f.puts "\u7d05\u7389bar\n"}
+    if block_given?
+      yield t
+    else
+      t
+    end
+  ensure
+    t&.close(true) if block_given?
+  end
+
+  def test_reopen_encoding
+    make_tempfile_for_encoding {|t|
+      open(__FILE__) {|f|
+        f.reopen(t.path, "r:utf-8")
+        s = f.gets
+        assert_equal(Encoding::UTF_8, s.encoding)
+        assert_equal("\u7d05\u7389bar\n", s)
+      }
+
+      open(__FILE__) {|f|
+        f.reopen(t.path, "r:UTF-8:EUC-JP")
+        s = f.gets
+        assert_equal(Encoding::EUC_JP, s.encoding)
+        assert_equal("\xB9\xC8\xB6\xCCbar\n".force_encoding(Encoding::EUC_JP), s)
+      }
+    }
+  end
+
+  def test_reopen_opt_encoding
+    feature7103 = '[ruby-core:47806]'
+    make_tempfile_for_encoding {|t|
+      open(__FILE__) {|f|
+        assert_nothing_raised(feature7103) {f.reopen(t.path, encoding: "ASCII-8BIT")}
+        s = f.gets
+        assert_equal(Encoding::ASCII_8BIT, s.encoding)
+        assert_equal("\xe7\xb4\x85\xe7\x8e\x89bar\n", s)
+      }
+
+      open(__FILE__) {|f|
+        assert_nothing_raised(feature7103) {f.reopen(t.path, encoding: "UTF-8:EUC-JP")}
+        s = f.gets
+        assert_equal(Encoding::EUC_JP, s.encoding)
+        assert_equal("\xB9\xC8\xB6\xCCbar\n".force_encoding(Encoding::EUC_JP), s)
+      }
+    }
+  end
+
+  bug11320 = '[ruby-core:69780] [Bug #11320]'
+  ["UTF-8", "EUC-JP", "Shift_JIS"].each do |enc|
+    define_method("test_reopen_nonascii(#{enc})") do
+      mkcdtmpdir do
+        fname = "\u{30eb 30d3 30fc}".encode(enc)
+        File.write(fname, '')
+        assert_file.exist?(fname)
+        stdin = $stdin.dup
+        begin
+          assert_nothing_raised(Errno::ENOENT, "#{bug11320}: #{enc}") {
+            $stdin.reopen(fname, 'r')
+          }
+        ensure
+          $stdin.reopen(stdin)
+          stdin.close
+        end
+      end
+    end
+  end
+
+  def test_reopen_ivar
+    assert_ruby_status([], "#{<<~"begin;"}\n#{<<~'end;'}")
+    begin;
+      f = File.open(IO::NULL)
+      f.instance_variable_set(:@foo, 42)
+      f.reopen(STDIN)
+      f.instance_variable_defined?(:@foo)
+      f.instance_variable_get(:@foo)
+    end;
+  end
+
+  def test_foreach
+    a = []
+    IO.foreach("|" + EnvUtil.rubybin + " -e 'puts :foo; puts :bar; puts :baz'") {|x| a << x }
+    assert_equal(["foo\n", "bar\n", "baz\n"], a)
+
+    a = []
+    IO.foreach("|" + EnvUtil.rubybin + " -e 'puts :zot'", :open_args => ["r"]) {|x| a << x }
+    assert_equal(["zot\n"], a)
+
+    make_tempfile {|t|
+      a = []
+      IO.foreach(t.path) {|x| a << x }
+      assert_equal(["foo\n", "bar\n", "baz\n"], a)
+
+      a = []
+      IO.foreach(t.path, :mode => "r") {|x| a << x }
+      assert_equal(["foo\n", "bar\n", "baz\n"], a)
+
+      a = []
+      IO.foreach(t.path, :open_args => []) {|x| a << x }
+      assert_equal(["foo\n", "bar\n", "baz\n"], a)
+
+      a = []
+      IO.foreach(t.path, :open_args => ["r"]) {|x| a << x }
+      assert_equal(["foo\n", "bar\n", "baz\n"], a)
+
+      a = []
+      IO.foreach(t.path, "b") {|x| a << x }
+      assert_equal(["foo\nb", "ar\nb", "az\n"], a)
+
+      a = []
+      IO.foreach(t.path, 3) {|x| a << x }
+      assert_equal(["foo", "\n", "bar", "\n", "baz", "\n"], a)
+
+      a = []
+      IO.foreach(t.path, "b", 3) {|x| a << x }
+      assert_equal(["foo", "\nb", "ar\n", "b", "az\n"], a)
+
+      bug = '[ruby-dev:31525]'
+      assert_raise(ArgumentError, bug) {IO.foreach}
+
+      a = nil
+      assert_nothing_raised(ArgumentError, bug) {a = IO.foreach(t.path).to_a}
+      assert_equal(["foo\n", "bar\n", "baz\n"], a, bug)
+
+      bug6054 = '[ruby-dev:45267]'
+      assert_raise_with_message(IOError, /not opened for reading/, bug6054) do
+        IO.foreach(t.path, mode:"w").next
+      end
+    }
+  end
+
+  def test_s_readlines
+    make_tempfile {|t|
+      assert_equal(["foo\n", "bar\n", "baz\n"], IO.readlines(t.path))
+      assert_equal(["foo\nb", "ar\nb", "az\n"], IO.readlines(t.path, "b"))
+      assert_equal(["fo", "o\n", "ba", "r\n", "ba", "z\n"], IO.readlines(t.path, 2))
+      assert_equal(["fo", "o\n", "b", "ar", "\nb", "az", "\n"], IO.readlines(t.path, "b", 2))
+    }
+  end
+
+  def test_printf
+    pipe(proc do |w|
+      printf(w, "foo %s baz\n", "bar")
+      w.close_write
+    end, proc do |r|
+      assert_equal("foo bar baz\n", r.read)
+    end)
+  end
+
+  def test_print
+    make_tempfile {|t|
+      assert_in_out_err(["-", t.path],
+                        "print while $<.gets",
+                        %w(foo bar baz), [])
+    }
+  end
+
+  def test_print_separators
+    EnvUtil.suppress_warning {
+      $, = ':'
+      $\ = "\n"
+    }
+    pipe(proc do |w|
+      w.print('a')
+      EnvUtil.suppress_warning {w.print('a','b','c')}
+      w.close
+    end, proc do |r|
+      assert_equal("a\n", r.gets)
+      assert_equal("a:b:c\n", r.gets)
+      assert_nil r.gets
+      r.close
+    end)
+  ensure
+    $, = nil
+    $\ = nil
+  end
+
+  def test_putc
+    pipe(proc do |w|
+      w.putc "A"
+      w.putc "BC"
+      w.putc 68
+      w.close_write
+    end, proc do |r|
+      assert_equal("ABD", r.read)
+    end)
+
+    assert_in_out_err([], "putc 65", %w(A), [])
+  end
+
+  def test_puts_recursive_array
+    a = ["foo"]
+    a << a
+    pipe(proc do |w|
+      w.puts a
+      w.close
+    end, proc do |r|
+      assert_equal("foo\n[...]\n", r.read)
+    end)
+  end
+
+  def test_puts_parallel
+    skip "not portable"
+    pipe(proc do |w|
+      threads = []
+      100.times do
+    
