@@ -2674,4 +2674,282 @@ class TestIO < Test::Unit::TestCase
     pipe(proc do |w|
       threads = []
       100.times do
-    
+        threads << Thread.new { w.puts "hey" }
+      end
+      threads.each(&:join)
+      w.close
+    end, proc do |r|
+      assert_equal("hey\n" * 100, r.read)
+    end)
+  end
+
+  def test_puts_old_write
+    capture = String.new
+    def capture.write(str)
+      self << str
+    end
+
+    capture.clear
+    assert_deprecated_warning(/[.#]write is outdated/) do
+      stdout, $stdout = $stdout, capture
+      puts "hey"
+    ensure
+      $stdout = stdout
+    end
+    assert_equal("hey\n", capture)
+  end
+
+  def test_display
+    pipe(proc do |w|
+      "foo".display(w)
+      w.close
+    end, proc do |r|
+      assert_equal("foo", r.read)
+    end)
+
+    assert_in_out_err([], "'foo'.display", %w(foo), [])
+  end
+
+  def test_set_stdout
+    assert_raise(TypeError) { $> = Object.new }
+
+    assert_in_out_err([], "$> = $stderr\nputs 'foo'", [], %w(foo))
+
+    assert_separately(%w[-Eutf-8], "#{<<~"begin;"}\n#{<<~"end;"}")
+    begin;
+      alias $\u{6a19 6e96 51fa 529b} $stdout
+      x = eval("class X\u{307b 3052}; self; end".encode("euc-jp"))
+      assert_raise_with_message(TypeError, /\\$\u{6a19 6e96 51fa 529b} must.*, X\u{307b 3052} given/) do
+        $\u{6a19 6e96 51fa 529b} = x.new
+      end
+    end;
+  end
+
+  def test_initialize
+    return unless defined?(Fcntl::F_GETFL)
+
+    make_tempfile {|t|
+      fd = IO.sysopen(t.path, "w")
+      assert_kind_of(Integer, fd)
+      %w[r r+ w+ a+].each do |mode|
+        assert_raise(Errno::EINVAL, "#{mode} [ruby-dev:38571]") {IO.new(fd, mode)}
+      end
+      f = IO.new(fd, "w")
+      f.write("FOO\n")
+      f.close
+
+      assert_equal("FOO\n", File.read(t.path))
+    }
+  end
+
+  def test_reinitialize
+    make_tempfile {|t|
+      f = open(t.path)
+      begin
+        assert_raise(RuntimeError) do
+          f.instance_eval { initialize }
+        end
+      ensure
+        f.close
+      end
+    }
+  end
+
+  def test_new_with_block
+    assert_in_out_err([], "r, w = IO.pipe; r.autoclose=false; IO.new(r.fileno) {}.close", [], /^.+$/)
+    n = "IO\u{5165 51fa 529b}"
+    c = eval("class #{n} < IO; self; end")
+    IO.pipe do |r, w|
+      assert_warning(/#{n}/) {
+        r.autoclose=false
+        io = c.new(r.fileno) {}
+        io.close
+      }
+    end
+  end
+
+  def test_readline2
+    assert_in_out_err(["-e", <<-SRC], "foo\nbar\nbaz\n", %w(foo bar baz end), [])
+      puts readline
+      puts readline
+      puts readline
+      begin
+        puts readline
+      rescue EOFError
+        puts "end"
+      end
+    SRC
+  end
+
+  def test_readlines
+    assert_in_out_err(["-e", "p readlines"], "foo\nbar\nbaz\n",
+                      ["[\"foo\\n\", \"bar\\n\", \"baz\\n\"]"], [])
+  end
+
+  def test_s_read
+    make_tempfile {|t|
+      assert_equal("foo\nbar\nbaz\n", File.read(t.path))
+      assert_equal("foo\nba", File.read(t.path, 6))
+      assert_equal("bar\n", File.read(t.path, 4, 4))
+    }
+  end
+
+  def test_uninitialized
+    assert_raise(IOError) { IO.allocate.print "" }
+  end
+
+  def test_nofollow
+    # O_NOFOLLOW is not standard.
+    mkcdtmpdir {
+      open("file", "w") {|f| f << "content" }
+      begin
+        File.symlink("file", "slnk")
+      rescue NotImplementedError
+        return
+      end
+      assert_raise(Errno::EMLINK, Errno::ELOOP) {
+        open("slnk", File::RDONLY|File::NOFOLLOW) {}
+      }
+      assert_raise(Errno::EMLINK, Errno::ELOOP) {
+        File.foreach("slnk", :open_args=>[File::RDONLY|File::NOFOLLOW]) {}
+      }
+    }
+  end if /freebsd|linux/ =~ RUBY_PLATFORM and defined? File::NOFOLLOW
+
+  def test_binmode_after_closed
+    make_tempfile {|t|
+      assert_raise(IOError) {t.binmode}
+    }
+  end
+
+  def test_DATA_binmode
+    assert_separately([], <<-SRC)
+assert_not_predicate(DATA, :binmode?)
+__END__
+    SRC
+  end
+
+  def test_threaded_flush
+    bug3585 = '[ruby-core:31348]'
+    src = "#{<<~"begin;"}\n#{<<~'end;'}"
+    begin;
+      t = Thread.new { sleep 3 }
+      Thread.new {sleep 1; t.kill; p 'hi!'}
+      t.join
+    end;
+    10.times.map do
+      Thread.start do
+        assert_in_out_err([], src, timeout: 20) {|stdout, stderr|
+          assert_no_match(/hi.*hi/, stderr.join, bug3585)
+        }
+      end
+    end.each {|th| th.join}
+  end
+
+  def test_flush_in_finalizer1
+    bug3910 = '[ruby-dev:42341]'
+    tmp = Tempfile.open("bug3910") {|t|
+      path = t.path
+      t.close
+      fds = []
+      assert_nothing_raised(TypeError, bug3910) do
+        500.times {
+          f = File.open(path, "w")
+          f.instance_variable_set(:@test_flush_in_finalizer1, true)
+          fds << f.fileno
+          f.print "hoge"
+        }
+      end
+      t
+    }
+  ensure
+    ObjectSpace.each_object(File) {|f|
+      if f.instance_variables.include?(:@test_flush_in_finalizer1)
+        f.close
+      end
+    }
+    tmp.close!
+  end
+
+  def test_flush_in_finalizer2
+    bug3910 = '[ruby-dev:42341]'
+    Tempfile.create("bug3910") {|t|
+      path = t.path
+      t.close
+      begin
+        1.times do
+          io = open(path,"w")
+          io.instance_variable_set(:@test_flush_in_finalizer2, true)
+          io.print "hoge"
+        end
+        assert_nothing_raised(TypeError, bug3910) do
+          GC.start
+        end
+      ensure
+        ObjectSpace.each_object(File) {|f|
+          if f.instance_variables.include?(:@test_flush_in_finalizer2)
+            f.close
+          end
+        }
+      end
+    }
+  end
+
+  def test_readlines_limit_0
+    bug4024 = '[ruby-dev:42538]'
+    make_tempfile {|t|
+      open(t.path, "r") do |io|
+        assert_raise(ArgumentError, bug4024) do
+          io.readlines(0)
+        end
+      end
+    }
+  end
+
+  def test_each_line_limit_0
+    bug4024 = '[ruby-dev:42538]'
+    make_tempfile {|t|
+      open(t.path, "r") do |io|
+        assert_raise(ArgumentError, bug4024) do
+          io.each_line(0).next
+        end
+      end
+    }
+  end
+
+  def os_and_fs(path)
+    uname = Etc.uname
+    os = "#{uname[:sysname]} #{uname[:release]}"
+
+    fs = nil
+    if uname[:sysname] == 'Linux'
+      # [ruby-dev:45703] Old Linux's fadvise() doesn't work on tmpfs.
+      mount = `mount`
+      mountpoints = []
+      mount.scan(/ on (\S+) type (\S+) /) {
+        mountpoints << [$1, $2]
+      }
+      mountpoints.sort_by {|mountpoint, fstype| mountpoint.length }.reverse_each {|mountpoint, fstype|
+        if path == mountpoint
+          fs = fstype
+          break
+        end
+        mountpoint += "/" if %r{/\z} !~ mountpoint
+        if path.start_with?(mountpoint)
+          fs = fstype
+          break
+        end
+      }
+    end
+
+    if fs
+      "#{fs} on #{os}"
+    else
+      os
+    end
+  end
+
+  def test_advise
+    make_tempfile {|tf|
+      assert_raise(ArgumentError, "no arguments") { tf.advise }
+      %w{normal random sequential willneed dontneed noreuse}.map(&:to_sym).each
