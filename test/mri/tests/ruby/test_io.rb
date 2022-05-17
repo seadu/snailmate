@@ -3178,4 +3178,254 @@ __END__
       File.delete path
       assert_equal(3, File.write(path, "foo", 0, encoding: "UTF-8"))
       assert_equal("foo", File.read(path))
-   
+      assert_equal(1, File.write(path, "f", 1, encoding: "UTF-8"))
+      assert_equal("ffo", File.read(path))
+      File.delete path
+      assert_equal(1, File.write(path, "f", 1, encoding: "UTF-8"))
+      assert_equal("\00f", File.read(path))
+      assert_equal(1, File.write(path, "f", 0, encoding: "UTF-8"))
+      assert_equal("ff", File.read(path))
+      File.write(path, "foo", Object.new => Object.new)
+      assert_equal("foo", File.read(path))
+    end
+  end
+
+  def test_s_binread_does_not_leak_with_invalid_offset
+    assert_raise(Errno::EINVAL) { IO.binread(__FILE__, 0, -1) }
+  end
+
+  def test_s_binwrite
+    mkcdtmpdir do
+      path = "test_s_binwrite"
+      File.binwrite(path, "foo\nbar\nbaz")
+      assert_equal("foo\nbar\nbaz", File.read(path))
+      File.binwrite(path, "FOO", 0)
+      assert_equal("FOO\nbar\nbaz", File.read(path))
+      File.binwrite(path, "BAR")
+      assert_equal("BAR", File.read(path))
+      File.binwrite(path, "\u{3042}")
+      assert_equal("\u{3042}".force_encoding("ASCII-8BIT"), File.binread(path))
+      File.delete path
+      assert_equal(6, File.binwrite(path, 'string', 2))
+      File.delete path
+      assert_equal(6, File.binwrite(path, 'string'))
+      assert_equal(3, File.binwrite(path, 'sub', 1))
+      assert_equal("ssubng", File.binread(path))
+      assert_equal(6, File.size(path))
+      assert_raise(Errno::EINVAL) { File.binwrite('nonexisting', 'string', -2) }
+      assert_nothing_raised(TypeError) { File.binwrite(path, "string", mode: "w", encoding: "EUC-JP") }
+    end
+  end
+
+  def test_race_between_read
+    Tempfile.create("test") {|file|
+      begin
+        path = file.path
+        file.close
+        write_file = File.open(path, "wt")
+        read_file = File.open(path, "rt")
+
+        threads = []
+        10.times do |i|
+          threads << Thread.new {write_file.print(i)}
+          threads << Thread.new {read_file.read}
+        end
+        assert_join_threads(threads)
+        assert(true, "[ruby-core:37197]")
+      ensure
+        read_file.close
+        write_file.close
+      end
+    }
+  end
+
+  def test_warn
+    assert_warning "warning\n" do
+      warn "warning"
+    end
+
+    assert_warning '' do
+      warn
+    end
+
+    assert_warning "[Feature #5029]\n[ruby-core:38070]\n" do
+      warn "[Feature #5029]", "[ruby-core:38070]"
+    end
+  end
+
+  def test_cloexec
+    return unless defined? Fcntl::FD_CLOEXEC
+    open(__FILE__) {|f|
+      assert_predicate(f, :close_on_exec?)
+      g = f.dup
+      begin
+        assert_predicate(g, :close_on_exec?)
+        f.reopen(g)
+        assert_predicate(f, :close_on_exec?)
+      ensure
+        g.close
+      end
+      g = IO.new(f.fcntl(Fcntl::F_DUPFD))
+      begin
+        assert_predicate(g, :close_on_exec?)
+      ensure
+        g.close
+      end
+    }
+    IO.pipe {|r,w|
+      assert_predicate(r, :close_on_exec?)
+      assert_predicate(w, :close_on_exec?)
+    }
+  end
+
+  def test_ioctl_linux
+    # Alpha, mips, sparc and ppc have an another ioctl request number scheme.
+    # So, hardcoded 0x80045200 may fail.
+    assert_nothing_raised do
+      File.open('/dev/urandom'){|f1|
+        entropy_count = ""
+        # RNDGETENTCNT(0x80045200) mean "get entropy count".
+        f1.ioctl(0x80045200, entropy_count)
+      }
+    end
+
+    buf = ''
+    assert_nothing_raised do
+      fionread = 0x541B
+      File.open(__FILE__){|f1|
+        f1.ioctl(fionread, buf)
+      }
+    end
+    assert_equal(File.size(__FILE__), buf.unpack('i!')[0])
+  end if /^(?:i.?86|x86_64)-linux/ =~ RUBY_PLATFORM
+
+  def test_ioctl_linux2
+    return unless STDIN.tty? # stdin is not a terminal
+    begin
+      f = File.open('/dev/tty')
+    rescue Errno::ENOENT, Errno::ENXIO => e
+      skip e.message
+    else
+      tiocgwinsz=0x5413
+      winsize=""
+      assert_nothing_raised {
+        f.ioctl(tiocgwinsz, winsize)
+      }
+    ensure
+      f&.close
+    end
+  end if /^(?:i.?86|x86_64)-linux/ =~ RUBY_PLATFORM
+
+  def test_setpos
+    mkcdtmpdir {
+      File.open("tmp.txt", "wb") {|f|
+        f.puts "a"
+        f.puts "bc"
+        f.puts "def"
+      }
+      pos1 = pos2 = pos3 = nil
+      File.open("tmp.txt", "rb") {|f|
+        assert_equal("a\n", f.gets)
+        pos1 = f.pos
+        assert_equal("bc\n", f.gets)
+        pos2 = f.pos
+        assert_equal("def\n", f.gets)
+        pos3 = f.pos
+        assert_equal(nil, f.gets)
+      }
+      File.open("tmp.txt", "rb") {|f|
+        f.pos = pos1
+        assert_equal("bc\n", f.gets)
+        assert_equal("def\n", f.gets)
+        assert_equal(nil, f.gets)
+      }
+      File.open("tmp.txt", "rb") {|f|
+        f.pos = pos2
+        assert_equal("def\n", f.gets)
+        assert_equal(nil, f.gets)
+      }
+      File.open("tmp.txt", "rb") {|f|
+        f.pos = pos3
+        assert_equal(nil, f.gets)
+      }
+      File.open("tmp.txt", "rb") {|f|
+        f.pos = File.size("tmp.txt")
+        s = "not empty string        "
+        assert_equal("", f.read(0,s))
+      }
+    }
+  end
+
+  def test_std_fileno
+    assert_equal(0, STDIN.fileno)
+    assert_equal(1, STDOUT.fileno)
+    assert_equal(2, STDERR.fileno)
+    assert_equal(0, $stdin.fileno)
+    assert_equal(1, $stdout.fileno)
+    assert_equal(2, $stderr.fileno)
+  end
+
+  def test_frozen_fileno
+    bug9865 = '[ruby-dev:48241] [Bug #9865]'
+    with_pipe do |r,w|
+      fd = r.fileno
+      assert_equal(fd, r.freeze.fileno, bug9865)
+    end
+  end
+
+  def test_frozen_autoclose
+    with_pipe do |r,w|
+      assert_equal(true, r.freeze.autoclose?)
+    end
+  end
+
+  def test_sysread_locktmp
+    bug6099 = '[ruby-dev:45297]'
+    buf = " " * 100
+    data = "a" * 100
+    with_pipe do |r,w|
+      th = Thread.new {r.sysread(100, buf)}
+
+      Thread.pass until th.stop?
+
+      assert_equal 100, buf.bytesize
+
+      msg = /can't modify string; temporarily locked/
+      assert_raise_with_message(RuntimeError, msg) do
+        buf.replace("")
+      end
+      assert_predicate(th, :alive?)
+      w.write(data)
+      th.join
+    end
+    assert_equal(data, buf, bug6099)
+  end
+
+  def test_readpartial_locktmp
+    bug6099 = '[ruby-dev:45297]'
+    buf = " " * 100
+    data = "a" * 100
+    th = nil
+    with_pipe do |r,w|
+      r.nonblock = true
+      th = Thread.new {r.readpartial(100, buf)}
+
+      Thread.pass until th.stop?
+
+      assert_equal 100, buf.bytesize
+
+      msg = /can't modify string; temporarily locked/
+      assert_raise_with_message(RuntimeError, msg) do
+        buf.replace("")
+      end
+      assert_predicate(th, :alive?)
+      w.write(data)
+      th.join
+    end
+    assert_equal(data, buf, bug6099)
+  end
+
+  def test_advise_pipe
+    # we don't know if other platforms have a real posix_fadvise()
+    with_pipe do |r,w|
+      # Linux 2.6.15 and earlier re
