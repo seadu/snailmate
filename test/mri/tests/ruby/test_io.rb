@@ -3428,4 +3428,268 @@ __END__
   def test_advise_pipe
     # we don't know if other platforms have a real posix_fadvise()
     with_pipe do |r,w|
-      # Linux 2.6.15 and earlier re
+      # Linux 2.6.15 and earlier returned EINVAL instead of ESPIPE
+      assert_raise(Errno::ESPIPE, Errno::EINVAL) {
+        r.advise(:willneed) or skip "fadvise(2) is not implemented"
+      }
+      assert_raise(Errno::ESPIPE, Errno::EINVAL) {
+        w.advise(:willneed) or skip "fadvise(2) is not implemented"
+      }
+    end
+  end if /linux/ =~ RUBY_PLATFORM
+
+  def assert_buffer_not_raise_shared_string_error
+    bug6764 = '[ruby-core:46586]'
+    bug9847 = '[ruby-core:62643] [Bug #9847]'
+    size = 28
+    data = [*"a".."z", *"A".."Z"].shuffle.join("")
+    t = Tempfile.new("test_io")
+    t.write(data)
+    t.close
+    w = []
+    assert_nothing_raised(RuntimeError, bug6764) do
+      buf = ''
+      File.open(t.path, "r") do |r|
+        while yield(r, size, buf)
+          w << buf.dup
+        end
+      end
+    end
+    assert_equal(data, w.join(""), bug9847)
+  ensure
+    t.close!
+  end
+
+  def test_read_buffer_not_raise_shared_string_error
+    assert_buffer_not_raise_shared_string_error do |r, size, buf|
+      r.read(size, buf)
+    end
+  end
+
+  def test_sysread_buffer_not_raise_shared_string_error
+    assert_buffer_not_raise_shared_string_error do |r, size, buf|
+      begin
+        r.sysread(size, buf)
+      rescue EOFError
+        nil
+      end
+    end
+  end
+
+  def test_readpartial_buffer_not_raise_shared_string_error
+    assert_buffer_not_raise_shared_string_error do |r, size, buf|
+      begin
+        r.readpartial(size, buf)
+      rescue EOFError
+        nil
+      end
+    end
+  end
+
+  def test_puts_recursive_ary
+    bug5986 = '[ruby-core:42444]'
+    c = Class.new {
+      def to_ary
+        [self]
+      end
+    }
+    s = StringIO.new
+    s.puts(c.new)
+    assert_equal("[...]\n", s.string, bug5986)
+  end
+
+  def test_io_select_with_many_files
+    bug8080 = '[ruby-core:53349]'
+
+    assert_normal_exit %q{
+      require "tempfile"
+
+      # Unfortunately, ruby doesn't export FD_SETSIZE. then we assume it's 1024.
+      fd_setsize = 1024
+
+      # try to raise RLIM_NOFILE to >FD_SETSIZE
+      begin
+        Process.setrlimit(Process::RLIMIT_NOFILE, fd_setsize+20)
+      rescue Errno::EPERM
+        exit 0
+      end
+
+      tempfiles = []
+      (0..fd_setsize+1).map {|i|
+        tempfiles << Tempfile.create("test_io_select_with_many_files")
+      }
+
+      begin
+        IO.select(tempfiles)
+      ensure
+        tempfiles.each { |t|
+          t.close
+          File.unlink(t.path)
+        }
+      end
+    }, bug8080, timeout: 100
+  end if defined?(Process::RLIMIT_NOFILE)
+
+  def test_read_32bit_boundary
+    bug8431 = '[ruby-core:55098] [Bug #8431]'
+    make_tempfile {|t|
+      assert_separately(["-", bug8431, t.path], <<-"end;")
+        msg = ARGV.shift
+        f = open(ARGV[0], "rb")
+        f.seek(0xffff_ffff)
+        assert_nil(f.read(1), msg)
+      end;
+    }
+  end if /mswin|mingw/ =~ RUBY_PLATFORM
+
+  def test_write_32bit_boundary
+    bug8431 = '[ruby-core:55098] [Bug #8431]'
+    make_tempfile {|t|
+      def t.close(unlink_now = false)
+        # TODO: Tempfile should deal with this delay on Windows?
+        # NOTE: re-opening with O_TEMPORARY does not work.
+        path = self.path
+        ret = super
+        if unlink_now
+          begin
+            File.unlink(path)
+          rescue Errno::ENOENT
+          rescue Errno::EACCES
+            sleep(2)
+            retry
+          end
+        end
+        ret
+      end
+
+      begin
+        assert_separately(["-", bug8431, t.path], <<-"end;", timeout: 30)
+          msg = ARGV.shift
+          f = open(ARGV[0], "wb")
+          f.seek(0xffff_ffff)
+          begin
+            # this will consume very long time or fail by ENOSPC on a
+            # filesystem which sparse file is not supported
+            f.write('1')
+            pos = f.tell
+          rescue Errno::ENOSPC
+            skip "non-sparse file system"
+          rescue SystemCallError
+          else
+            assert_equal(0x1_0000_0000, pos, msg)
+          end
+        end;
+      rescue Timeout::Error
+        skip "Timeout because of slow file writing"
+      end
+    }
+  end if /mswin|mingw/ =~ RUBY_PLATFORM
+
+  def test_read_unlocktmp_ensure
+    bug8669 = '[ruby-core:56121] [Bug #8669]'
+
+    str = ""
+    IO.pipe {|r,|
+      t = Thread.new {
+        assert_raise(RuntimeError) {
+          r.read(nil, str)
+        }
+      }
+      sleep 0.1 until t.stop?
+      t.raise
+      sleep 0.1 while t.alive?
+      assert_nothing_raised(RuntimeError, bug8669) { str.clear }
+      t.join
+    }
+  end if /cygwin/ !~ RUBY_PLATFORM
+
+  def test_readpartial_unlocktmp_ensure
+    bug8669 = '[ruby-core:56121] [Bug #8669]'
+
+    str = ""
+    IO.pipe {|r, w|
+      t = Thread.new {
+        assert_raise(RuntimeError) {
+          r.readpartial(4096, str)
+        }
+      }
+      sleep 0.1 until t.stop?
+      t.raise
+      sleep 0.1 while t.alive?
+      assert_nothing_raised(RuntimeError, bug8669) { str.clear }
+      t.join
+    }
+  end if /cygwin/ !~ RUBY_PLATFORM
+
+  def test_readpartial_bad_args
+    IO.pipe do |r, w|
+      w.write '.'
+      buf = String.new
+      assert_raise(ArgumentError) { r.readpartial(1, buf, exception: false) }
+      assert_raise(TypeError) { r.readpartial(1, exception: false) }
+      assert_equal [[r],[],[]], IO.select([r], nil, nil, 1)
+      assert_equal '.', r.readpartial(1)
+    end
+  end
+
+  def test_sysread_unlocktmp_ensure
+    bug8669 = '[ruby-core:56121] [Bug #8669]'
+
+    str = ""
+    IO.pipe {|r, w|
+      t = Thread.new {
+        assert_raise(RuntimeError) {
+          r.sysread(4096, str)
+        }
+      }
+      sleep 0.1 until t.stop?
+      t.raise
+      sleep 0.1 while t.alive?
+      assert_nothing_raised(RuntimeError, bug8669) { str.clear }
+      t.join
+    }
+  end if /cygwin/ !~ RUBY_PLATFORM
+
+  def test_exception_at_close
+    bug10153 = '[ruby-core:64463] [Bug #10153] exception in close at the end of block'
+    assert_raise(Errno::EBADF, bug10153) do
+      IO.pipe do |r, w|
+        assert_nothing_raised {IO.open(w.fileno) {}}
+      end
+    end
+  end
+
+  def test_close_twice
+    open(__FILE__) {|f|
+      assert_equal(nil, f.close)
+      assert_equal(nil, f.close)
+    }
+  end
+
+  def test_close_uninitialized
+    io = IO.allocate
+    assert_raise(IOError) { io.close }
+  end
+
+  def test_open_fifo_does_not_block_other_threads
+    mkcdtmpdir {
+      File.mkfifo("fifo")
+      assert_separately([], <<-'EOS')
+        t1 = Thread.new {
+          open("fifo", "r") {|r|
+            r.read
+          }
+        }
+        t2 = Thread.new {
+          open("fifo", "w") {|w|
+            w.write "foo"
+          }
+        }
+        t1_value, _ = assert_join_threads([t1, t2])
+        assert_equal("foo", t1_value)
+      EOS
+    }
+  end if /mswin|mingw|bccwin|cygwin/ !~ RUBY_PLATFORM
+
+  def test_open_flag
+ 
