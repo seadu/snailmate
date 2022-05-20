@@ -3692,4 +3692,237 @@ __END__
   end if /mswin|mingw|bccwin|cygwin/ !~ RUBY_PLATFORM
 
   def test_open_flag
- 
+    make_tempfile do |t|
+      assert_raise(Errno::EEXIST){ open(t.path, File::WRONLY|File::CREAT, flags: File::EXCL){} }
+      assert_raise(Errno::EEXIST){ open(t.path, 'w', flags: File::EXCL){} }
+      assert_raise(Errno::EEXIST){ open(t.path, mode: 'w', flags: File::EXCL){} }
+    end
+  end
+
+  def test_open_flag_binary
+    binary_enc = Encoding.find("BINARY")
+    make_tempfile do |t|
+      open(t.path, File::RDONLY, flags: File::BINARY) do |f|
+        assert_equal true, f.binmode?
+        assert_equal binary_enc, f.external_encoding
+      end
+      open(t.path, 'r', flags: File::BINARY) do |f|
+        assert_equal true, f.binmode?
+        assert_equal binary_enc, f.external_encoding
+      end
+      open(t.path, mode: 'r', flags: File::BINARY) do |f|
+        assert_equal true, f.binmode?
+        assert_equal binary_enc, f.external_encoding
+      end
+      open(t.path, File::RDONLY|File::BINARY) do |f|
+        assert_equal true, f.binmode?
+        assert_equal binary_enc, f.external_encoding
+      end
+      open(t.path, File::RDONLY|File::BINARY, autoclose: true) do |f|
+        assert_equal true, f.binmode?
+        assert_equal binary_enc, f.external_encoding
+      end
+    end
+  end if File::BINARY != 0
+
+  def test_exclusive_mode
+    make_tempfile do |t|
+      assert_raise(Errno::EEXIST){ open(t.path, 'wx'){} }
+      assert_raise(ArgumentError){ open(t.path, 'rx'){} }
+      assert_raise(ArgumentError){ open(t.path, 'ax'){} }
+    end
+  end
+
+  def test_race_gets_and_close
+    opt = { signal: :ABRT, timeout: 200 }
+    assert_separately([], "#{<<-"begin;"}\n#{<<-"end;"}", **opt)
+    bug13076 = '[ruby-core:78845] [Bug #13076]'
+    begin;
+      10.times do |i|
+        a = []
+        t = []
+        10.times do
+          r,w = IO.pipe
+          a << [r,w]
+          t << Thread.new do
+            begin
+              while r.gets
+              end
+            rescue IOError
+            end
+          end
+        end
+        a.each do |r,w|
+          w.puts "hoge"
+          w.close
+          r.close
+        end
+        t.each do |th|
+          assert_same(th, th.join(2), bug13076)
+        end
+      end
+    end;
+  end
+
+  def test_race_closed_stream
+    assert_separately([], "#{<<-"begin;"}\n#{<<-"end;"}")
+    begin;
+      bug13158 = '[ruby-core:79262] [Bug #13158]'
+      closed = nil
+      q = Thread::Queue.new
+      IO.pipe do |r, w|
+        thread = Thread.new do
+          begin
+            q << true
+            assert_raise_with_message(IOError, /stream closed/) do
+              while r.gets
+              end
+            end
+          ensure
+            closed = r.closed?
+          end
+        end
+        q.pop
+        sleep 0.01 until thread.stop?
+        r.close
+        thread.join
+        assert_equal(true, closed, bug13158 + ': stream should be closed')
+      end
+    end;
+  end
+
+  if RUBY_ENGINE == "ruby" # implementation details
+    def test_foreach_rs_conversion
+      make_tempfile {|t|
+        a = []
+        rs = Struct.new(:count).new(0)
+        def rs.to_str; self.count += 1; "\n"; end
+        IO.foreach(t.path, rs) {|x| a << x }
+        assert_equal(["foo\n", "bar\n", "baz\n"], a)
+        assert_equal(1, rs.count)
+      }
+    end
+
+    def test_foreach_rs_invalid
+      make_tempfile {|t|
+        rs = Object.new
+        def rs.to_str; raise "invalid rs"; end
+        assert_raise(RuntimeError) do
+          IO.foreach(t.path, rs, mode:"w") {}
+        end
+        assert_equal(["foo\n", "bar\n", "baz\n"], IO.foreach(t.path).to_a)
+      }
+    end
+
+    def test_foreach_limit_conversion
+      make_tempfile {|t|
+        a = []
+        lim = Struct.new(:count).new(0)
+        def lim.to_int; self.count += 1; -1; end
+        IO.foreach(t.path, lim) {|x| a << x }
+        assert_equal(["foo\n", "bar\n", "baz\n"], a)
+        assert_equal(1, lim.count)
+      }
+    end
+
+    def test_foreach_limit_invalid
+      make_tempfile {|t|
+        lim = Object.new
+        def lim.to_int; raise "invalid limit"; end
+        assert_raise(RuntimeError) do
+          IO.foreach(t.path, lim, mode:"w") {}
+        end
+        assert_equal(["foo\n", "bar\n", "baz\n"], IO.foreach(t.path).to_a)
+      }
+    end
+
+    def test_readlines_rs_invalid
+      make_tempfile {|t|
+        rs = Object.new
+        def rs.to_str; raise "invalid rs"; end
+        assert_raise(RuntimeError) do
+          IO.readlines(t.path, rs, mode:"w")
+        end
+        assert_equal(["foo\n", "bar\n", "baz\n"], IO.readlines(t.path))
+      }
+    end
+
+    def test_readlines_limit_invalid
+      make_tempfile {|t|
+        lim = Object.new
+        def lim.to_int; raise "invalid limit"; end
+        assert_raise(RuntimeError) do
+          IO.readlines(t.path, lim, mode:"w")
+        end
+        assert_equal(["foo\n", "bar\n", "baz\n"], IO.readlines(t.path))
+      }
+    end
+
+    def test_closed_stream_in_rescue
+      assert_separately([], "#{<<-"begin;"}\n#{<<~"end;"}")
+      begin;
+      10.times do
+        assert_nothing_raised(RuntimeError, /frozen IOError/) do
+          IO.pipe do |r, w|
+            th = Thread.start {r.close}
+            r.gets
+          rescue IOError
+            # swallow pending exceptions
+            begin
+              sleep 0.001
+            rescue IOError
+              retry
+            end
+          ensure
+            th.kill.join
+          end
+        end
+      end
+      end;
+    end
+  end
+
+  def test_pread
+    make_tempfile { |t|
+      open(t.path) do |f|
+        assert_equal("bar", f.pread(3, 4))
+        buf = "asdf"
+        assert_equal("bar", f.pread(3, 4, buf))
+        assert_equal("bar", buf)
+        assert_raise(EOFError) { f.pread(1, f.size) }
+      end
+    }
+  end if IO.method_defined?(:pread)
+
+  def test_pwrite
+    make_tempfile { |t|
+      open(t.path, IO::RDWR) do |f|
+        assert_equal(3, f.pwrite("ooo", 4))
+        assert_equal("ooo", f.pread(3, 4))
+      end
+    }
+  end if IO.method_defined?(:pread) and IO.method_defined?(:pwrite)
+
+  def test_select_exceptfds
+    if Etc.uname[:sysname] == 'SunOS'
+      str = 'h'.freeze #(???) Only 1 byte with MSG_OOB on Solaris
+    else
+      str = 'hello'.freeze
+    end
+
+    TCPServer.open('localhost', 0) do |svr|
+      con = TCPSocket.new('localhost', svr.addr[1])
+      acc = svr.accept
+      assert_equal str.length, con.send(str, Socket::MSG_OOB)
+      set = IO.select(nil, nil, [acc], 30)
+      assert_equal([[], [], [acc]], set, 'IO#select exceptions array OK')
+      acc.close
+      con.close
+    end
+  end if Socket.const_defined?(:MSG_OOB)
+
+  def test_recycled_fd_close
+    dot = -'.'
+    IO.pipe do |sig_rd, sig_wr|
+      noex = Thread.new do # everything right and never see exceptions :)
+        until s
