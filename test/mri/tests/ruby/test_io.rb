@@ -3925,4 +3925,108 @@ __END__
     dot = -'.'
     IO.pipe do |sig_rd, sig_wr|
       noex = Thread.new do # everything right and never see exceptions :)
-        until s
+        until sig_rd.wait_readable(0)
+          IO.pipe do |r, w|
+            th = Thread.new { r.read(1) }
+            w.write(dot)
+
+            assert_same th, th.join(15), '"good" reader timeout'
+            assert_equal(dot, th.value)
+          end
+        end
+        sig_rd.read(4)
+      end
+      1000.times do |i| # stupid things and make exceptions:
+        IO.pipe do |r,w|
+          th = Thread.new do
+            begin
+              while r.gets
+              end
+            rescue IOError => e
+              e
+            end
+          end
+          Thread.pass until th.stop?
+
+          r.close
+          assert_same th, th.join(30), '"bad" reader timeout'
+          assert_match(/stream closed/, th.value.message)
+        end
+      end
+      sig_wr.write 'done'
+      assert_same noex, noex.join(20), '"good" writer timeout'
+      assert_equal 'done', noex.value ,'r63216'
+    end
+  end
+
+  def test_select_memory_leak
+    # avoid malloc arena explosion from glibc and jemalloc:
+    env = {
+      'MALLOC_ARENA_MAX' => '1',
+      'MALLOC_ARENA_TEST' => '1',
+      'MALLOC_CONF' => 'narenas:1',
+    }
+    assert_no_memory_leak([env], "#{<<~"begin;"}\n#{<<~'else;'}", "#{<<~'end;'}", rss: true, timeout: 60)
+    begin;
+      r, w = IO.pipe
+      rset = [r]
+      wset = [w]
+      exc = StandardError.new(-"select used to leak on exception")
+      exc.set_backtrace([])
+      Thread.new { IO.select(rset, wset, nil, 0) }.join
+    else;
+      th = Thread.new do
+        Thread.handle_interrupt(StandardError => :on_blocking) do
+          begin
+            IO.select(rset, wset)
+          rescue
+            retry
+          end while true
+        end
+      end
+      50_000.times do
+        Thread.pass until th.stop?
+        th.raise(exc)
+      end
+      th.kill
+      th.join
+    end;
+  end
+
+  def test_external_encoding_index
+    IO.pipe {|r, w|
+      assert_raise(TypeError) {Marshal.dump(r)}
+      assert_raise(TypeError) {Marshal.dump(w)}
+    }
+  end
+
+  def test_marshal_closed_io
+    bug18077 = '[ruby-core:104927] [Bug #18077]'
+    r, w = IO.pipe
+    r.close; w.close
+    assert_raise(TypeError, bug18077) {Marshal.dump(r)}
+
+    class << r
+      undef_method :closed?
+    end
+    assert_raise(TypeError, bug18077) {Marshal.dump(r)}
+  end
+
+  def test_stdout_to_closed_pipe
+    EnvUtil.invoke_ruby(["-e", "loop {puts :ok}"], "", true, true) do
+      |in_p, out_p, err_p, pid|
+      out = out_p.gets
+      out_p.close
+      err = err_p.read
+    ensure
+      status = Process.wait2(pid)[1]
+      assert_equal("ok\n", out)
+      assert_empty(err)
+      assert_not_predicate(status, :success?)
+      if Signal.list["PIPE"]
+        assert_predicate(status, :signaled?)
+        assert_equal("PIPE", Signal.signame(status.termsig) || status.termsig)
+      end
+    end
+  end
+end
