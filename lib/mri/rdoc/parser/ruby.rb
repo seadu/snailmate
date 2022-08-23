@@ -607,4 +607,281 @@ class RDoc::Parser::Ruby < RDoc::Parser
       text = tk[:text].sub(/^:/, '')
 
       next_tk = peek_tk
-      if next_tk && :on_op == next_tk[:kind] && '=' 
+      if next_tk && :on_op == next_tk[:kind] && '=' == next_tk[:text] then
+        get_tk
+        text << '='
+      end
+
+      text
+    when :on_ident, :on_const, :on_gvar, :on_cvar, :on_ivar, :on_op, :on_kw then
+      tk[:text]
+    when :on_tstring, :on_dstring then
+      tk[:text][1..-2]
+    else
+      raise RDoc::Error, "Name or symbol expected (got #{tk})"
+    end
+  end
+
+  ##
+  # Marks containers between +container+ and +ancestor+ as ignored
+
+  def suppress_parents container, ancestor # :nodoc:
+    while container and container != ancestor do
+      container.suppress unless container.documented?
+      container = container.parent
+    end
+  end
+
+  ##
+  # Look for directives in a normal comment block:
+  #
+  #   # :stopdoc:
+  #   # Don't display comment from this point forward
+  #
+  # This routine modifies its +comment+ parameter.
+
+  def look_for_directives_in container, comment
+    @preprocess.handle comment, container do |directive, param|
+      case directive
+      when 'method', 'singleton-method',
+           'attr', 'attr_accessor', 'attr_reader', 'attr_writer' then
+        false # handled elsewhere
+      when 'section' then
+        break unless container.kind_of?(RDoc::Context)
+        container.set_current_section param, comment.dup
+        comment.text = ''
+        break
+      end
+    end
+
+    comment.remove_private
+  end
+
+  ##
+  # Adds useful info about the parser to +message+
+
+  def make_message message
+    prefix = "#{@file_name}:".dup
+
+    tk = peek_tk
+    prefix << "#{tk[:line_no]}:#{tk[:char_no]}:" if tk
+
+    "#{prefix} #{message}"
+  end
+
+  ##
+  # Creates a comment with the correct format
+
+  def new_comment comment, line_no = nil
+    c = RDoc::Comment.new comment, @top_level, :ruby
+    c.line = line_no
+    c.format = @markup
+    c
+  end
+
+  ##
+  # Creates an RDoc::Attr for the name following +tk+, setting the comment to
+  # +comment+.
+
+  def parse_attr(context, single, tk, comment)
+    line_no = tk[:line_no]
+
+    args = parse_symbol_arg 1
+    if args.size > 0 then
+      name = args[0]
+      rw = "R"
+      skip_tkspace_without_nl
+      tk = get_tk
+
+      if :on_comma == tk[:kind] then
+        rw = "RW" if get_bool
+      else
+        unget_tk tk
+      end
+
+      att = create_attr context, single, name, rw, comment
+      att.line   = line_no
+
+      read_documentation_modifiers att, RDoc::ATTR_MODIFIERS
+    else
+      warn "'attr' ignored - looks like a variable"
+    end
+  end
+
+  ##
+  # Creates an RDoc::Attr for each attribute listed after +tk+, setting the
+  # comment for each to +comment+.
+
+  def parse_attr_accessor(context, single, tk, comment)
+    line_no = tk[:line_no]
+
+    args = parse_symbol_arg
+    rw = "?"
+
+    tmp = RDoc::CodeObject.new
+    read_documentation_modifiers tmp, RDoc::ATTR_MODIFIERS
+    # TODO In most other places we let the context keep track of document_self
+    # and add found items appropriately but here we do not.  I'm not sure why.
+    return if @track_visibility and not tmp.document_self
+
+    case tk[:text]
+    when "attr_reader"   then rw = "R"
+    when "attr_writer"   then rw = "W"
+    when "attr_accessor" then rw = "RW"
+    else
+      rw = '?'
+    end
+
+    for name in args
+      att = create_attr context, single, name, rw, comment
+      att.line   = line_no
+    end
+  end
+
+  ##
+  # Parses an +alias+ in +context+ with +comment+
+
+  def parse_alias(context, single, tk, comment)
+    line_no = tk[:line_no]
+
+    skip_tkspace
+
+    if :on_lparen === peek_tk[:kind] then
+      get_tk
+      skip_tkspace
+    end
+
+    new_name = get_symbol_or_name
+
+    skip_tkspace
+    if :on_comma === peek_tk[:kind] then
+      get_tk
+      skip_tkspace
+    end
+
+    begin
+      old_name = get_symbol_or_name
+    rescue RDoc::Error
+      return
+    end
+
+    al = RDoc::Alias.new(get_tkread, old_name, new_name, comment,
+                         single == SINGLE)
+    record_location al
+    al.line   = line_no
+
+    read_documentation_modifiers al, RDoc::ATTR_MODIFIERS
+    context.add_alias al
+    @stats.add_alias al
+
+    al
+  end
+
+  ##
+  # Extracts call parameters from the token stream.
+
+  def parse_call_parameters(tk)
+    end_token = case tk[:kind]
+                when :on_lparen
+                  :on_rparen
+                when :on_rparen
+                  return ""
+                else
+                  :on_nl
+                end
+    nest = 0
+
+    loop do
+      break if tk.nil?
+      case tk[:kind]
+      when :on_semicolon
+        break
+      when :on_lparen
+        nest += 1
+      when end_token
+        if end_token == :on_rparen
+          nest -= 1
+          break if RDoc::Parser::RipperStateLex.end?(tk) and nest <= 0
+        else
+          break if RDoc::Parser::RipperStateLex.end?(tk)
+        end
+      when :on_comment, :on_embdoc
+        unget_tk(tk)
+        break
+      when :on_op
+        if tk[:text] =~ /^(.{1,2})?=$/
+          unget_tk(tk)
+          break
+        end
+      end
+      tk = get_tk
+    end
+
+    get_tkread_clean "\n", " "
+  end
+
+  ##
+  # Parses a class in +context+ with +comment+
+
+  def parse_class container, single, tk, comment
+    line_no = tk[:line_no]
+
+    declaration_context = container
+    container, name_t, given_name, = get_class_or_module container
+
+    if name_t[:kind] == :on_const
+      cls = parse_class_regular container, declaration_context, single,
+        name_t, given_name, comment
+    elsif name_t[:kind] == :on_op && name_t[:text] == '<<'
+      case name = get_class_specification
+      when 'self', container.name
+        read_documentation_modifiers cls, RDoc::CLASS_MODIFIERS
+        parse_statements container, SINGLE
+        return # don't update line
+      else
+        cls = parse_class_singleton container, name, comment
+      end
+    else
+      warn "Expected class name or '<<'. Got #{name_t[:kind]}: #{name_t[:text].inspect}"
+      return
+    end
+
+    cls.line   = line_no
+
+    # after end modifiers
+    read_documentation_modifiers cls, RDoc::CLASS_MODIFIERS
+
+    cls
+  end
+
+  ##
+  # Parses and creates a regular class
+
+  def parse_class_regular container, declaration_context, single, # :nodoc:
+                          name_t, given_name, comment
+    superclass = '::Object'
+
+    if given_name =~ /^::/ then
+      declaration_context = @top_level
+      given_name = $'
+    end
+
+    tk = peek_tk
+    if tk[:kind] == :on_op && tk[:text] == '<' then
+      get_tk
+      skip_tkspace
+      superclass = get_class_specification
+      superclass = '(unknown)' if superclass.empty?
+    end
+
+    cls_type = single == SINGLE ? RDoc::SingleClass : RDoc::NormalClass
+    cls = declaration_context.add_class cls_type, given_name, superclass
+    cls.ignore unless container.document_children
+
+    read_documentation_modifiers cls, RDoc::CLASS_MODIFIERS
+    record_location cls
+
+    cls.add_comment comment, @top_level
+
+    @top_level.add_to_classes_or_modules cls
+    @s
