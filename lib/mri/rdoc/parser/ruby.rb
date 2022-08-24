@@ -884,4 +884,237 @@ class RDoc::Parser::Ruby < RDoc::Parser
     cls.add_comment comment, @top_level
 
     @top_level.add_to_classes_or_modules cls
-    @s
+    @stats.add_class cls
+
+    suppress_parents container, declaration_context unless cls.document_self
+
+    parse_statements cls
+
+    cls
+  end
+
+  ##
+  # Parses a singleton class in +container+ with the given +name+ and
+  # +comment+.
+
+  def parse_class_singleton container, name, comment # :nodoc:
+    other = @store.find_class_named name
+
+    unless other then
+      if name =~ /^::/ then
+        name = $'
+        container = @top_level
+      end
+
+      other = container.add_module RDoc::NormalModule, name
+      record_location other
+
+      # class << $gvar
+      other.ignore if name.empty?
+
+      other.add_comment comment, @top_level
+    end
+
+    # notify :nodoc: all if not a constant-named class/module
+    # (and remove any comment)
+    unless name =~ /\A(::)?[A-Z]/ then
+      other.document_self = nil
+      other.document_children = false
+      other.clear_comment
+    end
+
+    @top_level.add_to_classes_or_modules other
+    @stats.add_class other
+
+    read_documentation_modifiers other, RDoc::CLASS_MODIFIERS
+    parse_statements(other, SINGLE)
+
+    other
+  end
+
+  ##
+  # Parses a constant in +context+ with +comment+.  If +ignore_constants+ is
+  # true, no found constants will be added to RDoc.
+
+  def parse_constant container, tk, comment, ignore_constants = false
+    line_no = tk[:line_no]
+
+    name = tk[:text]
+    skip_tkspace_without_nl
+
+    return unless name =~ /^\w+$/
+
+    new_modules = []
+    if :on_op == peek_tk[:kind] && '::' == peek_tk[:text] then
+      unget_tk tk
+
+      container, name_t, _, new_modules = get_class_or_module container, true
+
+      name = name_t[:text]
+    end
+
+    is_array_or_hash = false
+    if peek_tk && :on_lbracket == peek_tk[:kind]
+      get_tk
+      nest = 1
+      while bracket_tk = get_tk
+        case bracket_tk[:kind]
+        when :on_lbracket
+          nest += 1
+        when :on_rbracket
+          nest -= 1
+          break if nest == 0
+        end
+      end
+      skip_tkspace_without_nl
+      is_array_or_hash = true
+    end
+
+    unless peek_tk && :on_op == peek_tk[:kind] && '=' == peek_tk[:text] then
+      return false
+    end
+    get_tk
+
+    unless ignore_constants
+      new_modules.each do |prev_c, new_module|
+        prev_c.add_module_by_normal_module new_module
+        new_module.ignore unless prev_c.document_children
+        @top_level.add_to_classes_or_modules new_module
+      end
+    end
+
+    value = ''
+    con = RDoc::Constant.new name, value, comment
+
+    body = parse_constant_body container, con, is_array_or_hash
+
+    return unless body
+
+    con.value = body
+    record_location con
+    con.line   = line_no
+    read_documentation_modifiers con, RDoc::CONSTANT_MODIFIERS
+
+    return if is_array_or_hash
+
+    @stats.add_constant con
+    container.add_constant con
+
+    true
+  end
+
+  def parse_constant_body container, constant, is_array_or_hash # :nodoc:
+    nest     = 0
+    rhs_name = ''.dup
+
+    get_tkread
+
+    tk = get_tk
+
+    body = nil
+    loop do
+      break if tk.nil?
+      if :on_semicolon == tk[:kind] then
+        break if nest <= 0
+      elsif [:on_tlambeg, :on_lparen, :on_lbrace, :on_lbracket].include?(tk[:kind]) then
+        nest += 1
+      elsif (:on_kw == tk[:kind] && 'def' == tk[:text]) then
+        nest += 1
+      elsif (:on_kw == tk[:kind] && %w{do if unless case begin}.include?(tk[:text])) then
+        if (tk[:state] & RDoc::Parser::RipperStateLex::EXPR_LABEL) == 0
+          nest += 1
+        end
+      elsif [:on_rparen, :on_rbrace, :on_rbracket].include?(tk[:kind]) ||
+            (:on_kw == tk[:kind] && 'end' == tk[:text]) then
+        nest -= 1
+      elsif (:on_comment == tk[:kind] or :on_embdoc == tk[:kind]) then
+        unget_tk tk
+        if nest <= 0 and RDoc::Parser::RipperStateLex.end?(tk) then
+          body = get_tkread_clean(/^[ \t]+/, '')
+          read_documentation_modifiers constant, RDoc::CONSTANT_MODIFIERS
+          break
+        else
+          read_documentation_modifiers constant, RDoc::CONSTANT_MODIFIERS
+        end
+      elsif :on_const == tk[:kind] then
+        rhs_name << tk[:text]
+
+        next_tk = peek_tk
+        if nest <= 0 and (next_tk.nil? || :on_nl == next_tk[:kind]) then
+          create_module_alias container, constant, rhs_name unless is_array_or_hash
+          break
+        end
+      elsif :on_nl == tk[:kind] then
+        if nest <= 0 and RDoc::Parser::RipperStateLex.end?(tk) then
+          unget_tk tk
+          break
+        end
+      elsif :on_op == tk[:kind] && '::' == tk[:text]
+        rhs_name << '::'
+      end
+      tk = get_tk
+    end
+
+    body ? body : get_tkread_clean(/^[ \t]+/, '')
+  end
+
+  ##
+  # Generates an RDoc::Method or RDoc::Attr from +comment+ by looking for
+  # :method: or :attr: directives in +comment+.
+
+  def parse_comment container, tk, comment
+    return parse_comment_tomdoc container, tk, comment if @markup == 'tomdoc'
+    column  = tk[:char_no]
+    line_no = comment.line.nil? ? tk[:line_no] : comment.line
+
+    comment.text = comment.text.sub(/(^# +:?)(singleton-)(method:)/, '\1\3')
+    singleton = !!$~
+
+    co =
+      if (comment.text = comment.text.sub(/^# +:?method: *(\S*).*?\n/i, '')) && !!$~ then
+        line_no += $`.count("\n")
+        parse_comment_ghost container, comment.text, $1, column, line_no, comment
+      elsif (comment.text = comment.text.sub(/# +:?(attr(_reader|_writer|_accessor)?): *(\S*).*?\n/i, '')) && !!$~ then
+        parse_comment_attr container, $1, $3, comment
+      end
+
+    if co then
+      co.singleton = singleton
+      co.line      = line_no
+    end
+
+    true
+  end
+
+  ##
+  # Parse a comment that is describing an attribute in +container+ with the
+  # given +name+ and +comment+.
+
+  def parse_comment_attr container, type, name, comment # :nodoc:
+    return if name.empty?
+
+    rw = case type
+         when 'attr_reader' then 'R'
+         when 'attr_writer' then 'W'
+         else 'RW'
+         end
+
+    create_attr container, NORMAL, name, rw, comment
+  end
+
+  def parse_comment_ghost container, text, name, column, line_no, # :nodoc:
+                          comment
+    name = nil if name.empty?
+
+    meth = RDoc::GhostMethod.new get_tkread, name
+    record_location meth
+
+    meth.start_collecting_tokens
+    indent = RDoc::Parser::RipperStateLex::Token.new(1, 1, :on_sp, ' ' * column)
+    position_comment = RDoc::Parser::RipperStateLex::Token.new(line_no, 1, :on_comment)
+    position_comment[:text] = "# File #{@top_level.relative_name}, line #{line_no}"
+    newline = RDoc::Parser::RipperStateLex::Token.new(0, 0, :on_nl, "\n")
+    meth.add_tokens [position_comment, newline, indent]
+
+    meth.params =
+      if text.sub!(/^#\s+:?a
