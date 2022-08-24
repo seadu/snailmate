@@ -1117,4 +1117,261 @@ class RDoc::Parser::Ruby < RDoc::Parser
     meth.add_tokens [position_comment, newline, indent]
 
     meth.params =
-      if text.sub!(/^#\s+:?a
+      if text.sub!(/^#\s+:?args?:\s*(.*?)\s*$/i, '') then
+        $1
+      else
+        ''
+      end
+
+    comment.normalize
+    comment.extract_call_seq meth
+
+    return unless meth.name
+
+    container.add_method meth
+
+    meth.comment = comment
+
+    @stats.add_method meth
+
+    meth
+  end
+
+  ##
+  # Creates an RDoc::Method on +container+ from +comment+ if there is a
+  # Signature section in the comment
+
+  def parse_comment_tomdoc container, tk, comment
+    return unless signature = RDoc::TomDoc.signature(comment)
+    column  = tk[:char_no]
+    line_no = tk[:line_no]
+
+    name, = signature.split %r%[ \(]%, 2
+
+    meth = RDoc::GhostMethod.new get_tkread, name
+    record_location meth
+    meth.line      = line_no
+
+    meth.start_collecting_tokens
+    indent = RDoc::Parser::RipperStateLex::Token.new(1, 1, :on_sp, ' ' * column)
+    position_comment = RDoc::Parser::RipperStateLex::Token.new(line_no, 1, :on_comment)
+    position_comment[:text] = "# File #{@top_level.relative_name}, line #{line_no}"
+    newline = RDoc::Parser::RipperStateLex::Token.new(0, 0, :on_nl, "\n")
+    meth.add_tokens [position_comment, newline, indent]
+
+    meth.call_seq = signature
+
+    comment.normalize
+
+    return unless meth.name
+
+    container.add_method meth
+
+    meth.comment = comment
+
+    @stats.add_method meth
+  end
+
+  ##
+  # Parses an +include+ or +extend+, indicated by the +klass+ and adds it to
+  # +container+ # with +comment+
+
+  def parse_extend_or_include klass, container, comment # :nodoc:
+    loop do
+      skip_tkspace_comment
+
+      name = get_included_module_with_optional_parens
+
+      unless name.empty? then
+        obj = container.add klass, name, comment
+        record_location obj
+      end
+
+      return if peek_tk.nil? || :on_comma != peek_tk[:kind]
+
+      get_tk
+    end
+  end
+
+  ##
+  # Parses an +included+ with a block feature of ActiveSupport::Concern.
+
+  def parse_included_with_activesupport_concern container, comment # :nodoc:
+    skip_tkspace_without_nl
+    tk = get_tk
+    unless tk[:kind] == :on_lbracket || (tk[:kind] == :on_kw && tk[:text] == 'do')
+      unget_tk tk
+      return nil # should be a block
+    end
+
+    parse_statements container
+
+    container
+  end
+
+  ##
+  # Parses identifiers that can create new methods or change visibility.
+  #
+  # Returns true if the comment was not consumed.
+
+  def parse_identifier container, single, tk, comment # :nodoc:
+    case tk[:text]
+    when 'private', 'protected', 'public', 'private_class_method',
+         'public_class_method', 'module_function' then
+      parse_visibility container, single, tk
+      return true
+    when 'private_constant', 'public_constant'
+      parse_constant_visibility container, single, tk
+      return true
+    when 'attr' then
+      parse_attr container, single, tk, comment
+    when /^attr_(reader|writer|accessor)$/ then
+      parse_attr_accessor container, single, tk, comment
+    when 'alias_method' then
+      parse_alias container, single, tk, comment
+    when 'require', 'include' then
+      # ignore
+    else
+      if comment.text =~ /\A#\#$/ then
+        case comment.text
+        when /^# +:?attr(_reader|_writer|_accessor)?:/ then
+          parse_meta_attr container, single, tk, comment
+        else
+          method = parse_meta_method container, single, tk, comment
+          method.params = container.params if
+            container.params
+          method.block_params = container.block_params if
+            container.block_params
+        end
+      end
+    end
+
+    false
+  end
+
+  ##
+  # Parses a meta-programmed attribute and creates an RDoc::Attr.
+  #
+  # To create foo and bar attributes on class C with comment "My attributes":
+  #
+  #   class C
+  #
+  #     ##
+  #     # :attr:
+  #     #
+  #     # My attributes
+  #
+  #     my_attr :foo, :bar
+  #
+  #   end
+  #
+  # To create a foo attribute on class C with comment "My attribute":
+  #
+  #   class C
+  #
+  #     ##
+  #     # :attr: foo
+  #     #
+  #     # My attribute
+  #
+  #     my_attr :foo, :bar
+  #
+  #   end
+
+  def parse_meta_attr(context, single, tk, comment)
+    args = parse_symbol_arg
+    rw = "?"
+
+    # If nodoc is given, don't document any of them
+
+    tmp = RDoc::CodeObject.new
+    read_documentation_modifiers tmp, RDoc::ATTR_MODIFIERS
+
+    regexp = /^# +:?(attr(_reader|_writer|_accessor)?): *(\S*).*?\n/i
+    if regexp =~ comment.text then
+      comment.text = comment.text.sub(regexp, '')
+      rw = case $1
+           when 'attr_reader' then 'R'
+           when 'attr_writer' then 'W'
+           else 'RW'
+           end
+      name = $3 unless $3.empty?
+    end
+
+    if name then
+      att = create_attr context, single, name, rw, comment
+    else
+      args.each do |attr_name|
+        att = create_attr context, single, attr_name, rw, comment
+      end
+    end
+
+    att
+  end
+
+  ##
+  # Parses a meta-programmed method
+
+  def parse_meta_method(container, single, tk, comment)
+    column  = tk[:char_no]
+    line_no = tk[:line_no]
+
+    start_collecting_tokens
+    add_token tk
+    add_token_listener self
+
+    skip_tkspace_without_nl
+
+    comment.text = comment.text.sub(/(^# +:?)(singleton-)(method:)/, '\1\3')
+    singleton = !!$~
+
+    name = parse_meta_method_name comment, tk
+
+    return unless name
+
+    meth = RDoc::MetaMethod.new get_tkread, name
+    record_location meth
+    meth.line   = line_no
+    meth.singleton = singleton
+
+    remove_token_listener self
+
+    meth.start_collecting_tokens
+    indent = RDoc::Parser::RipperStateLex::Token.new(1, 1, :on_sp, ' ' * column)
+    position_comment = RDoc::Parser::RipperStateLex::Token.new(line_no, 1, :on_comment)
+    position_comment[:text] = "# File #{@top_level.relative_name}, line #{line_no}"
+    newline = RDoc::Parser::RipperStateLex::Token.new(0, 0, :on_nl, "\n")
+    meth.add_tokens [position_comment, newline, indent]
+    meth.add_tokens @token_stream
+
+    parse_meta_method_params container, single, meth, tk, comment
+
+    meth.comment = comment
+
+    @stats.add_method meth
+
+    meth
+  end
+
+  ##
+  # Parses the name of a metaprogrammed method.  +comment+ is used to
+  # determine the name while +tk+ is used in an error message if the name
+  # cannot be determined.
+
+  def parse_meta_method_name comment, tk # :nodoc:
+    if comment.text.sub!(/^# +:?method: *(\S*).*?\n/i, '') then
+      return $1 unless $1.empty?
+    end
+
+    name_t = get_tk
+
+    if :on_symbol == name_t[:kind] then
+      name_t[:text][1..-1]
+    elsif :on_tstring == name_t[:kind] then
+      name_t[:text][1..-2]
+    elsif :on_op == name_t[:kind] && '=' == name_t[:text] then # ignore
+      remove_token_listener self
+
+      nil
+    else
+      warn "unknow
