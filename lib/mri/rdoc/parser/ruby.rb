@@ -1374,4 +1374,239 @@ class RDoc::Parser::Ruby < RDoc::Parser
 
       nil
     else
-      warn "unknow
+      warn "unknown name token #{name_t.inspect} for meta-method '#{tk[:text]}'"
+      'unknown'
+    end
+  end
+
+  ##
+  # Parses the parameters and block for a meta-programmed method.
+
+  def parse_meta_method_params container, single, meth, tk, comment # :nodoc:
+    token_listener meth do
+      meth.params = ''
+
+      look_for_directives_in meth, comment
+      comment.normalize
+      comment.extract_call_seq meth
+
+      container.add_method meth
+
+      last_tk = tk
+
+      while tk = get_tk do
+        if :on_semicolon == tk[:kind] then
+          break
+        elsif :on_nl == tk[:kind] then
+          break unless last_tk and :on_comma == last_tk[:kind]
+        elsif :on_sp == tk[:kind] then
+          # expression continues
+        elsif :on_kw == tk[:kind] && 'do' == tk[:text] then
+          parse_statements container, single, meth
+          break
+        else
+          last_tk = tk
+        end
+      end
+    end
+  end
+
+  ##
+  # Parses a normal method defined by +def+
+
+  def parse_method(container, single, tk, comment)
+    singleton = nil
+    added_container = false
+    name = nil
+    column  = tk[:char_no]
+    line_no = tk[:line_no]
+
+    start_collecting_tokens
+    add_token tk
+
+    token_listener self do
+      prev_container = container
+      name, container, singleton = parse_method_name container
+      added_container = container != prev_container
+    end
+
+    return unless name
+
+    meth = RDoc::AnyMethod.new get_tkread, name
+    look_for_directives_in meth, comment
+    meth.singleton = single == SINGLE ? true : singleton
+
+    record_location meth
+    meth.line   = line_no
+
+    meth.start_collecting_tokens
+    indent = RDoc::Parser::RipperStateLex::Token.new(1, 1, :on_sp, ' ' * column)
+    token = RDoc::Parser::RipperStateLex::Token.new(line_no, 1, :on_comment)
+    token[:text] = "# File #{@top_level.relative_name}, line #{line_no}"
+    newline = RDoc::Parser::RipperStateLex::Token.new(0, 0, :on_nl, "\n")
+    meth.add_tokens [token, newline, indent]
+    meth.add_tokens @token_stream
+
+    parse_method_params_and_body container, single, meth, added_container
+
+    comment.normalize
+    comment.extract_call_seq meth
+
+    meth.comment = comment
+
+    # after end modifiers
+    read_documentation_modifiers meth, RDoc::METHOD_MODIFIERS
+
+    @stats.add_method meth
+  end
+
+  ##
+  # Parses the parameters and body of +meth+
+
+  def parse_method_params_and_body container, single, meth, added_container
+    token_listener meth do
+      parse_method_parameters meth
+
+      if meth.document_self or not @track_visibility then
+        container.add_method meth
+      elsif added_container then
+        container.document_self = false
+      end
+
+      # Having now read the method parameters and documentation modifiers, we
+      # now know whether we have to rename #initialize to ::new
+
+      if meth.name == "initialize" && !meth.singleton then
+        if meth.dont_rename_initialize then
+          meth.visibility = :protected
+        else
+          meth.singleton = true
+          meth.name = "new"
+          meth.visibility = :public
+        end
+      end
+
+      parse_statements container, single, meth
+    end
+  end
+
+  ##
+  # Parses a method that needs to be ignored.
+
+  def parse_method_dummy container
+    dummy = RDoc::Context.new
+    dummy.parent = container
+    dummy.store  = container.store
+    skip_method dummy
+  end
+
+  ##
+  # Parses the name of a method in +container+.
+  #
+  # Returns the method name, the container it is in (for def Foo.name) and if
+  # it is a singleton or regular method.
+
+  def parse_method_name container # :nodoc:
+    skip_tkspace
+    name_t = get_tk
+    back_tk = skip_tkspace_without_nl
+    singleton = false
+
+    dot = get_tk
+    if dot[:kind] == :on_period || (dot[:kind] == :on_op && dot[:text] == '::') then
+      singleton = true
+
+      name, container = parse_method_name_singleton container, name_t
+    else
+      unget_tk dot
+      back_tk.reverse_each do |token|
+        unget_tk token
+      end
+
+      name = parse_method_name_regular container, name_t
+    end
+
+    return name, container, singleton
+  end
+
+  ##
+  # For the given +container+ and initial name token +name_t+ the method name
+  # is parsed from the token stream for a regular method.
+
+  def parse_method_name_regular container, name_t # :nodoc:
+    if :on_op == name_t[:kind] && (%w{* & [] []= <<}.include?(name_t[:text])) then
+      name_t[:text]
+    else
+      unless [:on_kw, :on_const, :on_ident].include?(name_t[:kind]) then
+        warn "expected method name token, . or ::, got #{name_t.inspect}"
+        skip_method container
+        return
+      end
+      name_t[:text]
+    end
+  end
+
+  ##
+  # For the given +container+ and initial name token +name_t+ the method name
+  # and the new +container+ (if necessary) are parsed from the token stream
+  # for a singleton method.
+
+  def parse_method_name_singleton container, name_t # :nodoc:
+    skip_tkspace
+    name_t2 = get_tk
+
+    if (:on_kw == name_t[:kind] && 'self' == name_t[:text]) || (:on_op == name_t[:kind] && '%' == name_t[:text]) then
+      # NOTE: work around '[' being consumed early
+      if :on_lbracket == name_t2[:kind]
+        get_tk
+        name = '[]'
+      else
+        name = name_t2[:text]
+      end
+    elsif :on_const == name_t[:kind] then
+      name = name_t2[:text]
+
+      container = get_method_container container, name_t
+
+      return unless container
+
+      name
+    elsif :on_ident == name_t[:kind] || :on_ivar == name_t[:kind] || :on_gvar == name_t[:kind] then
+      parse_method_dummy container
+
+      name = nil
+    elsif (:on_kw == name_t[:kind]) && ('true' == name_t[:text] || 'false' == name_t[:text] || 'nil' == name_t[:text]) then
+      klass_name = "#{name_t[:text].capitalize}Class"
+      container = @store.find_class_named klass_name
+      container ||= @top_level.add_class RDoc::NormalClass, klass_name
+
+      name = name_t2[:text]
+    else
+      warn "unexpected method name token #{name_t.inspect}"
+      # break
+      skip_method container
+
+      name = nil
+    end
+
+    return name, container
+  end
+
+  ##
+  # Extracts +yield+ parameters from +method+
+
+  def parse_method_or_yield_parameters(method = nil,
+                                       modifiers = RDoc::METHOD_MODIFIERS)
+    skip_tkspace_without_nl
+    tk = get_tk
+    end_token = get_end_token tk
+    return '' unless end_token
+
+    nest = 0
+    continue = false
+
+    while tk != nil do
+      case tk[:kind]
+      when :on_semicolon then
+        break if nest == 0
+      when :on_l
