@@ -1609,4 +1609,249 @@ class RDoc::Parser::Ruby < RDoc::Parser
       case tk[:kind]
       when :on_semicolon then
         break if nest == 0
-      when :on_l
+      when :on_lbracket then
+        nest += 1
+      when :on_rbracket then
+        nest -= 1
+      when :on_lbrace then
+        nest += 1
+      when :on_rbrace then
+        nest -= 1
+        if nest <= 0
+          # we might have a.each { |i| yield i }
+          unget_tk(tk) if nest < 0
+          break
+        end
+      when :on_lparen then
+        nest += 1
+      when end_token[:kind] then
+        if end_token[:kind] == :on_rparen
+          nest -= 1
+          break if nest <= 0
+        else
+          break
+        end
+      when :on_rparen then
+        nest -= 1
+      when :on_comment, :on_embdoc then
+        @read.pop
+        if :on_nl == end_token[:kind] and "\n" == tk[:text][-1] and
+          (!continue or (tk[:state] & RDoc::Parser::RipperStateLex::EXPR_LABEL) != 0) then
+          if method && method.block_params.nil? then
+            unget_tk tk
+            read_documentation_modifiers method, modifiers
+          end
+          break if !continue and nest <= 0
+        end
+      when :on_comma then
+        continue = true
+      when :on_ident then
+        continue = false if continue
+      end
+      tk = get_tk
+    end
+
+    get_tkread_clean(/\s+/, ' ')
+  end
+
+  ##
+  # Capture the method's parameters. Along the way, look for a comment
+  # containing:
+  #
+  #    # yields: ....
+  #
+  # and add this as the block_params for the method
+
+  def parse_method_parameters method
+    res = parse_method_or_yield_parameters method
+
+    res = "(#{res})" unless res =~ /\A\(/
+    method.params = res unless method.params
+
+    return if  method.block_params
+
+    skip_tkspace_without_nl
+    read_documentation_modifiers method, RDoc::METHOD_MODIFIERS
+  end
+
+  ##
+  # Parses an RDoc::NormalModule in +container+ with +comment+
+
+  def parse_module container, single, tk, comment
+    container, name_t, = get_class_or_module container
+
+    name = name_t[:text]
+
+    mod = container.add_module RDoc::NormalModule, name
+    mod.ignore unless container.document_children
+    record_location mod
+
+    read_documentation_modifiers mod, RDoc::CLASS_MODIFIERS
+    mod.add_comment comment, @top_level
+    parse_statements mod
+
+    # after end modifiers
+    read_documentation_modifiers mod, RDoc::CLASS_MODIFIERS
+
+    @stats.add_module mod
+  end
+
+  ##
+  # Parses an RDoc::Require in +context+ containing +comment+
+
+  def parse_require(context, comment)
+    skip_tkspace_comment
+    tk = get_tk
+
+    if :on_lparen == tk[:kind] then
+      skip_tkspace_comment
+      tk = get_tk
+    end
+
+    name = tk[:text][1..-2] if :on_tstring == tk[:kind]
+
+    if name then
+      @top_level.add_require RDoc::Require.new(name, comment)
+    else
+      unget_tk tk
+    end
+  end
+
+  ##
+  # Parses a rescue
+
+  def parse_rescue
+    skip_tkspace_without_nl
+
+    while tk = get_tk
+      case tk[:kind]
+      when :on_nl, :on_semicolon, :on_comment then
+        break
+      when :on_comma then
+        skip_tkspace_without_nl
+
+        get_tk if :on_nl == peek_tk[:kind]
+      end
+
+      skip_tkspace_without_nl
+    end
+  end
+
+  ##
+  # Retrieve comment body without =begin/=end
+
+  def retrieve_comment_body(tk)
+    if :on_embdoc == tk[:kind]
+      tk[:text].gsub(/\A=begin.*\n/, '').gsub(/=end\n?\z/, '')
+    else
+      tk[:text]
+    end
+  end
+
+  ##
+  # The core of the Ruby parser.
+
+  def parse_statements(container, single = NORMAL, current_method = nil,
+                       comment = new_comment(''))
+    raise 'no' unless RDoc::Comment === comment
+    comment = RDoc::Encoding.change_encoding comment, @encoding if @encoding
+
+    nest = 1
+    save_visibility = container.visibility
+
+    non_comment_seen = true
+
+    while tk = get_tk do
+      keep_comment = false
+      try_parse_comment = false
+
+      non_comment_seen = true unless (:on_comment == tk[:kind] or :on_embdoc == tk[:kind])
+
+      case tk[:kind]
+      when :on_nl, :on_ignored_nl, :on_comment, :on_embdoc then
+        if :on_nl == tk[:kind] or :on_ignored_nl == tk[:kind]
+          skip_tkspace
+          tk = get_tk
+        else
+          past_tokens = @read.size > 1 ? @read[0..-2] : []
+          nl_position = 0
+          past_tokens.reverse.each_with_index do |read_tk, i|
+            if read_tk =~ /^\n$/ then
+              nl_position = (past_tokens.size - 1) - i
+              break
+            elsif read_tk =~ /^#.*\n$/ then
+              nl_position = ((past_tokens.size - 1) - i) + 1
+              break
+            end
+          end
+          comment_only_line = past_tokens[nl_position..-1].all?{ |c| c =~ /^\s+$/ }
+          unless comment_only_line then
+            tk = get_tk
+          end
+        end
+
+        if tk and (:on_comment == tk[:kind] or :on_embdoc == tk[:kind]) then
+          if non_comment_seen then
+            # Look for RDoc in a comment about to be thrown away
+            non_comment_seen = parse_comment container, tk, comment unless
+              comment.empty?
+
+            comment = ''
+            comment = RDoc::Encoding.change_encoding comment, @encoding if @encoding
+          end
+
+          line_no = nil
+          while tk and (:on_comment == tk[:kind] or :on_embdoc == tk[:kind]) do
+            comment_body = retrieve_comment_body(tk)
+            line_no = tk[:line_no] if comment.empty?
+            comment += comment_body
+            comment << "\n" unless comment_body =~ /\n\z/
+
+            if comment_body.size > 1 && comment_body =~ /\n\z/ then
+              skip_tkspace_without_nl # leading spaces
+            end
+            tk = get_tk
+          end
+
+          comment = new_comment comment, line_no
+
+          unless comment.empty? then
+            look_for_directives_in container, comment
+
+            if container.done_documenting then
+              throw :eof if RDoc::TopLevel === container
+              container.ongoing_visibility = save_visibility
+            end
+          end
+
+          keep_comment = true
+        else
+          non_comment_seen = true
+        end
+
+        unget_tk tk
+        keep_comment = true
+        container.current_line_visibility = nil
+
+      when :on_kw then
+        case tk[:text]
+        when 'class' then
+          parse_class container, single, tk, comment
+
+        when 'module' then
+          parse_module container, single, tk, comment
+
+        when 'def' then
+          parse_method container, single, tk, comment
+
+        when 'alias' then
+          parse_alias container, single, tk, comment unless current_method
+
+        when 'yield' then
+          if current_method.nil? then
+            warn "Warning: yield outside of method" if container.document_self
+          else
+            parse_yield container, single, tk, current_method
+          end
+
+   
