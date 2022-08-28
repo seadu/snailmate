@@ -1854,4 +1854,271 @@ class RDoc::Parser::Ruby < RDoc::Parser
             parse_yield container, single, tk, current_method
           end
 
-   
+        when 'until', 'while' then
+          if (tk[:state] & RDoc::Parser::RipperStateLex::EXPR_LABEL) == 0
+            nest += 1
+            skip_optional_do_after_expression
+          end
+
+        # Until and While can have a 'do', which shouldn't increase the nesting.
+        # We can't solve the general case, but we can handle most occurrences by
+        # ignoring a do at the end of a line.
+
+        # 'for' is trickier
+        when 'for' then
+          nest += 1
+          skip_for_variable
+          skip_optional_do_after_expression
+
+        when 'case', 'do', 'if', 'unless', 'begin' then
+          if (tk[:state] & RDoc::Parser::RipperStateLex::EXPR_LABEL) == 0
+            nest += 1
+          end
+
+        when 'super' then
+          current_method.calls_super = true if current_method
+
+        when 'rescue' then
+          parse_rescue
+
+        when 'end' then
+          nest -= 1
+          if nest == 0 then
+            container.ongoing_visibility = save_visibility
+
+            parse_comment container, tk, comment unless comment.empty?
+
+            return
+          end
+        end
+
+      when :on_const then
+        unless parse_constant container, tk, comment, current_method then
+          try_parse_comment = true
+        end
+
+      when :on_ident then
+        if nest == 1 and current_method.nil? then
+          keep_comment = parse_identifier container, single, tk, comment
+        end
+
+        case tk[:text]
+        when "require" then
+          parse_require container, comment
+        when "include" then
+          parse_extend_or_include RDoc::Include, container, comment
+        when "extend" then
+          parse_extend_or_include RDoc::Extend, container, comment
+        when "included" then
+          parse_included_with_activesupport_concern container, comment
+        end
+
+      else
+        try_parse_comment = nest == 1
+      end
+
+      if try_parse_comment then
+        non_comment_seen = parse_comment container, tk, comment unless
+          comment.empty?
+
+        keep_comment = false
+      end
+
+      unless keep_comment then
+        comment = new_comment ''
+        comment = RDoc::Encoding.change_encoding comment, @encoding if @encoding
+        container.params = nil
+        container.block_params = nil
+      end
+
+      consume_trailing_spaces
+    end
+
+    container.params = nil
+    container.block_params = nil
+  end
+
+  ##
+  # Parse up to +no+ symbol arguments
+
+  def parse_symbol_arg(no = nil)
+    skip_tkspace_comment
+
+    tk = get_tk
+    if tk[:kind] == :on_lparen
+      parse_symbol_arg_paren no
+    else
+      parse_symbol_arg_space no, tk
+    end
+  end
+
+  ##
+  # Parses up to +no+ symbol arguments surrounded by () and places them in
+  # +args+.
+
+  def parse_symbol_arg_paren no # :nodoc:
+    args = []
+
+    loop do
+      skip_tkspace_comment
+      if tk1 = parse_symbol_in_arg
+        args.push tk1
+        break if no and args.size >= no
+      end
+
+      skip_tkspace_comment
+      case (tk2 = get_tk)[:kind]
+      when :on_rparen
+        break
+      when :on_comma
+      else
+        warn("unexpected token: '#{tk2.inspect}'") if $DEBUG_RDOC
+        break
+      end
+    end
+
+    args
+  end
+
+  ##
+  # Parses up to +no+ symbol arguments separated by spaces and places them in
+  # +args+.
+
+  def parse_symbol_arg_space no, tk # :nodoc:
+    args = []
+
+    unget_tk tk
+    if tk = parse_symbol_in_arg
+      args.push tk
+      return args if no and args.size >= no
+    end
+
+    loop do
+      skip_tkspace_without_nl
+
+      tk1 = get_tk
+      if tk1.nil? || :on_comma != tk1[:kind] then
+        unget_tk tk1
+        break
+      end
+
+      skip_tkspace_comment
+      if tk = parse_symbol_in_arg
+        args.push tk
+        break if no and args.size >= no
+      end
+    end
+
+    args
+  end
+
+  ##
+  # Returns symbol text from the next token
+
+  def parse_symbol_in_arg
+    tk = get_tk
+    if :on_symbol == tk[:kind] then
+      tk[:text].sub(/^:/, '')
+    elsif :on_tstring == tk[:kind] then
+      tk[:text][1..-2]
+    elsif :on_dstring == tk[:kind] or :on_ident == tk[:kind] then
+      nil # ignore
+    else
+      warn("Expected symbol or string, got #{tk.inspect}") if $DEBUG_RDOC
+      nil
+    end
+  end
+
+  ##
+  # Parses statements in the top-level +container+
+
+  def parse_top_level_statements container
+    comment = collect_first_comment
+
+    look_for_directives_in container, comment
+
+    throw :eof if container.done_documenting
+
+    @markup = comment.format
+
+    # HACK move if to RDoc::Context#comment=
+    container.comment = comment if container.document_self unless comment.empty?
+
+    parse_statements container, NORMAL, nil, comment
+  end
+
+  ##
+  # Determines the visibility in +container+ from +tk+
+
+  def parse_visibility(container, single, tk)
+    vis_type, vis, singleton = get_visibility_information tk, single
+
+    skip_tkspace_comment false
+
+    ptk = peek_tk
+    # Ryan Davis suggested the extension to ignore modifiers, because he
+    # often writes
+    #
+    #   protected unless $TESTING
+    #
+    if [:on_nl, :on_semicolon].include?(ptk[:kind]) || (:on_kw == ptk[:kind] && (['if', 'unless'].include?(ptk[:text]))) then
+      container.ongoing_visibility = vis
+    elsif :on_kw == ptk[:kind] && 'def' == ptk[:text]
+      container.current_line_visibility = vis
+    else
+      update_visibility container, vis_type, vis, singleton
+    end
+  end
+
+  ##
+  # Parses a Module#private_constant or Module#public_constant call from +tk+.
+
+  def parse_constant_visibility(container, single, tk)
+    args = parse_symbol_arg
+    case tk[:text]
+    when 'private_constant'
+      vis = :private
+    when 'public_constant'
+      vis = :public
+    else
+      raise RDoc::Error, 'Unreachable'
+    end
+    container.set_constant_visibility_for args, vis
+  end
+
+  ##
+  # Determines the block parameter for +context+
+
+  def parse_yield(context, single, tk, method)
+    return if method.block_params
+
+    get_tkread
+    method.block_params = parse_method_or_yield_parameters
+  end
+
+  ##
+  # Directives are modifier comments that can appear after class, module, or
+  # method names. For example:
+  #
+  #   def fred # :yields: a, b
+  #
+  # or:
+  #
+  #   class MyClass # :nodoc:
+  #
+  # We return the directive name and any parameters as a two element array if
+  # the name is in +allowed+.  A directive can be found anywhere up to the end
+  # of the current line.
+
+  def read_directive allowed
+    tokens = []
+
+    while tk = get_tk do
+      tokens << tk
+
+      if :on_nl == tk[:kind] or (:on_kw == tk[:kind] && 'def' == tk[:text]) then
+        return
+      elsif :on_comment == tk[:kind] or :on_embdoc == tk[:kind] then
+        return unless tk[:text] =~ /\s*:?([\w-]+):\s*(.*)/
+
+        direc
