@@ -2121,4 +2121,225 @@ class RDoc::Parser::Ruby < RDoc::Parser
       elsif :on_comment == tk[:kind] or :on_embdoc == tk[:kind] then
         return unless tk[:text] =~ /\s*:?([\w-]+):\s*(.*)/
 
-        direc
+        directive = $1.downcase
+
+        return [directive, $2] if allowed.include? directive
+
+        return
+      end
+    end
+  ensure
+    unless tokens.length == 1 and (:on_comment == tokens.first[:kind] or :on_embdoc == tokens.first[:kind]) then
+      tokens.reverse_each do |token|
+        unget_tk token
+      end
+    end
+  end
+
+  ##
+  # Handles directives following the definition for +context+ (any
+  # RDoc::CodeObject) if the directives are +allowed+ at this point.
+  #
+  # See also RDoc::Markup::PreProcess#handle_directive
+
+  def read_documentation_modifiers context, allowed
+    skip_tkspace_without_nl
+    directive, value = read_directive allowed
+
+    return unless directive
+
+    @preprocess.handle_directive '', directive, value, context do |dir, param|
+      if %w[notnew not_new not-new].include? dir then
+        context.dont_rename_initialize = true
+
+        true
+      end
+    end
+  end
+
+  ##
+  # Records the location of this +container+ in the file for this parser and
+  # adds it to the list of classes and modules in the file.
+
+  def record_location container # :nodoc:
+    case container
+    when RDoc::ClassModule then
+      @top_level.add_to_classes_or_modules container
+    end
+
+    container.record_location @top_level
+  end
+
+  ##
+  # Scans this Ruby file for Ruby constructs
+
+  def scan
+    reset
+
+    catch :eof do
+      begin
+        parse_top_level_statements @top_level
+
+      rescue StandardError => e
+        if @content.include?('<%') and @content.include?('%>') then
+          # Maybe, this is ERB.
+          $stderr.puts "\033[2KRDoc detects ERB file. Skips it for compatibility:"
+          $stderr.puts @file_name
+          return
+        end
+
+        if @scanner_point >= @scanner.size
+          now_line_no = @scanner[@scanner.size - 1][:line_no]
+        else
+          now_line_no = peek_tk[:line_no]
+        end
+        first_tk_index = @scanner.find_index { |tk| tk[:line_no] == now_line_no }
+        last_tk_index = @scanner.find_index { |tk| tk[:line_no] == now_line_no + 1 }
+        last_tk_index = last_tk_index ? last_tk_index - 1 : @scanner.size - 1
+        code = @scanner[first_tk_index..last_tk_index].map{ |t| t[:text] }.join
+
+        $stderr.puts <<-EOF
+
+#{self.class} failure around line #{now_line_no} of
+#{@file_name}
+
+        EOF
+
+        unless code.empty? then
+          $stderr.puts code
+          $stderr.puts
+        end
+
+        raise e
+      end
+    end
+
+    @top_level
+  end
+
+  ##
+  # while, until, and for have an optional do
+
+  def skip_optional_do_after_expression
+    skip_tkspace_without_nl
+    tk = get_tk
+
+    b_nest = 0
+    nest = 0
+
+    loop do
+      break unless tk
+      case tk[:kind]
+      when :on_semicolon, :on_nl, :on_ignored_nl then
+        break if b_nest.zero?
+      when :on_lparen then
+        nest += 1
+      when :on_rparen then
+        nest -= 1
+      when :on_kw then
+        case tk[:text]
+        when 'begin'
+          b_nest += 1
+        when 'end'
+          b_nest -= 1
+        when 'do'
+          break if nest.zero?
+        end
+      when :on_comment, :on_embdoc then
+        if b_nest.zero? and "\n" == tk[:text][-1] then
+          break
+        end
+      end
+      tk = get_tk
+    end
+
+    skip_tkspace_without_nl
+
+    get_tk if peek_tk && :on_kw == peek_tk[:kind] && 'do' == peek_tk[:text]
+  end
+
+  ##
+  # skip the var [in] part of a 'for' statement
+
+  def skip_for_variable
+    skip_tkspace_without_nl
+    get_tk
+    skip_tkspace_without_nl
+    tk = get_tk
+    unget_tk(tk) unless :on_kw == tk[:kind] and 'in' == tk[:text]
+  end
+
+  ##
+  # Skips the next method in +container+
+
+  def skip_method container
+    meth = RDoc::AnyMethod.new "", "anon"
+    parse_method_parameters meth
+    parse_statements container, false, meth
+  end
+
+  ##
+  # Skip spaces until a comment is found
+
+  def skip_tkspace_comment(skip_nl = true)
+    loop do
+      skip_nl ? skip_tkspace : skip_tkspace_without_nl
+      next_tk = peek_tk
+      return if next_tk.nil? || (:on_comment != next_tk[:kind] and :on_embdoc != next_tk[:kind])
+      get_tk
+    end
+  end
+
+  ##
+  # Updates visibility in +container+ from +vis_type+ and +vis+.
+
+  def update_visibility container, vis_type, vis, singleton # :nodoc:
+    new_methods = []
+
+    case vis_type
+    when 'module_function' then
+      args = parse_symbol_arg
+      container.set_visibility_for args, :private, false
+
+      container.methods_matching args do |m|
+        s_m = m.dup
+        record_location s_m
+        s_m.singleton = true
+        new_methods << s_m
+      end
+    when 'public_class_method', 'private_class_method' then
+      args = parse_symbol_arg
+
+      container.methods_matching args, true do |m|
+        if m.parent != container then
+          m = m.dup
+          record_location m
+          new_methods << m
+        end
+
+        m.visibility = vis
+      end
+    else
+      args = parse_symbol_arg
+      container.set_visibility_for args, vis, singleton
+    end
+
+    new_methods.each do |method|
+      case method
+      when RDoc::AnyMethod then
+        container.add_method method
+      when RDoc::Attr then
+        container.add_attribute method
+      end
+      method.visibility = vis
+    end
+  end
+
+  ##
+  # Prints +message+ to +$stderr+ unless we're being quiet
+
+  def warn message
+    @options.warn make_message message
+  end
+
+end
