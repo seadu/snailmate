@@ -17,4 +17,15 @@ ruby_version_is "3.0" do
       set.join(nil).should == "abc"
     end
 
-    it "returns a string formed by concatenating each element s
+    it "returns a string formed by concatenating each element separated by the separator" do
+      set = Set[:a, :b, :c]
+      set.join(' | ').should == "a | b | c"
+    end
+
+    it "calls #to_a to convert the Set in to an Array" do
+      set = Set[:a, :b, :c]
+      set.should_receive(:to_a).and_return([:a, :b, :c])
+      set.join.should == "abc"
+    end
+  end
+end
