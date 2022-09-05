@@ -42,4 +42,19 @@ class RDoc::Stats::Quiet
   def print_file(*) end
 
   ##
-  # Prints when a method is a
+  # Prints when a method is added
+
+  def print_method(*) end
+
+  ##
+  # Prints when a module is added
+
+  def print_module(*) end
+
+  ##
+  # Prints when RDoc is done
+
+  def done_adding(*) end
+
+end
+
