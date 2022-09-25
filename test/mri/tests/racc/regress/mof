@@ -1221,3 +1221,148 @@ module_eval(<<'.,.,', 'mof.y', 416)
   def _reduce_116(val, _values, result)
      result = val[0] + val[1]
     result
+  end
+.,.,
+
+# reduce 117 omitted
+
+# reduce 118 omitted
+
+# reduce 119 omitted
+
+# reduce 120 omitted
+
+# reduce 121 omitted
+
+# reduce 122 omitted
+
+# reduce 123 omitted
+
+# reduce 124 omitted
+
+# reduce 125 omitted
+
+# reduce 126 omitted
+
+# reduce 127 omitted
+
+# reduce 128 omitted
+
+# reduce 129 omitted
+
+module_eval(<<'.,.,', 'mof.y', 471)
+  def _reduce_130(val, _values, result)
+     result = CIM::QualifierDeclaration.new( val[1], val[2][0], val[2][1], val[3], val[4])
+    result
+  end
+.,.,
+
+# reduce 131 omitted
+
+# reduce 132 omitted
+
+# reduce 133 omitted
+
+# reduce 134 omitted
+
+# reduce 135 omitted
+
+# reduce 136 omitted
+
+# reduce 137 omitted
+
+module_eval(<<'.,.,', 'mof.y', 490)
+  def _reduce_138(val, _values, result)
+     type = val[2].nil? ? val[1] : CIM::Array.new(val[2],val[1])
+	    result = [ type, val[3] ]
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'mof.y', 497)
+  def _reduce_139(val, _values, result)
+     result = CIM::QualifierScopes.new(val[3])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'mof.y', 502)
+  def _reduce_140(val, _values, result)
+     result = [ val[0] ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'mof.y', 504)
+  def _reduce_141(val, _values, result)
+     result = val[0] << val[2]
+    result
+  end
+.,.,
+
+# reduce 142 omitted
+
+# reduce 143 omitted
+
+# reduce 144 omitted
+
+# reduce 145 omitted
+
+# reduce 146 omitted
+
+# reduce 147 omitted
+
+# reduce 148 omitted
+
+# reduce 149 omitted
+
+# reduce 150 omitted
+
+# reduce 151 omitted
+
+module_eval(<<'.,.,', 'mof.y', 522)
+  def _reduce_152(val, _values, result)
+     result = CIM::QualifierFlavors.new val[3]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'mof.y', 527)
+  def _reduce_153(val, _values, result)
+     result = [ val[0] ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'mof.y', 529)
+  def _reduce_154(val, _values, result)
+     result = val[0] << val[2]
+    result
+  end
+.,.,
+
+# reduce 155 omitted
+
+# reduce 156 omitted
+
+# reduce 157 omitted
+
+# reduce 158 omitted
+
+# reduce 159 omitted
+
+module_eval(<<'.,.,', 'mof.y', 553)
+  def _reduce_160(val, _values, result)
+     raise "Instance property '#{val[1]} must have a value" unless @style == :wmi
+    result
+  end
+.,.,
+
+def _reduce_none(val, _values, result)
+  val[0]
+end
+
+  end   # class Parser
+end   # module MOF
+
