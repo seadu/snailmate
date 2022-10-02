@@ -134,4 +134,156 @@ class RDoc::TopLevel < RDoc::Context
   # TODO Why do we search through all classes/modules found, not just the
   #       ones of this instance?
 
-  def
+  def find_class_or_module name
+    @store.find_class_or_module name
+  end
+
+  ##
+  # Finds a class or module named +symbol+
+
+  def find_local_symbol(symbol)
+    find_class_or_module(symbol) || super
+  end
+
+  ##
+  # Finds a module or class with +name+
+
+  def find_module_named(name)
+    find_class_or_module(name)
+  end
+
+  ##
+  # Returns the relative name of this file
+
+  def full_name
+    @relative_name
+  end
+
+  ##
+  # An RDoc::TopLevel has the same hash as another with the same
+  # relative_name
+
+  def hash
+    @relative_name.hash
+  end
+
+  ##
+  # URL for this with a +prefix+
+
+  def http_url(prefix)
+    path = [prefix, @relative_name.tr('.', '_')]
+
+    File.join(*path.compact) + '.html'
+  end
+
+  def inspect # :nodoc:
+    "#<%s:0x%x %p modules: %p classes: %p>" % [
+      self.class, object_id,
+      base_name,
+      @modules.map { |n,m| m },
+      @classes.map { |n,c| c }
+    ]
+  end
+
+  ##
+  # Time this file was last modified, if known
+
+  def last_modified
+    @file_stat ? file_stat.mtime : nil
+  end
+
+  ##
+  # Dumps this TopLevel for use by ri.  See also #marshal_load
+
+  def marshal_dump
+    [
+      MARSHAL_VERSION,
+      @relative_name,
+      @parser,
+      parse(@comment),
+    ]
+  end
+
+  ##
+  # Loads this TopLevel from +array+.
+
+  def marshal_load array # :nodoc:
+    initialize array[1]
+
+    @parser  = array[2]
+    @comment = array[3]
+
+    @file_stat          = nil
+  end
+
+  ##
+  # Returns the NormalClass "Object", creating it if not found.
+  #
+  # Records +self+ as a location in "Object".
+
+  def object_class
+    @object_class ||= begin
+      oc = @store.find_class_named('Object') || add_class(RDoc::NormalClass, 'Object')
+      oc.record_location self
+      oc
+    end
+  end
+
+  ##
+  # Base name of this file without the extension
+
+  def page_name
+    basename = File.basename @relative_name
+    basename =~ /\.(rb|rdoc|txt|md)$/i
+
+    $` || basename
+  end
+
+  ##
+  # Path to this file for use with HTML generator output.
+
+  def path
+    http_url @store.rdoc.generator.file_dir
+  end
+
+  def pretty_print q # :nodoc:
+    q.group 2, "[#{self.class}: ", "]" do
+      q.text "base name: #{base_name.inspect}"
+      q.breakable
+
+      items = @modules.map { |n,m| m }
+      items.concat @modules.map { |n,c| c }
+      q.seplist items do |mod| q.pp mod end
+    end
+  end
+
+  ##
+  # Search record used by RDoc::Generator::JsonIndex
+
+  def search_record
+    return unless @parser < RDoc::Parser::Text
+
+    [
+      page_name,
+      '',
+      page_name,
+      '',
+      path,
+      '',
+      snippet(@comment),
+    ]
+  end
+
+  ##
+  # Is this TopLevel from a text file instead of a source code file?
+
+  def text?
+    @parser and @parser.include? RDoc::Parser::Text
+  end
+
+  def to_s # :nodoc:
+    "file #{full_name}"
+  end
+
+end
+
