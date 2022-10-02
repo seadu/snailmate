@@ -135,4 +135,29 @@ class TestGetoptLong < Test::Unit::TestCase
   end
 
   def test_new_with_invalid_alias
-    inva
+    invalid_aliases = %w[v - -- +]
+    invalid_aliases.each do |invalid_alias|
+      e = assert_raise(ArgumentError, invalid_alias.to_s) do
+        arguments = [
+          ['--verbose', invalid_alias, GetoptLong::NO_ARGUMENT]
+        ]
+        GetoptLong.new(*arguments)
+      end
+      assert_match(/invalid option/, e.message)
+    end
+  end
+
+  def test_new_with_invalid_flag
+    invalid_flags = ['foo']
+    invalid_flags.each do |invalid_flag|
+      e = assert_raise(ArgumentError, invalid_flag.to_s) do
+        arguments = [
+          ['--verbose', '-v', invalid_flag]
+        ]
+        GetoptLong.new(*arguments)
+      end
+      assert_match(/no argument-flag/, e.message)
+    end
+  end
+
+end
