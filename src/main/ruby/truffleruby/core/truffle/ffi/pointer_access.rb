@@ -284,4 +284,244 @@ class Truffle::FFI::Pointer
     check_bounds(offset, 4)
     Primitive.pointer_read_int address + offset
   end
-  al
+  alias_method :get_int32, :get_int
+
+  def put_int(offset, value)
+    check_bounds(offset, 4)
+    Primitive.pointer_write_int address + offset, Primitive.rb_to_int(value)
+    self
+  end
+  alias_method :put_int32, :put_int
+
+  def read_array_of_int(length)
+    check_bounds(0, length * 4)
+    Array.new(length) do |i|
+      Primitive.pointer_read_int address + (i * 4)
+    end
+  end
+  alias_method :read_array_of_int32, :read_array_of_int
+
+  def write_array_of_int(ary)
+    Truffle::Type.rb_check_type(ary, ::Array)
+    check_bounds(0, ary.size * 4)
+    ary.each_with_index do |value, i|
+      Primitive.pointer_write_int address + (i * 4), Primitive.rb_to_int(value)
+    end
+    self
+  end
+  alias_method :write_array_of_int32, :write_array_of_int
+
+  def get_array_of_int(offset, length)
+    (self + offset).read_array_of_int(length)
+  end
+  alias_method :get_array_of_int32, :get_array_of_int
+
+  def put_array_of_int(offset, ary)
+    (self + offset).write_array_of_int(ary)
+    self
+  end
+  alias_method :put_array_of_int32, :put_array_of_int
+
+  # uint, uint32
+
+  def read_uint
+    check_bounds(0, 4)
+    Primitive.pointer_read_uint address
+  end
+  alias_method :read_uint32, :read_uint
+
+  def write_uint(value)
+    check_bounds(0, 4)
+    Primitive.pointer_write_uint address, Primitive.rb_to_int(value)
+    self
+  end
+  alias_method :write_uint32, :write_uint
+
+  def get_uint(offset)
+    check_bounds(offset, 4)
+    Primitive.pointer_read_uint address + offset
+  end
+  alias_method :get_uint32, :get_uint
+
+  def put_uint(offset, value)
+    check_bounds(offset, 4)
+    Primitive.pointer_write_uint address + offset, Primitive.rb_to_int(value)
+    self
+  end
+  alias_method :put_uint32, :put_uint
+
+  def read_array_of_uint(length)
+    check_bounds(0, length * 4)
+    Array.new(length) do |i|
+      Primitive.pointer_read_uint address + (i * 4)
+    end
+  end
+  alias_method :read_array_of_uint32, :read_array_of_uint
+
+  def write_array_of_uint(ary)
+    Truffle::Type.rb_check_type(ary, ::Array)
+    check_bounds(0, ary.size * 4)
+    ary.each_with_index do |value, i|
+      Primitive.pointer_write_uint address + (i * 4), Primitive.rb_to_int(value)
+    end
+    self
+  end
+  alias_method :write_array_of_uint32, :write_array_of_uint
+
+  def get_array_of_uint(offset, length)
+    (self + offset).read_array_of_uint(length)
+  end
+  alias_method :get_array_of_uint32, :get_array_of_uint
+
+  def put_array_of_uint(offset, ary)
+    (self + offset).write_array_of_uint(ary)
+    self
+  end
+  alias_method :put_array_of_uint32, :put_array_of_uint
+
+  # long, int64, long_long
+
+  def read_long
+    check_bounds(0, 8)
+    Primitive.pointer_read_long address
+  end
+  alias_method :read_int64, :read_long
+  alias_method :read_long_long, :read_long
+
+  def write_long(value)
+    check_bounds(0, 8)
+    Primitive.pointer_write_long address, Primitive.rb_to_int(value)
+    self
+  end
+  alias_method :write_int64, :write_long
+  alias_method :write_long_long, :write_long
+
+  def get_long(offset)
+    check_bounds(offset, 8)
+    Primitive.pointer_read_long address + offset
+  end
+  alias_method :get_int64, :get_long
+  alias_method :get_long_long, :get_long
+
+  def put_long(offset, value)
+    check_bounds(offset, 8)
+    Primitive.pointer_write_long address + offset, Primitive.rb_to_int(value)
+    self
+  end
+  alias_method :put_int64, :put_long
+  alias_method :put_long_long, :put_long
+
+  def read_array_of_long(length)
+    check_bounds(0, length * 8)
+    Array.new(length) do |i|
+      Primitive.pointer_read_long address + (i * 8)
+    end
+  end
+  alias_method :read_array_of_int64, :read_array_of_long
+  alias_method :read_array_of_long_long, :read_array_of_long
+
+  def write_array_of_long(ary)
+    Truffle::Type.rb_check_type(ary, ::Array)
+    check_bounds(0, ary.size * 8)
+    ary.each_with_index do |value, i|
+      Primitive.pointer_write_long address + (i * 8), Primitive.rb_to_int(value)
+    end
+    self
+  end
+  alias_method :write_array_of_int64, :write_array_of_long
+  alias_method :write_array_of_long_long, :write_array_of_long
+
+  def get_array_of_long(offset, length)
+    (self + offset).read_array_of_long(length)
+  end
+  alias_method :get_array_of_int64, :get_array_of_long
+  alias_method :get_array_of_long_long, :get_array_of_long
+
+  def put_array_of_long(offset, ary)
+    (self + offset).write_array_of_long(ary)
+    self
+  end
+  alias_method :put_array_of_int64, :put_array_of_long
+  alias_method :put_array_of_long_long, :put_array_of_long
+
+  # ulong, uint64, ulong_long
+
+  def read_ulong
+    check_bounds(0, 8)
+    Primitive.pointer_read_ulong address
+  end
+  alias_method :read_uint64, :read_ulong
+  alias_method :read_ulong_long, :read_ulong
+
+  def write_ulong(value)
+    check_bounds(0, 8)
+    Primitive.pointer_write_ulong address, Primitive.rb_to_int(value)
+    self
+  end
+  alias_method :write_uint64, :write_ulong
+  alias_method :write_ulong_long, :write_ulong
+
+  def get_ulong(offset)
+    check_bounds(offset, 8)
+    Primitive.pointer_read_ulong address + offset
+  end
+  alias_method :get_uint64, :get_ulong
+  alias_method :get_ulong_long, :get_ulong
+
+  def put_ulong(offset, value)
+    check_bounds(offset, 8)
+    Primitive.pointer_write_ulong address + offset, Primitive.rb_to_int(value)
+    self
+  end
+  alias_method :put_uint64, :put_ulong
+  alias_method :put_ulong_long, :put_ulong
+
+  def read_array_of_ulong(length)
+    check_bounds(0, length * 8)
+    Array.new(length) do |i|
+      Primitive.pointer_read_ulong address + (i * 8)
+    end
+  end
+  alias_method :read_array_of_uint64, :read_array_of_ulong
+  alias_method :read_array_of_ulong_long, :read_array_of_ulong
+
+  def write_array_of_ulong(ary)
+    Truffle::Type.rb_check_type(ary, ::Array)
+    check_bounds(0, ary.size * 8)
+    ary.each_with_index do |value, i|
+      Primitive.pointer_write_ulong address + (i * 8), Primitive.rb_to_int(value)
+    end
+    self
+  end
+  alias_method :write_array_of_uint64, :write_array_of_ulong
+  alias_method :write_array_of_ulong_long, :write_array_of_ulong
+
+  def get_array_of_ulong(offset, length)
+    (self + offset).read_array_of_ulong(length)
+  end
+  alias_method :get_array_of_uint64, :get_array_of_ulong
+  alias_method :get_array_of_ulong_long, :get_array_of_ulong
+
+  def put_array_of_ulong(offset, ary)
+    (self + offset).write_array_of_ulong(ary)
+    self
+  end
+  alias_method :put_array_of_uint64, :put_array_of_ulong
+  alias_method :put_array_of_ulong_long, :put_array_of_ulong
+
+  # float, float32
+
+  def read_float
+    check_bounds(0, 4)
+    Primitive.pointer_read_float address
+  end
+  alias_method :read_float32, :read_float
+
+  def write_float(value)
+    check_bounds(0, 4)
+    Primitive.pointer_write_float address, Truffle::Type.rb_to_f(value)
+    self
+  end
+  alias_method :write_float32, :write_float
+
+  def get_float(
