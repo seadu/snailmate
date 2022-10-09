@@ -524,4 +524,166 @@ class Truffle::FFI::Pointer
   end
   alias_method :write_float32, :write_float
 
-  def get_float(
+  def get_float(offset)
+    check_bounds(offset, 4)
+    Primitive.pointer_read_float address + offset
+  end
+  alias_method :get_float32, :get_float
+
+  def put_float(offset, value)
+    check_bounds(offset, 4)
+    Primitive.pointer_write_float address + offset, Truffle::Type.rb_to_f(value)
+    self
+  end
+  alias_method :put_float32, :put_float
+
+  def read_array_of_float(length)
+    check_bounds(0, length * 4)
+    Array.new(length) do |i|
+      Primitive.pointer_read_float address + (i * 4)
+    end
+  end
+  alias_method :read_array_of_float32, :read_array_of_float
+
+  def write_array_of_float(ary)
+    Truffle::Type.rb_check_type(ary, ::Array)
+    check_bounds(0, ary.size * 4)
+    ary.each_with_index do |value, i|
+      Primitive.pointer_write_float address + (i * 4), Truffle::Type.rb_to_f(value)
+    end
+    self
+  end
+  alias_method :write_array_of_float32, :write_array_of_float
+
+  def get_array_of_float(offset, length)
+    (self + offset).read_array_of_float(length)
+  end
+  alias_method :get_array_of_float32, :get_array_of_float
+
+  def put_array_of_float(offset, ary)
+    (self + offset).write_array_of_float(ary)
+    self
+  end
+  alias_method :put_array_of_float32, :put_array_of_float
+
+  # double, float64
+
+  def read_double
+    check_bounds(0, 8)
+    Primitive.pointer_read_double address
+  end
+  alias_method :read_float64, :read_double
+
+  def write_double(value)
+    check_bounds(0, 8)
+    Primitive.pointer_write_double address, Truffle::Type.rb_to_f(value)
+    self
+  end
+  alias_method :write_float64, :write_double
+
+  def get_double(offset)
+    check_bounds(offset, 8)
+    Primitive.pointer_read_double address + offset
+  end
+  alias_method :get_float64, :get_double
+
+  def put_double(offset, value)
+    check_bounds(offset, 8)
+    Primitive.pointer_write_double address + offset, Truffle::Type.rb_to_f(value)
+    self
+  end
+  alias_method :put_float64, :put_double
+
+  def read_array_of_double(length)
+    check_bounds(0, length * 8)
+    Array.new(length) do |i|
+      Primitive.pointer_read_double address + (i * 8)
+    end
+  end
+  alias_method :read_array_of_float64, :read_array_of_double
+
+  def write_array_of_double(ary)
+    Truffle::Type.rb_check_type(ary, ::Array)
+    check_bounds(0, ary.size * 8)
+    ary.each_with_index do |value, i|
+      Primitive.pointer_write_double address + (i * 8), Truffle::Type.rb_to_f(value)
+    end
+    self
+  end
+  alias_method :write_array_of_float64, :write_array_of_double
+
+  def get_array_of_double(offset, length)
+    (self + offset).read_array_of_double(length)
+  end
+  alias_method :get_array_of_float64, :get_array_of_double
+
+  def put_array_of_double(offset, ary)
+    (self + offset).write_array_of_double(ary)
+    self
+  end
+  alias_method :put_array_of_float64, :put_array_of_double
+
+  # pointer
+
+  private def get_pointer_value(value)
+    if Truffle::FFI::Pointer === value
+      value.address
+    elsif nil.equal?(value)
+      0
+    elsif Integer === value
+      value
+    elsif value.respond_to?(:to_ptr)
+      value.to_ptr.address
+    else
+      raise ArgumentError, "#{value} is not a pointer"
+    end
+  end
+
+  def read_pointer
+    check_bounds(0, 8)
+    Primitive.pointer_read_pointer address
+  end
+
+  def write_pointer(value)
+    check_bounds(0, 8)
+    Primitive.pointer_write_pointer address, get_pointer_value(value)
+    self
+  end
+
+  def get_pointer(offset)
+    check_bounds(offset, 8)
+    Primitive.pointer_read_pointer address + offset
+  end
+
+  def put_pointer(offset, value)
+    check_bounds(offset, 8)
+    Primitive.pointer_write_pointer address + offset, get_pointer_value(value)
+    self
+  end
+
+  def read_array_of_pointer(length)
+    check_bounds(0, length * 8)
+    Array.new(length) do |i|
+      Primitive.pointer_read_pointer address + (i * 8)
+    end
+  end
+
+  def write_array_of_pointer(ary)
+    Truffle::Type.rb_check_type(ary, ::Array)
+    check_bounds(0, ary.size * 8)
+    ary.each_with_index do |value, i|
+      Primitive.pointer_write_pointer address + (i * 8), get_pointer_value(value)
+    end
+    self
+  end
+
+  def get_array_of_pointer(offset, length)
+    (self + offset).read_array_of_pointer(length)
+  end
+
+  def put_array_of_pointer(offset, ary)
+    (self + offset).write_array_of_pointer(ary)
+    self
+  end
+
+end
