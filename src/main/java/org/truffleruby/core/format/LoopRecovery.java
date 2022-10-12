@@ -55,4 +55,85 @@ public abstract class LoopRecovery {
 
             int successfulLengthOfLoopedString = -1;
 
-            // Increase the size of the string that will be tried to be looped - but only as far as the
+            // Increase the size of the string that will be tried to be looped - but only as far as there is that much
+            // string both before and after the index
+
+            while (tryLengthOfLoopedString <= index && index + tryLengthOfLoopedString <= format.length()) {
+                // If that length of string exists both before and after the index then that's a successful length
+                // to use for looping. The loop must be followed by a new directive. We don't handle whitespace well
+                // here at the moment, as the whitespace won't count as a new directive.
+
+                final String beforeIndex = format.substring(index - tryLengthOfLoopedString, index);
+                final String afterIndex = format.substring(index, index + tryLengthOfLoopedString);
+
+                final boolean repetitionExists = beforeIndex.equals(afterIndex);
+                final boolean charactersAfterRepetition = index + tryLengthOfLoopedString < format.length();
+
+                if (repetitionExists && !(charactersAfterRepetition &&
+                        DIRECTIVES.indexOf(format.charAt(index + tryLengthOfLoopedString)) == -1)) {
+                    successfulLengthOfLoopedString = tryLengthOfLoopedString;
+                }
+
+                tryLengthOfLoopedString++;
+            }
+
+            // Were any lengths of looped string we tried successful?
+
+            if (successfulLengthOfLoopedString == -1) {
+                // None were - just move onto the next character and try again
+
+                index++;
+            } else {
+                final String repeated = format.substring(index, index + successfulLengthOfLoopedString);
+
+                // The number of times to repeat - 2 initially - before and after the index
+
+                int repetitionsCount = 2;
+
+                // Where in the string the 2 repetitions end
+
+                int indexOfEndOfRepetitions = index + successfulLengthOfLoopedString;
+
+                // Loop to find out how many times the string appears after the 2 initial instances
+
+                while (indexOfEndOfRepetitions + successfulLengthOfLoopedString <= format.length()) {
+                    // If there isn't another repetition of the string, stop looking
+
+                    if (!format
+                            .substring(
+                                    indexOfEndOfRepetitions,
+                                    indexOfEndOfRepetitions + successfulLengthOfLoopedString)
+                            .equals(repeated)) {
+                        break;
+                    }
+
+                    // If this repetition isn't followed by a directive, stop looking
+
+                    if (indexOfEndOfRepetitions + successfulLengthOfLoopedString < format.length() &&
+                            DIRECTIVES.indexOf(
+                                    format.charAt(indexOfEndOfRepetitions + successfulLengthOfLoopedString)) == -1) {
+                        break;
+                    }
+
+                    repetitionsCount++;
+                    indexOfEndOfRepetitions += successfulLengthOfLoopedString;
+                }
+
+                // Replace 'nnn' with 'n3'
+
+                final StringBuilder builder = new StringBuilder();
+                builder.append(format.substring(0, index - successfulLengthOfLoopedString));
+                builder.append('(');
+                builder.append(repeated);
+                builder.append(')');
+                builder.append(repetitionsCount);
+                builder.append(format.substring(indexOfEndOfRepetitions));
+
+                format = builder.toString();
+            }
+
+        }
+
+        return format;
+    }
+}
