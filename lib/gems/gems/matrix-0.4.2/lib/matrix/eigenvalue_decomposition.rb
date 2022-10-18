@@ -430,4 +430,281 @@ class Matrix
             g = 0.0
             m.upto(high) do |i|
               g += @ort[i] * @v[i][j]
-    
+            end
+            # Double division avoids possible underflow
+            g = (g / @ort[m]) / @h[m][m-1]
+            m.upto(high) do |i|
+              @v[i][j] += g * @ort[i]
+            end
+          end
+        end
+      end
+    end
+
+    # Nonsymmetric reduction from Hessenberg to real Schur form.
+
+    private def hessenberg_to_real_schur
+
+      #  This is derived from the Algol procedure hqr2,
+      #  by Martin and Wilkinson, Handbook for Auto. Comp.,
+      #  Vol.ii-Linear Algebra, and the corresponding
+      #  Fortran subroutine in EISPACK.
+
+      # Initialize
+
+      nn = @size
+      n = nn-1
+      low = 0
+      high = nn-1
+      eps = Float::EPSILON
+      exshift = 0.0
+      p = q = r = s = z = 0
+
+      # Store roots isolated by balanc and compute matrix norm
+
+      norm = 0.0
+      nn.times do |i|
+        if (i < low || i > high)
+          @d[i] = @h[i][i]
+          @e[i] = 0.0
+        end
+        ([i-1, 0].max).upto(nn-1) do |j|
+          norm = norm + @h[i][j].abs
+        end
+      end
+
+      # Outer loop over eigenvalue index
+
+      iter = 0
+      while (n >= low) do
+
+        # Look for single small sub-diagonal element
+
+        l = n
+        while (l > low) do
+          s = @h[l-1][l-1].abs + @h[l][l].abs
+          if (s == 0.0)
+            s = norm
+          end
+          if (@h[l][l-1].abs < eps * s)
+            break
+          end
+          l-=1
+        end
+
+        # Check for convergence
+        # One root found
+
+        if (l == n)
+          @h[n][n] = @h[n][n] + exshift
+          @d[n] = @h[n][n]
+          @e[n] = 0.0
+          n-=1
+          iter = 0
+
+        # Two roots found
+
+        elsif (l == n-1)
+          w = @h[n][n-1] * @h[n-1][n]
+          p = (@h[n-1][n-1] - @h[n][n]) / 2.0
+          q = p * p + w
+          z = Math.sqrt(q.abs)
+          @h[n][n] = @h[n][n] + exshift
+          @h[n-1][n-1] = @h[n-1][n-1] + exshift
+          x = @h[n][n]
+
+          # Real pair
+
+          if (q >= 0)
+            if (p >= 0)
+              z = p + z
+            else
+              z = p - z
+            end
+            @d[n-1] = x + z
+            @d[n] = @d[n-1]
+            if (z != 0.0)
+              @d[n] = x - w / z
+            end
+            @e[n-1] = 0.0
+            @e[n] = 0.0
+            x = @h[n][n-1]
+            s = x.abs + z.abs
+            p = x / s
+            q = z / s
+            r = Math.sqrt(p * p+q * q)
+            p /= r
+            q /= r
+
+            # Row modification
+
+            (n-1).upto(nn-1) do |j|
+              z = @h[n-1][j]
+              @h[n-1][j] = q * z + p * @h[n][j]
+              @h[n][j] = q * @h[n][j] - p * z
+            end
+
+            # Column modification
+
+            0.upto(n) do |i|
+              z = @h[i][n-1]
+              @h[i][n-1] = q * z + p * @h[i][n]
+              @h[i][n] = q * @h[i][n] - p * z
+            end
+
+            # Accumulate transformations
+
+            low.upto(high) do |i|
+              z = @v[i][n-1]
+              @v[i][n-1] = q * z + p * @v[i][n]
+              @v[i][n] = q * @v[i][n] - p * z
+            end
+
+          # Complex pair
+
+          else
+            @d[n-1] = x + p
+            @d[n] = x + p
+            @e[n-1] = z
+            @e[n] = -z
+          end
+          n -= 2
+          iter = 0
+
+        # No convergence yet
+
+        else
+
+          # Form shift
+
+          x = @h[n][n]
+          y = 0.0
+          w = 0.0
+          if (l < n)
+            y = @h[n-1][n-1]
+            w = @h[n][n-1] * @h[n-1][n]
+          end
+
+          # Wilkinson's original ad hoc shift
+
+          if (iter == 10)
+            exshift += x
+            low.upto(n) do |i|
+              @h[i][i] -= x
+            end
+            s = @h[n][n-1].abs + @h[n-1][n-2].abs
+            x = y = 0.75 * s
+            w = -0.4375 * s * s
+          end
+
+          # MATLAB's new ad hoc shift
+
+          if (iter == 30)
+             s = (y - x) / 2.0
+             s *= s + w
+             if (s > 0)
+                s = Math.sqrt(s)
+                if (y < x)
+                  s = -s
+                end
+                s = x - w / ((y - x) / 2.0 + s)
+                low.upto(n) do |i|
+                  @h[i][i] -= s
+                end
+                exshift += s
+                x = y = w = 0.964
+             end
+          end
+
+          iter = iter + 1  # (Could check iteration count here.)
+
+          # Look for two consecutive small sub-diagonal elements
+
+          m = n-2
+          while (m >= l) do
+            z = @h[m][m]
+            r = x - z
+            s = y - z
+            p = (r * s - w) / @h[m+1][m] + @h[m][m+1]
+            q = @h[m+1][m+1] - z - r - s
+            r = @h[m+2][m+1]
+            s = p.abs + q.abs + r.abs
+            p /= s
+            q /= s
+            r /= s
+            if (m == l)
+              break
+            end
+            if (@h[m][m-1].abs * (q.abs + r.abs) <
+              eps * (p.abs * (@h[m-1][m-1].abs + z.abs +
+              @h[m+1][m+1].abs)))
+                break
+            end
+            m-=1
+          end
+
+          (m+2).upto(n) do |i|
+            @h[i][i-2] = 0.0
+            if (i > m+2)
+              @h[i][i-3] = 0.0
+            end
+          end
+
+          # Double QR step involving rows l:n and columns m:n
+
+          m.upto(n-1) do |k|
+            notlast = (k != n-1)
+            if (k != m)
+              p = @h[k][k-1]
+              q = @h[k+1][k-1]
+              r = (notlast ? @h[k+2][k-1] : 0.0)
+              x = p.abs + q.abs + r.abs
+              next if x == 0
+              p /= x
+              q /= x
+              r /= x
+            end
+            s = Math.sqrt(p * p + q * q + r * r)
+            if (p < 0)
+              s = -s
+            end
+            if (s != 0)
+              if (k != m)
+                @h[k][k-1] = -s * x
+              elsif (l != m)
+                @h[k][k-1] = -@h[k][k-1]
+              end
+              p += s
+              x = p / s
+              y = q / s
+              z = r / s
+              q /= p
+              r /= p
+
+              # Row modification
+
+              k.upto(nn-1) do |j|
+                p = @h[k][j] + q * @h[k+1][j]
+                if (notlast)
+                  p += r * @h[k+2][j]
+                  @h[k+2][j] = @h[k+2][j] - p * z
+                end
+                @h[k][j] = @h[k][j] - p * x
+                @h[k+1][j] = @h[k+1][j] - p * y
+              end
+
+              # Column modification
+
+              0.upto([n, k+3].min) do |i|
+                p = x * @h[i][k] + y * @h[i][k+1]
+                if (notlast)
+                  p += z * @h[i][k+2]
+                  @h[i][k+2] = @h[i][k+2] - p * r
+                end
+                @h[i][k] = @h[i][k] - p
+                @h[i][k+1] = @h[i][k+1] - p * q
+              end
+
+              # Accumulate transformations
+
+              low.upto(high) do |i|
