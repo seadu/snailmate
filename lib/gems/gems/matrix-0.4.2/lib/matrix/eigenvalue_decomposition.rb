@@ -708,3 +708,175 @@ class Matrix
               # Accumulate transformations
 
               low.upto(high) do |i|
+                p = x * @v[i][k] + y * @v[i][k+1]
+                if (notlast)
+                  p += z * @v[i][k+2]
+                  @v[i][k+2] = @v[i][k+2] - p * r
+                end
+                @v[i][k] = @v[i][k] - p
+                @v[i][k+1] = @v[i][k+1] - p * q
+              end
+            end  # (s != 0)
+          end  # k loop
+        end  # check convergence
+      end  # while (n >= low)
+
+      # Backsubstitute to find vectors of upper triangular form
+
+      if (norm == 0.0)
+        return
+      end
+
+      (nn-1).downto(0) do |k|
+        p = @d[k]
+        q = @e[k]
+
+        # Real vector
+
+        if (q == 0)
+          l = k
+          @h[k][k] = 1.0
+          (k-1).downto(0) do |i|
+            w = @h[i][i] - p
+            r = 0.0
+            l.upto(k) do |j|
+              r += @h[i][j] * @h[j][k]
+            end
+            if (@e[i] < 0.0)
+              z = w
+              s = r
+            else
+              l = i
+              if (@e[i] == 0.0)
+                if (w != 0.0)
+                  @h[i][k] = -r / w
+                else
+                  @h[i][k] = -r / (eps * norm)
+                end
+
+              # Solve real equations
+
+              else
+                x = @h[i][i+1]
+                y = @h[i+1][i]
+                q = (@d[i] - p) * (@d[i] - p) + @e[i] * @e[i]
+                t = (x * s - z * r) / q
+                @h[i][k] = t
+                if (x.abs > z.abs)
+                  @h[i+1][k] = (-r - w * t) / x
+                else
+                  @h[i+1][k] = (-s - y * t) / z
+                end
+              end
+
+              # Overflow control
+
+              t = @h[i][k].abs
+              if ((eps * t) * t > 1)
+                i.upto(k) do |j|
+                  @h[j][k] = @h[j][k] / t
+                end
+              end
+            end
+          end
+
+        # Complex vector
+
+        elsif (q < 0)
+          l = n-1
+
+          # Last vector component imaginary so matrix is triangular
+
+          if (@h[n][n-1].abs > @h[n-1][n].abs)
+            @h[n-1][n-1] = q / @h[n][n-1]
+            @h[n-1][n] = -(@h[n][n] - p) / @h[n][n-1]
+          else
+            cdivr, cdivi = cdiv(0.0, -@h[n-1][n], @h[n-1][n-1]-p, q)
+            @h[n-1][n-1] = cdivr
+            @h[n-1][n] = cdivi
+          end
+          @h[n][n-1] = 0.0
+          @h[n][n] = 1.0
+          (n-2).downto(0) do |i|
+            ra = 0.0
+            sa = 0.0
+            l.upto(n) do |j|
+              ra = ra + @h[i][j] * @h[j][n-1]
+              sa = sa + @h[i][j] * @h[j][n]
+            end
+            w = @h[i][i] - p
+
+            if (@e[i] < 0.0)
+              z = w
+              r = ra
+              s = sa
+            else
+              l = i
+              if (@e[i] == 0)
+                cdivr, cdivi = cdiv(-ra, -sa, w, q)
+                @h[i][n-1] = cdivr
+                @h[i][n] = cdivi
+              else
+
+                # Solve complex equations
+
+                x = @h[i][i+1]
+                y = @h[i+1][i]
+                vr = (@d[i] - p) * (@d[i] - p) + @e[i] * @e[i] - q * q
+                vi = (@d[i] - p) * 2.0 * q
+                if (vr == 0.0 && vi == 0.0)
+                  vr = eps * norm * (w.abs + q.abs +
+                  x.abs + y.abs + z.abs)
+                end
+                cdivr, cdivi = cdiv(x*r-z*ra+q*sa, x*s-z*sa-q*ra, vr, vi)
+                @h[i][n-1] = cdivr
+                @h[i][n] = cdivi
+                if (x.abs > (z.abs + q.abs))
+                  @h[i+1][n-1] = (-ra - w * @h[i][n-1] + q * @h[i][n]) / x
+                  @h[i+1][n] = (-sa - w * @h[i][n] - q * @h[i][n-1]) / x
+                else
+                  cdivr, cdivi = cdiv(-r-y*@h[i][n-1], -s-y*@h[i][n], z, q)
+                  @h[i+1][n-1] = cdivr
+                  @h[i+1][n] = cdivi
+                end
+              end
+
+              # Overflow control
+
+              t = [@h[i][n-1].abs, @h[i][n].abs].max
+              if ((eps * t) * t > 1)
+                i.upto(n) do |j|
+                  @h[j][n-1] = @h[j][n-1] / t
+                  @h[j][n] = @h[j][n] / t
+                end
+              end
+            end
+          end
+        end
+      end
+
+      # Vectors of isolated roots
+
+      nn.times do |i|
+        if (i < low || i > high)
+          i.upto(nn-1) do |j|
+            @v[i][j] = @h[i][j]
+          end
+        end
+      end
+
+      # Back transformation to get eigenvectors of original matrix
+
+      (nn-1).downto(low) do |j|
+        low.upto(high) do |i|
+          z = 0.0
+          low.upto([j, high].min) do |k|
+            z += @v[i][k] * @h[k][j]
+          end
+          @v[i][j] = z
+        end
+      end
+    end
+
+  end
+end
