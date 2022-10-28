@@ -37,4 +37,27 @@
  */
 package org.truffleruby.platform;
 
-public a
+public abstract class NativeTypes {
+
+    public static final int TYPE_CHAR = 0;
+    public static final int TYPE_UCHAR = 1;
+    public static final int TYPE_BOOL = 2;
+    public static final int TYPE_SHORT = 3;
+    public static final int TYPE_USHORT = 4;
+    public static final int TYPE_INT = 5;
+    public static final int TYPE_UINT = 6;
+    public static final int TYPE_LONG = 7;
+    public static final int TYPE_ULONG = 8;
+    public static final int TYPE_LL = 9;
+    public static final int TYPE_ULL = 10;
+    public static final int TYPE_FLOAT = 11;
+    public static final int TYPE_DOUBLE = 12;
+    public static final int TYPE_PTR = 13;
+    public static final int TYPE_VOID = 14;
+    public static final int TYPE_STRING = 15;
+    public static final int TYPE_STRPTR = 16;
+    public static final int TYPE_CHARARR = 17;
+    public static final int TYPE_ENUM = 18;
+    public static final int TYPE_VARARGS = 19;
+
+}
