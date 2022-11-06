@@ -175,4 +175,209 @@ restrict return short signed sizeof static struct switch typedef union
   end
 
   def make_function_def(pos, specs, func_declarator, decl_list, defn)
-   
+    add_decl_type(func_declarator, make_direct_type(pos, specs))
+
+    # get types from decl_list if necessary
+    function = func_declarator.indirect_type
+    function.is_a? Function or
+      parse_error pos, "non function type for function `#{func_declarator.name}'"
+    params = function.params
+    if decl_list
+      params.all?{|p| p.type.nil?} or
+        parse_error pos, "both prototype and declaration list given for `#{func_declarator.name}'"
+      decl_list.each do |declaration|
+        declaration.declarators.each do |declarator|
+          param = params.find{|p| p.name == declarator.name} or
+            parse_error pos, "no parameter named #{declarator.name}"
+          if declarator.indirect_type
+            param.type = declarator.indirect_type
+            param.type.direct_type = declaration.type.dup
+          else
+            param.type = declaration.type.dup
+          end
+        end
+      end
+      params.all?{|p| p.type} or
+        begin
+          s = params.find_all{|p| p.type.nil?}.map{|p| "`#{p.name}'"}.join(' and ')
+          parse_error pos, "types missing for parameters #{s}"
+        end
+    end
+
+    fd = FunctionDef.new_at(pos,
+                            function.detach,
+                            func_declarator.name,
+                            defn,
+                            :no_prototype => !decl_list.nil?)
+
+    # set storage class
+    # 6.9.1p4: only extern or static allowed
+    specs.each do |s|
+      [:typedef, :auto, :register].include?(s) and
+        "`#{s}' illegal for function"
+    end
+    storage_classes = specs.find_all do |s|
+      s == :extern || s == :static
+    end
+    # 6.7.1p2: at most, one storage-class specifier may be given in
+    # the declaration specifiers in a declaration
+    storage_classes.length <= 1 or
+      "multiple or duplicate storage classes given for `#{func_declarator.name}'"
+    fd.storage = storage_classes[0] if storage_classes[0]
+
+    # set function specifiers
+    # 6.7.4p5 'inline' can be repeated
+    fd.inline = specs.include?(:inline)
+
+    return fd
+  end
+
+  #
+  # Make a direct type from the list of type specifiers and type
+  # qualifiers.
+  #
+  def make_direct_type(pos, specs)
+    specs_order = [:signed, :unsigned, :short, :long, :double, :void,
+      :char, :int, :float, :_Bool, :_Complex, :_Imaginary]
+
+    type_specs = specs.find_all do |x|
+      specs_order.include?(x) || !x.is_a?(Symbol)
+    end
+    type_specs.sort! do |a, b|
+      (specs_order.index(a)||100) <=> (specs_order.index(b)||100)
+    end
+
+    # set type specifiers
+    # 6.7.2p2: the specifier list should be one of these
+    type =
+      case type_specs
+      when [:void]
+        Void.new
+      when [:char]
+        Char.new
+      when [:signed, :char]
+        Char.new :signed => true
+      when [:unsigned, :char]
+        Char.new :signed => false
+      when [:short], [:signed, :short], [:short, :int],
+        [:signed, :short, :int]
+        Int.new :longness => -1
+      when [:unsigned, :short], [:unsigned, :short, :int]
+        Int.new :unsigned => true, :longness => -1
+      when [:int], [:signed], [:signed, :int]
+        Int.new
+      when [:unsigned], [:unsigned, :int]
+        Int.new :unsigned => true
+      when [:long], [:signed, :long], [:long, :int],
+        [:signed, :long, :int]
+        Int.new :longness => 1
+      when [:unsigned, :long], [:unsigned, :long, :int]
+        Int.new :longness => 1, :unsigned => true
+      when [:long, :long], [:signed, :long, :long],
+        [:long, :long, :int], [:signed, :long, :long, :int]
+        Int.new :longness => 2
+      when [:unsigned, :long, :long], [:unsigned, :long, :long, :int]
+        Int.new :longness => 2, :unsigned => true
+      when [:float]
+        Float.new
+      when [:double]
+        Float.new :longness => 1
+      when [:long, :double]
+        Float.new :longness => 2
+      when [:_Bool]
+        Bool.new
+      when [:float, :_Complex]
+        Complex.new
+      when [:double, :_Complex]
+        Complex.new :longness => 1
+      when [:long, :double, :_Complex]
+        Complex.new :longness => 2
+      when [:float, :_Imaginary]
+        Imaginary.new
+      when [:double, :_Imaginary]
+        Imaginary.new :longness => 1
+      when [:long, :double, :_Imaginary]
+        Imaginary.new :longness => 2
+      else
+        if type_specs.length == 1 &&
+            [CustomType, Struct, Union, Enum].any?{|c| type_specs[0].is_a? c}
+          type_specs[0]
+        else
+          if type_specs == []
+            parse_error pos, "no type specifiers given"
+          else
+            parse_error pos, "invalid type specifier combination: #{type_specs.join(' ')}"
+          end
+        end
+      end
+    type.pos ||= pos
+
+    # set type qualifiers
+    # 6.7.3p4: type qualifiers can be repeated
+    type.const    = specs.any?{|x| x.equal? :const   }
+    type.restrict = specs.any?{|x| x.equal? :restrict}
+    type.volatile = specs.any?{|x| x.equal? :volatile}
+
+    return type
+  end
+
+  def make_parameter(pos, specs, indirect_type, name)
+    type = indirect_type
+    if type
+      type.direct_type = make_direct_type(pos, specs)
+    else
+      type = make_direct_type(pos, specs)
+    end
+    [:typedef, :extern, :static, :auto, :inline].each do |sym|
+      specs.include? sym and
+        parse_error pos, "parameter `#{declarator.name}' declared `#{sym}'"
+    end
+    return Parameter.new_at(pos, type, name,
+                            :register => specs.include?(:register))
+  end
+
+  def add_type_quals(type, quals)
+    type.const    = quals.include?(:const   )
+    type.restrict = quals.include?(:restrict)
+    type.volatile = quals.include?(:volatile)
+    return type
+  end
+
+  #
+  # Add te given type as the "most direct" type to the given
+  # declarator.  Return the declarator.
+  #
+  def add_decl_type(declarator, type)
+    if declarator.indirect_type
+      declarator.indirect_type.direct_type = type
+    else
+      declarator.indirect_type = type
+    end
+    return declarator
+  end
+
+  def param_list(params, var_args)
+    if params.length == 1 &&
+        params[0].type.is_a?(Void) &&
+        params[0].name.nil?
+      return NodeArray[]
+    elsif params.empty?
+      return nil
+    else
+      return params
+    end
+  end
+
+  def parse_error(pos, str)
+    raise ParseError, "#{pos}: #{str}"
+  end
+
+...end cast.y/module_eval...
+##### State transition tables begin ###
+
+racc_action_table = [
+    99,   100,    65,   103,   108,   109,   120,   312,    61,   110,
+   111,   112,   113,   114,   115,   116,   117,    77,    48,    10,
+    11,    12,    13,    14,    15,    16,    17,    18,    19,    20,
+    21,    22,    23,    24,    25,    26,    31,    32,    33,    34,
+    35,    36,    37,    72,   281,   128,    49,    38,   196,  
