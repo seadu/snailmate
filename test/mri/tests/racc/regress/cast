@@ -1857,4 +1857,374 @@ racc_token_table = {
   :EQEQ => 69,
   :NEQ => 70,
   :XOR => 71,
-  :OR => 
+  :OR => 72,
+  :ANDAND => 73,
+  :OROR => 74,
+  :QUESTION => 75,
+  :MULEQ => 76,
+  :DIVEQ => 77,
+  :MODEQ => 78,
+  :ADDEQ => 79,
+  :SUBEQ => 80,
+  :LSHIFTEQ => 81,
+  :RSHIFTEQ => 82,
+  :ANDEQ => 83,
+  :XOREQ => 84,
+  :OREQ => 85,
+  :ID => 86,
+  :ICON => 87,
+  :FCON => 88,
+  :CCON => 89,
+  :SCON => 90 }
+
+racc_nt_base = 91
+
+racc_use_result_var = true
+
+Racc_arg = [
+  racc_action_table,
+  racc_action_check,
+  racc_action_default,
+  racc_action_pointer,
+  racc_goto_table,
+  racc_goto_check,
+  racc_goto_default,
+  racc_goto_pointer,
+  racc_nt_base,
+  racc_reduce_table,
+  racc_token_table,
+  racc_shift_n,
+  racc_reduce_n,
+  racc_use_result_var ]
+
+Racc_token_to_s_table = [
+  "$end",
+  "error",
+  "COLON",
+  "CASE",
+  "DEFAULT",
+  "LBRACE",
+  "RBRACE",
+  "SEMICOLON",
+  "IF",
+  "LPAREN",
+  "RPAREN",
+  "ELSE",
+  "SWITCH",
+  "WHILE",
+  "DO",
+  "FOR",
+  "GOTO",
+  "CONTINUE",
+  "BREAK",
+  "RETURN",
+  "COMMA",
+  "EQ",
+  "TYPEDEF",
+  "EXTERN",
+  "STATIC",
+  "AUTO",
+  "REGISTER",
+  "VOID",
+  "CHAR",
+  "SHORT",
+  "INT",
+  "LONG",
+  "FLOAT",
+  "DOUBLE",
+  "SIGNED",
+  "UNSIGNED",
+  "BOOL",
+  "COMPLEX",
+  "IMAGINARY",
+  "STRUCT",
+  "UNION",
+  "ENUM",
+  "CONST",
+  "RESTRICT",
+  "VOLATILE",
+  "INLINE",
+  "LBRACKET",
+  "RBRACKET",
+  "MUL",
+  "ELLIPSIS",
+  "TYPENAME",
+  "DOT",
+  "ARROW",
+  "INC",
+  "DEC",
+  "SIZEOF",
+  "AND",
+  "ADD",
+  "SUB",
+  "NOT",
+  "BANG",
+  "DIV",
+  "MOD",
+  "LSHIFT",
+  "RSHIFT",
+  "LT",
+  "GT",
+  "LEQ",
+  "GEQ",
+  "EQEQ",
+  "NEQ",
+  "XOR",
+  "OR",
+  "ANDAND",
+  "OROR",
+  "QUESTION",
+  "MULEQ",
+  "DIVEQ",
+  "MODEQ",
+  "ADDEQ",
+  "SUBEQ",
+  "LSHIFTEQ",
+  "RSHIFTEQ",
+  "ANDEQ",
+  "XOREQ",
+  "OREQ",
+  "ID",
+  "ICON",
+  "FCON",
+  "CCON",
+  "SCON",
+  "$start",
+  "translation_unit",
+  "external_declaration",
+  "function_definition",
+  "declaration",
+  "declaration_specifiers",
+  "declarator",
+  "declaration_list",
+  "compound_statement",
+  "statement",
+  "labeled_statement",
+  "expression_statement",
+  "selection_statement",
+  "iteration_statement",
+  "jump_statement",
+  "identifier",
+  "constant_expression",
+  "typedef_name",
+  "block_item_list",
+  "block_item",
+  "expression",
+  "init_declarator_list",
+  "storage_class_specifier",
+  "type_specifier",
+  "type_qualifier",
+  "function_specifier",
+  "init_declarator",
+  "initializer",
+  "struct_or_union_specifier",
+  "enum_specifier",
+  "struct_or_union",
+  "struct_declaration_list",
+  "struct_declaration",
+  "specifier_qualifier_list",
+  "struct_declarator_list",
+  "struct_declarator",
+  "enumerator_list",
+  "enumerator",
+  "enumeration_constant",
+  "pointer",
+  "direct_declarator",
+  "type_qualifier_list",
+  "assignment_expression",
+  "parameter_type_list",
+  "identifier_list",
+  "parameter_list",
+  "parameter_declaration",
+  "abstract_declarator",
+  "type_name",
+  "direct_abstract_declarator",
+  "initializer_list",
+  "designation",
+  "designator_list",
+  "designator",
+  "primary_expression",
+  "constant",
+  "string_literal",
+  "postfix_expression",
+  "argument_expression_list",
+  "argument_expression",
+  "unary_expression",
+  "unary_operator",
+  "cast_expression",
+  "multiplicative_expression",
+  "additive_expression",
+  "shift_expression",
+  "relational_expression",
+  "equality_expression",
+  "and_expression",
+  "exclusive_or_expression",
+  "inclusive_or_expression",
+  "logical_and_expression",
+  "logical_or_expression",
+  "conditional_expression",
+  "assignment_operator" ]
+
+Racc_debug_parser = false
+
+##### State transition tables end #####
+
+# reduce 0 omitted
+
+module_eval(<<'.,.,', 'cast.y', 32)
+  def _reduce_1(val, _values, result)
+    result = TranslationUnit.new_at(val[0].pos, NodeChain[val[0]])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 33)
+  def _reduce_2(val, _values, result)
+    result = val[0]; result.entities << val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 37)
+  def _reduce_3(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 38)
+  def _reduce_4(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 42)
+  def _reduce_5(val, _values, result)
+    result = make_function_def(val[0][0], val[0][1], val[1], val[2], val[3])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 43)
+  def _reduce_6(val, _values, result)
+    result = make_function_def(val[0][0], val[0][1], val[1], nil   , val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 47)
+  def _reduce_7(val, _values, result)
+    result = [val[0]]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 48)
+  def _reduce_8(val, _values, result)
+    result = val[0] << val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 54)
+  def _reduce_9(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 55)
+  def _reduce_10(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 56)
+  def _reduce_11(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 57)
+  def _reduce_12(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 58)
+  def _reduce_13(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 59)
+  def _reduce_14(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 63)
+  def _reduce_15(val, _values, result)
+    val[2].labels.unshift(PlainLabel.new_at(val[0].pos, val[0].val)); result = val[2]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 64)
+  def _reduce_16(val, _values, result)
+    val[3].labels.unshift(Case      .new_at(val[0].pos, val[1]    )); result = val[3]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 65)
+  def _reduce_17(val, _values, result)
+    val[2].labels.unshift(Default   .new_at(val[0].pos            )); result = val[2]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 67)
+  def _reduce_18(val, _values, result)
+    val[2].labels.unshift(PlainLabel.new_at(val[0].pos, val[0].name)); result = val[2]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 71)
+  def _reduce_19(val, _values, result)
+    result = Block.new_at(val[0].pos, val[1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 72)
+  def _reduce_20(val, _values, result)
+    result = Block.new_at(val[0].pos        )
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 76)
+  def _reduce_21(val, _values, result)
+    result = NodeChain[val[0]]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 77)
+  def _reduce_22(val, _values, result)
+    result = val[0] << val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 81)
+  def _reduce_23(val, _values, result)
+    result 
