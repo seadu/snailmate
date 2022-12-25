@@ -2535,4 +2535,331 @@ module_eval(<<'.,.,', 'cast.y', 154)
 
 module_eval(<<'.,.,', 'cast.y', 155)
   def _reduce_67(val, _values, result)
-   
+    result = [val[0].pos, :auto    ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 156)
+  def _reduce_68(val, _values, result)
+    result = [val[0].pos, :register]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 160)
+  def _reduce_69(val, _values, result)
+    result = [val[0].pos, :void      ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 161)
+  def _reduce_70(val, _values, result)
+    result = [val[0].pos, :char      ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 162)
+  def _reduce_71(val, _values, result)
+    result = [val[0].pos, :short     ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 163)
+  def _reduce_72(val, _values, result)
+    result = [val[0].pos, :int       ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 164)
+  def _reduce_73(val, _values, result)
+    result = [val[0].pos, :long      ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 165)
+  def _reduce_74(val, _values, result)
+    result = [val[0].pos, :float     ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 166)
+  def _reduce_75(val, _values, result)
+    result = [val[0].pos, :double    ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 167)
+  def _reduce_76(val, _values, result)
+    result = [val[0].pos, :signed    ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 168)
+  def _reduce_77(val, _values, result)
+    result = [val[0].pos, :unsigned  ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 169)
+  def _reduce_78(val, _values, result)
+    result = [val[0].pos, :_Bool     ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 170)
+  def _reduce_79(val, _values, result)
+    result = [val[0].pos, :_Complex  ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 171)
+  def _reduce_80(val, _values, result)
+    result = [val[0].pos, :_Imaginary]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 172)
+  def _reduce_81(val, _values, result)
+    result = [val[0].pos, val[0]    ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 173)
+  def _reduce_82(val, _values, result)
+    result = [val[0].pos, val[0]    ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 174)
+  def _reduce_83(val, _values, result)
+    result = [val[0].pos, val[0]    ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 178)
+  def _reduce_84(val, _values, result)
+    result = val[0][1].new_at(val[0][0], val[1].val, val[3])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 179)
+  def _reduce_85(val, _values, result)
+    result = val[0][1].new_at(val[0][0], nil       , val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 180)
+  def _reduce_86(val, _values, result)
+    result = val[0][1].new_at(val[0][0], val[1].val, nil   )
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 182)
+  def _reduce_87(val, _values, result)
+    result = val[0][1].new_at(val[0][0], val[1].name, val[3])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 183)
+  def _reduce_88(val, _values, result)
+    result = val[0][1].new_at(val[0][0], val[1].name, nil   )
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 187)
+  def _reduce_89(val, _values, result)
+    result = [val[0].pos, Struct]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 188)
+  def _reduce_90(val, _values, result)
+    result = [val[0].pos, Union ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 192)
+  def _reduce_91(val, _values, result)
+    result = NodeArray[val[0]]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 193)
+  def _reduce_92(val, _values, result)
+    val[0] << val[1]; result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 197)
+  def _reduce_93(val, _values, result)
+    result = make_declaration(val[0][0], val[0][1], val[1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 201)
+  def _reduce_94(val, _values, result)
+    val[1][1] << val[0][1]; result = val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 202)
+  def _reduce_95(val, _values, result)
+    result = [val[0][0], [val[0][1]]]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 203)
+  def _reduce_96(val, _values, result)
+    val[1][1] << val[0][1]; result = val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 204)
+  def _reduce_97(val, _values, result)
+    result = [val[0][0], [val[0][1]]]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 208)
+  def _reduce_98(val, _values, result)
+    result = NodeArray[val[0]]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 209)
+  def _reduce_99(val, _values, result)
+    result = val[0] << val[2]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 213)
+  def _reduce_100(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 214)
+  def _reduce_101(val, _values, result)
+    result = val[0]; val[0].num_bits = val[2]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 215)
+  def _reduce_102(val, _values, result)
+    result = Declarator.new_at(val[0].pos, :num_bits => val[1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 219)
+  def _reduce_103(val, _values, result)
+    result = Enum.new_at(val[0].pos, val[1].val, val[3])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 220)
+  def _reduce_104(val, _values, result)
+    result = Enum.new_at(val[0].pos, nil       , val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 221)
+  def _reduce_105(val, _values, result)
+    result = Enum.new_at(val[0].pos, val[1].val, val[3])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 222)
+  def _reduce_106(val, _values, result)
+    result = Enum.new_at(val[0].pos, nil       , val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 223)
+  def _reduce_107(val, _values, result)
+    result = Enum.new_at(val[0].pos, val[1].val, nil   )
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 225)
+  def _reduce_108(val, _values, result)
+    result = Enum.new_at(val[0].pos, val[1].name, val[3])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 226)
+  def _reduce_109(val, _values, result)
+    result = Enum.new_at(val[0].pos, val[1].name, val[3])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 227)
+  def _reduce_110(val, _values, result)
+    result = Enum.new_at(val[0].pos, val[1].name, nil   )
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 231)
+  def _reduce_111(val, _values, result)
+    result = NodeArray[val[0]]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 232)
+  def _reduce_112(val, _values, result)
+    result = val[0] << val[2]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 236)
+  def _reduce_113(val, _values, result)
+    result = Enumerator.new_at(val[0].pos, val[0].val, nil   )
+    result
+  end
+.,.,
+
+module_eva
