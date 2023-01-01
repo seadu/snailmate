@@ -2862,4 +2862,289 @@ module_eval(<<'.,.,', 'cast.y', 236)
   end
 .,.,
 
-module_eva
+module_eval(<<'.,.,', 'cast.y', 237)
+  def _reduce_114(val, _values, result)
+    result = Enumerator.new_at(val[0].pos, val[0].val, val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 241)
+  def _reduce_115(val, _values, result)
+    result = [val[0].pos, :const   ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 242)
+  def _reduce_116(val, _values, result)
+    result = [val[0].pos, :restrict]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 243)
+  def _reduce_117(val, _values, result)
+    result = [val[0].pos, :volatile]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 247)
+  def _reduce_118(val, _values, result)
+    result = [val[0].pos, :inline]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 251)
+  def _reduce_119(val, _values, result)
+    result = add_decl_type(val[1], val[0])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 252)
+  def _reduce_120(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 256)
+  def _reduce_121(val, _values, result)
+    result = Declarator.new_at(val[0].pos, nil, val[0].val)
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 257)
+  def _reduce_122(val, _values, result)
+    result = val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 258)
+  def _reduce_123(val, _values, result)
+    result = add_decl_type(val[0], Array.new_at(val[0].pos             ))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 259)
+  def _reduce_124(val, _values, result)
+    result = add_decl_type(val[0], Array.new_at(val[0].pos             ))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 260)
+  def _reduce_125(val, _values, result)
+    result = add_decl_type(val[0], Array.new_at(val[0].pos, nil, val[2]))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 261)
+  def _reduce_126(val, _values, result)
+    result = add_decl_type(val[0], Array.new_at(val[0].pos             ))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 262)
+  def _reduce_127(val, _values, result)
+    result = add_decl_type(val[0], Array.new_at(val[0].pos             ))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 263)
+  def _reduce_128(val, _values, result)
+    result = add_decl_type(val[0], Array.new_at(val[0].pos             ))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 264)
+  def _reduce_129(val, _values, result)
+    result = add_decl_type(val[0], Array.new_at(val[0].pos             ))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 265)
+  def _reduce_130(val, _values, result)
+    result = add_decl_type(val[0], Array.new_at(val[0].pos             ))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 266)
+  def _reduce_131(val, _values, result)
+    result = add_decl_type(val[0], Array.new_at(val[0].pos             ))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 267)
+  def _reduce_132(val, _values, result)
+    result = add_decl_type(val[0], Function.new_at(val[0].pos, nil, param_list(*val[2]), :var_args => val[2][1]))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 268)
+  def _reduce_133(val, _values, result)
+    result = add_decl_type(val[0], Function.new_at(val[0].pos, nil,             val[2]))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 269)
+  def _reduce_134(val, _values, result)
+    result = add_decl_type(val[0], Function.new_at(val[0].pos                         ))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 273)
+  def _reduce_135(val, _values, result)
+    result = add_type_quals(Pointer.new_at(val[0].pos), val[1][1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 274)
+  def _reduce_136(val, _values, result)
+    result =                Pointer.new_at(val[0].pos)
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 275)
+  def _reduce_137(val, _values, result)
+    p      = add_type_quals(Pointer.new_at(val[0].pos), val[1][1]); val[2].direct_type = p; result = val[2]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 276)
+  def _reduce_138(val, _values, result)
+    p      =                Pointer.new_at(val[0].pos)            ; val[1].direct_type = p; result = val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 280)
+  def _reduce_139(val, _values, result)
+    result = [val[0][0], [val[0][1]]]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 281)
+  def _reduce_140(val, _values, result)
+    val[0][1] << val[1][1]; result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 285)
+  def _reduce_141(val, _values, result)
+    result = [val[0], false]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 286)
+  def _reduce_142(val, _values, result)
+    result = [val[0], true ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 290)
+  def _reduce_143(val, _values, result)
+    result = NodeArray[val[0]]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 291)
+  def _reduce_144(val, _values, result)
+    result = val[0] << val[2]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 295)
+  def _reduce_145(val, _values, result)
+    ind_type = val[1].indirect_type and ind_type.detach
+                                                result = make_parameter(val[0][0], val[0][1], ind_type, val[1].name)
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 297)
+  def _reduce_146(val, _values, result)
+    result = make_parameter(val[0][0], val[0][1], val[1]  , nil        )
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 298)
+  def _reduce_147(val, _values, result)
+    result = make_parameter(val[0][0], val[0][1], nil     , nil        )
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 302)
+  def _reduce_148(val, _values, result)
+    result = NodeArray[Parameter.new_at(val[0].pos, nil, val[0].val)]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 303)
+  def _reduce_149(val, _values, result)
+    result = val[0] << Parameter.new_at(val[2].pos, nil, val[2].val)
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 307)
+  def _reduce_150(val, _values, result)
+    val[1].direct_type = make_direct_type(val[0][0], val[0][1]); result = val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 308)
+  def _reduce_151(val, _values, result)
+    result             = make_direct_type(val[0][0], val[0][1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 312)
+  def _reduce_152(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 313)
+  def _reduce_153(val, _values, result)
+    val[1].direct_type = val[0]; result = val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 314)
+  def _reduce_154(val, _values, result)
+    result = val[0]
+    result
+  
