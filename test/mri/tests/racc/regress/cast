@@ -3147,4 +3147,284 @@ module_eval(<<'.,.,', 'cast.y', 314)
   def _reduce_154(val, _values, result)
     result = val[0]
     result
-  
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 318)
+  def _reduce_155(val, _values, result)
+    result = val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 319)
+  def _reduce_156(val, _values, result)
+    val[0].direct_type = Array.new_at(val[0].pos, nil, val[2]); result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 320)
+  def _reduce_157(val, _values, result)
+    val[0].direct_type = Array.new_at(val[0].pos, nil, nil   ); result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 321)
+  def _reduce_158(val, _values, result)
+    result = Array.new_at(val[0].pos, nil, val[1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 322)
+  def _reduce_159(val, _values, result)
+    result = Array.new_at(val[0].pos             )
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 323)
+  def _reduce_160(val, _values, result)
+    val[0].direct_type = Array.new_at(val[0].pos); result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 324)
+  def _reduce_161(val, _values, result)
+    result = Array.new_at(val[0].pos)
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 325)
+  def _reduce_162(val, _values, result)
+    val[0].direct_type = Function.new_at(val[0].pos, nil, param_list(*val[2]), val[2][1]); result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 326)
+  def _reduce_163(val, _values, result)
+    val[0].direct_type = Function.new_at(val[0].pos                                       ); result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 327)
+  def _reduce_164(val, _values, result)
+    result = Function.new_at(val[0].pos, nil, param_list(*val[1]), val[1][1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 328)
+  def _reduce_165(val, _values, result)
+    result = Function.new_at(val[0].pos                                     )
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 334)
+  def _reduce_166(val, _values, result)
+    result = CustomType.new_at(val[0].pos, val[0].val)
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 338)
+  def _reduce_167(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 339)
+  def _reduce_168(val, _values, result)
+    result = CompoundLiteral.new_at(val[0].pos, nil, val[1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 340)
+  def _reduce_169(val, _values, result)
+    result = CompoundLiteral.new_at(val[0].pos, nil, val[1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 344)
+  def _reduce_170(val, _values, result)
+    result = NodeArray[MemberInit.new_at(val[0][0] , val[0][1], val[1])]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 345)
+  def _reduce_171(val, _values, result)
+    result = NodeArray[MemberInit.new_at(val[0].pos, nil      , val[0])]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 346)
+  def _reduce_172(val, _values, result)
+    result = val[0] << MemberInit.new_at(val[2][0] , val[2][1], val[3])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 347)
+  def _reduce_173(val, _values, result)
+    result = val[0] << MemberInit.new_at(val[2].pos, nil      , val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 351)
+  def _reduce_174(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 355)
+  def _reduce_175(val, _values, result)
+    result = val[0]; val[0][1] = NodeArray[val[0][1]]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 356)
+  def _reduce_176(val, _values, result)
+    result = val[0]; val[0][1] << val[1][1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 360)
+  def _reduce_177(val, _values, result)
+    result = [val[1].pos, val[1]                               ]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 361)
+  def _reduce_178(val, _values, result)
+    result = [val[1].pos, Member.new_at(val[1].pos, val[1].val)]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 367)
+  def _reduce_179(val, _values, result)
+    result = Variable.new_at(val[0].pos, val[0].val)
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 368)
+  def _reduce_180(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 369)
+  def _reduce_181(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 371)
+  def _reduce_182(val, _values, result)
+    result = val[1]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 372)
+  def _reduce_183(val, _values, result)
+    block_expressions_enabled? or parse_error val[0].pos, "compound statement found where expression expected"
+                                      result = BlockExpression.new(val[1]); result.pos = val[0].pos
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 377)
+  def _reduce_184(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 378)
+  def _reduce_185(val, _values, result)
+    result = Index          .new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 379)
+  def _reduce_186(val, _values, result)
+    result = Call           .new_at(val[0].pos, val[0], val[2]     )
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 380)
+  def _reduce_187(val, _values, result)
+    result = Call           .new_at(val[0].pos, val[0], NodeArray[])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 381)
+  def _reduce_188(val, _values, result)
+    result = Dot            .new_at(val[0].pos, val[0], Member.new(val[2].val))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 382)
+  def _reduce_189(val, _values, result)
+    result = Arrow          .new_at(val[0].pos, val[0], Member.new(val[2].val))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 383)
+  def _reduce_190(val, _values, result)
+    result = PostInc        .new_at(val[0].pos, val[0]        )
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 384)
+  def _reduce_191(val, _values, result)
+    result = PostDec        .new_at(val[0].pos, val[0]        )
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 385)
+  def _reduce_192(val, _values, result)
+    result = CompoundLiteral.new_at(val[0].pos, val[1], val[4])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 386)
+  def _reduce_193(val, _values, result)
+    result = CompoundLiteral.new_at(val[0].pos, val[1], val[4])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 390)
+  def _reduce_194(val, _values, result)
+    result = NodeArray[val[0]]
+    resu
