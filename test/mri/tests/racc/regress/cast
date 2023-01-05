@@ -3761,3 +3761,185 @@ module_eval(<<'.,.,', 'cast.y', 482)
 .,.,
 
 module_eval(<<'.,.,', 'cast.y', 486)
+  def _reduce_242(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 487)
+  def _reduce_243(val, _values, result)
+    result = val[1].new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 491)
+  def _reduce_244(val, _values, result)
+    result =           Assign
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 492)
+  def _reduce_245(val, _values, result)
+    result =   MultiplyAssign
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 493)
+  def _reduce_246(val, _values, result)
+    result =     DivideAssign
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 494)
+  def _reduce_247(val, _values, result)
+    result =        ModAssign
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 495)
+  def _reduce_248(val, _values, result)
+    result =        AddAssign
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 496)
+  def _reduce_249(val, _values, result)
+    result =   SubtractAssign
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 497)
+  def _reduce_250(val, _values, result)
+    result =  ShiftLeftAssign
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 498)
+  def _reduce_251(val, _values, result)
+    result = ShiftRightAssign
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 499)
+  def _reduce_252(val, _values, result)
+    result =     BitAndAssign
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 500)
+  def _reduce_253(val, _values, result)
+    result =     BitXorAssign
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 501)
+  def _reduce_254(val, _values, result)
+    result =      BitOrAssign
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 505)
+  def _reduce_255(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 507)
+  def _reduce_256(val, _values, result)
+        if val[0].is_a? Comma
+      if val[2].is_a? Comma
+        val[0].exprs.push(*val[2].exprs)
+      else
+        val[0].exprs << val[2]
+      end
+      result = val[0]
+    else
+      if val[2].is_a? Comma
+        val[2].exprs.unshift(val[0])
+        val[2].pos = val[0].pos
+        result = val[2]
+      else
+        result = Comma.new_at(val[0].pos, NodeArray[val[0], val[2]])
+      end
+    end
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 527)
+  def _reduce_257(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 542)
+  def _reduce_258(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 546)
+  def _reduce_259(val, _values, result)
+    result = val[0].val; result.pos = val[0].pos
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 547)
+  def _reduce_260(val, _values, result)
+    result = val[0].val; result.pos = val[0].pos
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 550)
+  def _reduce_261(val, _values, result)
+    result = val[0].val; result.pos = val[0].pos
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 554)
+  def _reduce_262(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 559)
+  def _reduce_263(val, _values, result)
+    val[0].val << val[1].val.val; result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 560)
+  def _reduce_264(val, _values, result)
+     result = val[0].val; result.pos = val[0].pos
+    result
+  end
+.,.,
+
+def _reduce_none(val, _values, result)
+  val[0]
+end
+
+  end   # class Parser
+end   # module C
