@@ -3427,4 +3427,337 @@ module_eval(<<'.,.,', 'cast.y', 386)
 module_eval(<<'.,.,', 'cast.y', 390)
   def _reduce_194(val, _values, result)
     result = NodeArray[val[0]]
-    resu
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 391)
+  def _reduce_195(val, _values, result)
+    result = val[0] << val[2]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 395)
+  def _reduce_196(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 396)
+  def _reduce_197(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 400)
+  def _reduce_198(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 401)
+  def _reduce_199(val, _values, result)
+    result = PreInc.new_at(val[0].pos, val[1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 402)
+  def _reduce_200(val, _values, result)
+    result = PreDec.new_at(val[0].pos, val[1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 403)
+  def _reduce_201(val, _values, result)
+    result = val[0][0].new_at(val[0][1], val[1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 404)
+  def _reduce_202(val, _values, result)
+    result = Sizeof.new_at(val[0].pos, val[1])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 405)
+  def _reduce_203(val, _values, result)
+    result = Sizeof.new_at(val[0].pos, val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 409)
+  def _reduce_204(val, _values, result)
+    result = [Address    , val[0].pos]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 410)
+  def _reduce_205(val, _values, result)
+    result = [Dereference, val[0].pos]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 411)
+  def _reduce_206(val, _values, result)
+    result = [Positive   , val[0].pos]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 412)
+  def _reduce_207(val, _values, result)
+    result = [Negative   , val[0].pos]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 413)
+  def _reduce_208(val, _values, result)
+    result = [BitNot     , val[0].pos]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 414)
+  def _reduce_209(val, _values, result)
+    result = [Not        , val[0].pos]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 418)
+  def _reduce_210(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 419)
+  def _reduce_211(val, _values, result)
+    result = Cast.new_at(val[0].pos, val[1], val[3])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 423)
+  def _reduce_212(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 424)
+  def _reduce_213(val, _values, result)
+    result = Multiply.new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 425)
+  def _reduce_214(val, _values, result)
+    result = Divide  .new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 426)
+  def _reduce_215(val, _values, result)
+    result = Mod     .new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 430)
+  def _reduce_216(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 431)
+  def _reduce_217(val, _values, result)
+    result = Add     .new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 432)
+  def _reduce_218(val, _values, result)
+    result = Subtract.new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 436)
+  def _reduce_219(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 437)
+  def _reduce_220(val, _values, result)
+    result = ShiftLeft .new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 438)
+  def _reduce_221(val, _values, result)
+    result = ShiftRight.new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 442)
+  def _reduce_222(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 443)
+  def _reduce_223(val, _values, result)
+    result = Less.new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 444)
+  def _reduce_224(val, _values, result)
+    result = More.new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 445)
+  def _reduce_225(val, _values, result)
+    result = LessOrEqual.new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 446)
+  def _reduce_226(val, _values, result)
+    result = MoreOrEqual.new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 450)
+  def _reduce_227(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 451)
+  def _reduce_228(val, _values, result)
+    result = Equal   .new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 452)
+  def _reduce_229(val, _values, result)
+    result = NotEqual.new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 456)
+  def _reduce_230(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 457)
+  def _reduce_231(val, _values, result)
+    result = BitAnd.new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 461)
+  def _reduce_232(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 462)
+  def _reduce_233(val, _values, result)
+    result = BitXor.new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 466)
+  def _reduce_234(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 467)
+  def _reduce_235(val, _values, result)
+    result = BitOr.new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 471)
+  def _reduce_236(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 472)
+  def _reduce_237(val, _values, result)
+    result = And.new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 476)
+  def _reduce_238(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 477)
+  def _reduce_239(val, _values, result)
+    result = Or.new_at(val[0].pos, val[0], val[2])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 481)
+  def _reduce_240(val, _values, result)
+    result = val[0]
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 482)
+  def _reduce_241(val, _values, result)
+    result = Conditional.new_at(val[0].pos, val[0], val[2], val[4])
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', 'cast.y', 486)
