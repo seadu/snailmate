@@ -221,4 +221,45 @@ platform_is_not :windows do
 
     guard -> {
       # We need to check if getlogin(3) returns non-NULL,
-      # as MRI only checks getlogin(3) for expa
+      # as MRI only checks getlogin(3) for expanding '~' if $HOME is not set.
+      user = ENV.delete("USER")
+      begin
+        Etc.getlogin != nil
+      rescue
+        false
+      ensure
+        ENV["USER"] = user
+      end
+    } do
+      it "uses the user database when passed '~' if HOME is nil" do
+        ENV.delete "HOME"
+        File.directory?(File.expand_path("~")).should == true
+      end
+
+      it "uses the user database when passed '~/' if HOME is nil" do
+        ENV.delete "HOME"
+        File.directory?(File.expand_path("~/")).should == true
+      end
+    end
+
+    it "raises an ArgumentError when passed '~' if HOME == ''" do
+      ENV["HOME"] = ""
+      -> { File.expand_path("~") }.should raise_error(ArgumentError)
+    end
+  end
+
+  describe "File.expand_path with a non-absolute HOME" do
+    before :each do
+      @home = ENV["HOME"]
+    end
+
+    after :each do
+      ENV["HOME"] = @home
+    end
+
+    it "raises an ArgumentError" do
+      ENV["HOME"] = "non-absolute"
+      -> { File.expand_path("~") }.should raise_error(ArgumentError, 'non-absolute home')
+    end
+  end
+end
