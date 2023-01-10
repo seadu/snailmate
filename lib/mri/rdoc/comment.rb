@@ -233,4 +233,18 @@ class RDoc::Comment
   # An error is raised if the comment contains a document but no text.
 
   def text= text
-    raise RDoc::Error, 'r
+    raise RDoc::Error, 'replacing document-only comment is not allowed' if
+      @text.nil? and @document
+
+    @document = nil
+    @text = text.nil? ? nil : text.dup
+  end
+
+  ##
+  # Returns true if this comment is in TomDoc format.
+
+  def tomdoc?
+    @format == 'tomdoc'
+  end
+
+end
