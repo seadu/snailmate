@@ -100,4 +100,24 @@ public class EmbeddedScript {
     }
 
     private boolean isShebangLine(byte[] bytes, int lineStart) {
-        return bytes.length - lineStart >= 2 && bytes
+        return bytes.length - lineStart >= 2 && bytes[lineStart] == '#' && bytes[lineStart + 1] == '!';
+    }
+
+    static boolean lineContainsRuby(byte[] bytes, int lineStart, int lineLength) {
+        if (lineLength < 4) {
+            return false;
+        }
+
+        // Don't bother looking for 'ruby' with just three characters to go
+        final int limit = lineStart + lineLength - 3;
+
+        for (int n = lineStart; n < limit; n++) {
+            if (bytes[n] == 'r' && bytes[n + 1] == 'u' && bytes[n + 2] == 'b' && bytes[n + 3] == 'y') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+}
