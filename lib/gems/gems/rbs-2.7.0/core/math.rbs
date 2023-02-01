@@ -1,0 +1,59 @@
+# <!-- rdoc-file=math.c -->
+# The Math module contains module functions for basic trigonometric and
+# transcendental functions. See class Float for a list of constants that define
+# Ruby's floating point accuracy.
+#
+# Domains and codomains are given only for real (not complex) numbers.
+#
+module Math
+  # <!--
+  #   rdoc-file=math.c
+  #   - Math.acos(x)    -> Float
+  # -->
+  # Computes the arc cosine of `x`. Returns 0..PI.
+  #
+  # Domain: [-1, 1]
+  #
+  # Codomain: [0, PI]
+  #
+  #     Math.acos(0) == Math::PI/2  #=> true
+  #
+  def self.acos: (Numeric x) -> Float
+
+  # <!--
+  #   rdoc-file=math.c
+  #   - Math.acosh(x)    -> Float
+  # -->
+  # Computes the inverse hyperbolic cosine of `x`.
+  #
+  # Domain: [1, INFINITY)
+  #
+  # Codomain: [0, INFINITY)
+  #
+  #     Math.acosh(1) #=> 0.0
+  #
+  def self.acosh: (Numeric x) -> Float
+
+  # <!--
+  #   rdoc-file=math.c
+  #   - Math.asin(x)    -> Float
+  # -->
+  # Computes the arc sine of `x`. Returns -PI/2..PI/2.
+  #
+  # Domain: [-1, -1]
+  #
+  # Codomain: [-PI/2, PI/2]
+  #
+  #     Math.asin(1) == Math::PI/2  #=> true
+  #
+  def self.asin: (Numeric x) -> Float
+
+  # <!--
+  #   rdoc-file=math.c
+  #   - Math.asinh(x)    -> Float
+  # -->
+  # Computes the inverse hyperbolic sine of `x`.
+  #
+  # Domain: (-INFINITY, INFINITY)
+  #
+  # Codomain: (-INFINITY, INFINITY)
