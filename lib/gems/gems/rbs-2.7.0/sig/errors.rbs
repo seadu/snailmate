@@ -1,0 +1,55 @@
+module RBS
+  interface _MethodName
+    def kind: () -> (:instance | :singleton)
+
+    def type_name: () -> TypeName
+
+    def method_name: () -> Symbol
+  end
+
+  module MethodNameHelper : _MethodName
+    def method_name_string: () -> String
+  end
+
+  # Error class for errors defined in RBS.
+  #
+  class BaseError < StandardError
+  end
+
+  # Error class for errors raised during parsing.
+  #
+  class ParsingError < BaseError
+    attr_reader location: Location[untyped, untyped]
+    attr_reader error_message: String
+    attr_reader token_type: String
+
+    def initialize: (Location[untyped, untyped], String error_message, String token_type) -> void
+
+    def error_value: () -> String
+
+    def token_str: () -> String
+  end
+
+  class Parser
+    SemanticsError: singleton(ParsingError)
+    SyntaxError: singleton(ParsingError)
+    LexerError: singleton(ParsingError)
+  end
+
+  # Error class for errors raised during loading environments.
+  #
+  class LoadingError < BaseError
+  end
+
+  # Error class for errors raised during building definitions.
+  #
+  class DefinitionError < BaseError
+  end
+
+  class InvalidTypeApplicationError < DefinitionError
+    attr_reader type_name: TypeName
+    attr_reader args: Array[Types::t]
+    attr_reader params: Array[Symbol]
+    attr_reader location: Location[untyped, untyped]?
+
+    def initialize: (type_name: TypeName, args
