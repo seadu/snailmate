@@ -243,4 +243,6 @@ module RBS
     # Method name
     attr_reader method_name: Symbol?
 
-    def initialize: (type_name: TypeName, method_name:
+    def initialize: (type_name: TypeName, method_name: Symbol?, params: Array[AST::TypeParam], location: Location[untyped, untyped]?) -> void
+  end
+end
