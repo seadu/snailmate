@@ -17,4 +17,7 @@ class Test_EConvAppend < Test::Unit::TestCase
     dst = ""
     ret = ec.append("\u3042"*30, dst)
     assert_same(dst, ret)
-    assert_not_predicate(dst,
+    assert_not_predicate(dst, :ascii_only?)
+    assert_not_predicate(dst, :valid_encoding?)
+  end
+end
