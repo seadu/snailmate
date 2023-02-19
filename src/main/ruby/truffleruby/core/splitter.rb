@@ -72,4 +72,155 @@ module Truffle
           # See motivation: https://github.com/oracle/truffleruby/pull/2052#issuecomment-663494235
           return Primitive.string_awk_split string, awk_limit, orig_block
         elsif Primitive.object_kind_of?(pattern, Regexp)
-          split
+          split_type_regexp(string, pattern, limit, block)
+        else
+          pattern = StringValue(pattern)
+
+          valid_encoding?(string)
+          valid_encoding?(pattern)
+
+          if pattern.empty?
+            split_type_chars(string, limit, block)
+          else
+            split_type_string(string, pattern, limit, block)
+          end
+        end
+
+        orig_block ? string : result
+      end
+
+      private
+
+      def valid_encoding?(string)
+        raise ArgumentError, "invalid byte sequence in #{string.encoding.name}" unless string.valid_encoding?
+      end
+
+      def split_type_chars(string, limit, block)
+        if limit > 0
+          last = string.size > (limit - 1) ? string[(limit - 1)..-1] : empty_string(string)
+
+          string.each_char.each_with_index do |char, index|
+            break if index == limit - 1
+            block.call(char)
+          end
+
+          block.call(last)
+        else
+          string.each_char(&block)
+
+          block.call(empty_string(string)) if tail_empty?(limit)
+        end
+      end
+
+      def split_type_string(string, pattern, limit, block)
+        pos = 0
+        empty_count = 0
+        limited = limit > 0
+        count = 0
+
+        ret = []
+
+        pat_size = pattern.bytesize
+        str_size = string.bytesize
+
+        while (pos < str_size && !(limited && limit - count <= 1))
+          nxt = Primitive.find_string(string, pattern, pos)
+          break unless nxt
+
+          match_size = nxt - pos
+          empty_count = add_substring(string, ret, string.byteslice(pos, match_size), empty_count, block)
+
+          pos = nxt + pat_size
+          count += 1
+        end
+
+        # No more separators, but we need to grab the last part still.
+        empty_count = add_substring(string, ret, string.byteslice(pos, str_size - pos), empty_count, block)
+
+        if tail_empty?(limit)
+          add_empty(string, ret, empty_count, block)
+        end
+      end
+
+      def split_type_regexp(string, pattern, limit, block)
+        # Handle // as a special case.
+        if pattern.source.empty?
+          return split_type_chars(string, limit, block)
+        end
+
+        start = 0
+        ret = []
+        count = 0
+        empty_count = 0
+        limited = limit > 0
+
+        last_match = nil
+        last_match_end = 0
+
+        while match = Truffle::RegexpOperations.match_from(pattern, string, start)
+          break if limited && limit - count <= 1
+
+          collapsed = Truffle::RegexpOperations.collapsing?(match)
+
+          unless collapsed && (Primitive.match_data_byte_begin(match, 0) == last_match_end)
+            substring = Truffle::RegexpOperations.pre_match_from(match, last_match_end)
+            empty_count = add_substring(string, ret, substring, empty_count, block)
+
+            # length > 1 means there are captures
+            if match.length > 1
+              match.captures.compact.each do |capture|
+                empty_count = add_substring(string, ret, capture, empty_count, block)
+              end
+            end
+
+            count += 1
+          end
+
+          start = Primitive.match_data_byte_end(match, 0)
+          if collapsed
+            start += 1
+          end
+
+          last_match = match
+          last_match_end = Primitive.match_data_byte_end(last_match, 0)
+        end
+
+        if last_match
+          empty_count = add_substring(string, ret, last_match.post_match, empty_count, block)
+        elsif ret.empty?
+          empty_count = add_substring(string, ret, string.dup, empty_count, block)
+        end
+
+        if tail_empty?(limit)
+          add_empty(string, ret, empty_count, block)
+        end
+
+        block ? string : ret
+      end
+
+
+      def add_substring(string, array, substring, empty_count, block)
+        return empty_count + 1 if substring.length == 0 # remember another one empty match
+
+        add_empty(string, array, empty_count, block)
+
+        block.call(substring)
+
+        0 # always release all empties when we get non empty substring
+      end
+
+      def add_empty(string, array, count, block)
+        count.times { block.call(empty_string(string)) }
+      end
+
+      def empty_string(original)
+        # Use #byteslice because it returns the right class.
+        original.byteslice(0,0)
+      end
+
+      def tail_empty?(limit)
+        limit != 0
+      end
+    end
+  end
+end
