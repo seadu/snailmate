@@ -76,4 +76,60 @@ describe "String#valid_encoding?" do
     str.force_encoding('macRomania').valid_encoding?.should be_true
     str.force_encoding('macThai').valid_encoding?.should be_true
     str.force_encoding('macTurkish').valid_encoding?.should be_true
-    str.force_encoding('m
+    str.force_encoding('macUkraine').valid_encoding?.should be_true
+    str.force_encoding('stateless-ISO-2022-JP').valid_encoding?.should be_false
+    str.force_encoding('eucJP-ms').valid_encoding?.should be_false
+    str.force_encoding('CP51932').valid_encoding?.should be_false
+    str.force_encoding('GB2312').valid_encoding?.should be_false
+    str.force_encoding('GB12345').valid_encoding?.should be_false
+    str.force_encoding('ISO-2022-JP').valid_encoding?.should be_true
+    str.force_encoding('ISO-2022-JP-2').valid_encoding?.should be_true
+    str.force_encoding('CP50221').valid_encoding?.should be_true
+    str.force_encoding('Windows-1252').valid_encoding?.should be_true
+    str.force_encoding('Windows-1250').valid_encoding?.should be_true
+    str.force_encoding('Windows-1256').valid_encoding?.should be_true
+    str.force_encoding('Windows-1253').valid_encoding?.should be_true
+    str.force_encoding('Windows-1255').valid_encoding?.should be_true
+    str.force_encoding('Windows-1254').valid_encoding?.should be_true
+    str.force_encoding('TIS-620').valid_encoding?.should be_true
+    str.force_encoding('Windows-874').valid_encoding?.should be_true
+    str.force_encoding('Windows-1257').valid_encoding?.should be_true
+    str.force_encoding('Windows-31J').valid_encoding?.should be_false
+    str.force_encoding('MacJapanese').valid_encoding?.should be_false
+    str.force_encoding('UTF-7').valid_encoding?.should be_true
+    str.force_encoding('UTF8-MAC').valid_encoding?.should be_true
+  end
+
+  ruby_version_is '3.0' do
+    it "returns true for IBM720 encoding self is valid in" do
+      str = "\xE6\x9D\x94"
+      str.force_encoding('IBM720').valid_encoding?.should be_true
+      str.force_encoding('CP720').valid_encoding?.should be_true
+    end
+  end
+
+  it "returns false if self is valid in one encoding, but invalid in the one it's tagged with" do
+    str = "\u{8765}"
+    str.valid_encoding?.should be_true
+    str = str.force_encoding('ascii')
+    str.valid_encoding?.should be_false
+  end
+
+  it "returns false if self contains a character invalid in the associated encoding" do
+    "abc#{[0x80].pack('C')}".force_encoding('ascii').valid_encoding?.should be_false
+  end
+
+  it "returns false if a valid String had an invalid character appended to it" do
+    str = "a"
+    str.valid_encoding?.should be_true
+    str << [0xDD].pack('C').force_encoding('utf-8')
+    str.valid_encoding?.should be_false
+  end
+
+  it "returns true if an invalid string is appended another invalid one but both make a valid string" do
+    str = [0xD0].pack('C').force_encoding('utf-8')
+    str.valid_encoding?.should be_false
+    str << [0xBF].pack('C').force_encoding('utf-8')
+    str.valid_encoding?.should be_true
+  end
+end
