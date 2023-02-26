@@ -47,4 +47,35 @@ class TestGemResolverVendorSpecification < Gem::TestCase
     assert_equal "a-1", v_spec.full_name
   end
 
-  def t
+  def test_install
+    spec = Gem::Resolver::VendorSpecification.new @set, @spec
+
+    called = :junk
+
+    spec.install({}) do |installer|
+      called = installer
+    end
+
+    assert_nil called
+  end
+
+  def test_name
+    v_spec = Gem::Resolver::VendorSpecification.new @set, @spec
+
+    assert_equal "a", v_spec.name
+  end
+
+  def test_platform
+    v_spec = Gem::Resolver::VendorSpecification.new @set, @spec
+
+    assert_equal Gem::Platform::RUBY, v_spec.platform
+  end
+
+  def test_version
+    spec = Gem::Specification.new "a", 1
+
+    v_spec = Gem::Resolver::VendorSpecification.new @set, spec
+
+    assert_equal v(1), v_spec.version
+  end
+end
