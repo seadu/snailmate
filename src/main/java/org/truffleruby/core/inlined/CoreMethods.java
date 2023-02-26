@@ -62,4 +62,12 @@ public class CoreMethods {
         language.coreMethodAssumptions.registerAssumptions(context.getCoreLibrary());
     }
 
-    private InternalMethod getMethod(RubyModule mo
+    private InternalMethod getMethod(RubyModule module, String name) {
+        final InternalMethod method = module.fields.getMethod(name);
+        if (method == null || method.isUndefined()) {
+            throw new AssertionError();
+        }
+        return method;
+    }
+
+}
